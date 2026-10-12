@@ -1996,6 +1996,11 @@ async function renderWorkspace(projectId, targetId, tab) {
     // order, so revealResultsPath() can find a path's row index without
     // building any DOM for it.
     let resultsPlanKeys = [];
+    // Same order again -- each entry's own RAW path ("/api" vs "/api/"). Two
+    // different results can share one key (the 301 stub "/api" and the real
+    // directory "/api/"), so revealResultsPath() needs the raw path to pick
+    // the exact row that was fuzzed.
+    let resultsPlanPaths = [];
     // Same order as resultsPlan/resultsPlanKeys -- each entry's own
     // `seen_key` (results_service.annotate_new), or undefined for a
     // synthetic placeholder (nothing real to mark seen). Accumulated into
@@ -2009,7 +2014,13 @@ async function renderWorkspace(projectId, targetId, tab) {
     // after leaving the tab; only what was genuinely on screen gets marked.
     const visitedSeenKeys = new Set();
     let lastResultsHierarchy = null; // set by renderResultsTree(), read by revealResultsPath()
-    let resultsRowHeight = 30; // average px per plan entry, refined as rows paint
+    let resultsRowHeight = 30; // average px per plan entry, refined as rows paint -- only a fallback
+    // Measured height of every plan entry that has ever painted. Rows are NOT
+    // all the same height: a long redirect URL wraps onto several lines
+    // (overflow-wrap: anywhere), so one average mis-places everything computed
+    // from it (spacers, scroll targets). Keyed by entryId(), so it survives the
+    // plan being rebuilt; cleared when the window is resized (wrapping changes).
+    const entryHeights = new Map();
     const RESULTS_OVERSCAN = 20;
     const knownJobIds = new Set();
     let hasActiveJobs = false;
@@ -2730,6 +2741,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             const connector = treeConnectorFor(depth, prefix, isLastItem ? isLast : false);
             resultsPlan.push(() => buildResultRow(item, depth, isLastItem ? children.length : 0, parentPath, connector));
             resultsPlanKeys.push(node.key);
+            resultsPlanPaths.push(item.path);
             resultsPlanSeenKeys.push(item.seen_key);
         });
         if (children.length && !collapsedParents.has(node.key)) {
@@ -2743,6 +2755,7 @@ async function renderWorkspace(projectId, targetId, tab) {
     function renderResultsTree() {
         resultsPlan = [];
         resultsPlanKeys = [];
+        resultsPlanPaths = [];
         resultsPlanSeenKeys = [];
         // Filtering happens on the flat list, before grouping: if a filter
         // hides an ancestor, its still-visible descendants just render as
@@ -2782,34 +2795,43 @@ async function renderWorkspace(projectId, targetId, tab) {
         savePref(`collapsed:${collapsedRouteKey}`, [...collapsedParents]);
         renderResultsTree();
 
-        const index = resultsPlanKeys.indexOf(key);
-        if (index === -1 || !resultsBody.parentElement) return;
-        // The workspace tabs bar + this filter toolbar are both `position:
-        // sticky` INSIDE scrollArea, so once scrolled they visually cover
-        // the top `tabs + toolbar` px of the viewport. The target row must
-        // land flush BELOW them, as the first visible row, with its children
-        // right after it -- nothing of the rows before it peeking in (unless
-        // the list is too short to scroll that far, where the browser's own
-        // clamping applies).
+        // The root has no row of its own in Results: its "results" are the whole list.
+        if (key === "/") {
+            scrollArea.scrollTop = 0;
+            paintResultsWindow(false);
+            return;
+        }
+        // Which row? A key can hold two real rows -- the 301 stub "/api" and
+        // the real directory "/api/" (the one that carries the children). The
+        // one whose RAW path equals what was fuzzed goes first ("path/" when
+        // "path/" was fuzzed, "path" when "path" was); otherwise the last row
+        // of the position, which is the one with the children.
+        const candidates = [];
+        resultsPlanKeys.forEach((k, i) => { if (k === key) candidates.push(i); });
+        if (!candidates.length || !resultsBody.parentElement) return;
+        const index = candidates.find((i) => resultsPlanPaths[i] === path) ?? candidates[candidates.length - 1];
+        // The workspace tabs bar + this filter toolbar are `position: sticky`
+        // INSIDE scrollArea, so once scrolled they cover the top
+        // `tabs + toolbar` px of the viewport. The target row must land flush
+        // BELOW them, as the first visible row, with its children right after
+        // it and nothing of the rows before it peeking in (unless the list is
+        // too short to scroll that far, where the browser's clamping applies).
         //
-        // Two steps, because the per-row height used to estimate the
-        // position is only an average: (1) jump to an estimate, paint, then
-        // (2) measure where the row REALLY painted and correct by the
-        // difference. The estimate is measured from the tbody (not the
-        // table: that would include the column-header row, ~25px, and leave
-        // the row that far too low with the previous rows showing above it).
-        const areaTop = () => scrollArea.getBoundingClientRect().top;
-        const stuckBottom = () => areaTop() + tabs.getBoundingClientRect().height + filterBarContainer.getBoundingClientRect().height;
-        const bodyTop = () => resultsBody.getBoundingClientRect().top - areaTop() + scrollArea.scrollTop;
-        scrollArea.scrollTop = Math.max(0, bodyTop() + index * resultsRowHeight - (stuckBottom() - areaTop()));
-        paintResultsWindow();
-        for (let pass = 0; pass < 4; pass++) {
+        // Converges by measuring, not by trusting an estimate: if the row is
+        // not painted yet, jump to the best estimate (measured heights where
+        // known) and paint; once painted, move by exactly how far it really is
+        // from its place and repaint, until it sits there.
+        for (let pass = 0; pass < 10; pass++) {
             const row = resultsBody.querySelector(`[data-plan-index="${index}"]`);
-            if (!row) break;
+            if (!row) {
+                scrollArea.scrollTop = Math.max(0, bodyTop() + entryOffsets()[index] - (stuckBottom() - areaTop()));
+                paintResultsWindow(false);
+                continue;
+            }
             const delta = row.getBoundingClientRect().top - stuckBottom();
             if (Math.abs(delta) < 0.5) break;
             scrollArea.scrollTop += delta;
-            paintResultsWindow();
+            paintResultsWindow(false);
         }
     }
     resultsReveal = (path) => revealResultsPath(path);
@@ -2819,18 +2841,64 @@ async function renderWorkspace(projectId, targetId, tab) {
     // full list. The viewport position is read from the live page, so this
     // is only meaningful once the table is actually mounted -- render() calls
     // resultsRepaint() again right after it restores the scroll position.
-    function paintResultsWindow() {
+    // ---- geometry helpers (viewport coordinates unless stated) ----
+    const areaTop = () => scrollArea.getBoundingClientRect().top;
+    // Where the sticky tabs bar + filter toolbar end: rows are hidden above it.
+    const stuckBottom = () => areaTop() + tabs.getBoundingClientRect().height + filterBarContainer.getBoundingClientRect().height;
+    // The tbody's own top within the scroll area's content (excludes the column-header row).
+    const bodyTop = () => resultsBody.getBoundingClientRect().top - areaTop() + scrollArea.scrollTop;
+    const entryId = (i) => `${resultsPlanKeys[i]}|${resultsPlanPaths[i]}`;
+    const entryHeight = (i) => entryHeights.get(entryId(i)) ?? resultsRowHeight;
+    // offsets[i] = where plan entry i starts inside the tbody, offsets[n] = total height.
+    function entryOffsets() {
+        const offsets = new Array(resultsPlan.length + 1);
+        offsets[0] = 0;
+        for (let i = 0; i < resultsPlan.length; i++) offsets[i + 1] = offsets[i] + entryHeight(i);
+        return offsets;
+    }
+    function onResultsResize() {
+        if (!resultsBody.isConnected) { window.removeEventListener("resize", onResultsResize); return; }
+        entryHeights.clear(); // line wrapping depends on the width
+    }
+    window.addEventListener("resize", onResultsResize);
+
+    // `keepAnchor` (default): the first row visible below the sticky bars stays
+    // exactly where it is on screen across the repaint. Rows that were never
+    // painted are only an estimate until they appear; without this, the moment
+    // they do appear (real, taller height than estimated) everything below
+    // them jumps. revealResultsPath() passes false: it positions things itself.
+    function paintResultsWindow(keepAnchor = true) {
         // Not mounted (e.g. JOBS/TREE is showing, or a job's delete re-renders
         // this off-screen) -- nothing to paint into.
         if (!resultsBody.parentElement) return;
         const n = resultsPlan.length;
         // Read the layout BEFORE clearing the body: reading it while the table is
         // empty forces a layout that clamps scrollTop to 0 and loses the position.
-        const table = resultsBody.parentElement;
-        const tableTop = table.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top + scrollArea.scrollTop;
-        const rowH = resultsRowHeight;
-        const first = Math.max(0, Math.floor((scrollArea.scrollTop - tableTop) / rowH) - RESULTS_OVERSCAN);
-        const last = Math.min(n, first + Math.ceil(scrollArea.clientHeight / rowH) + 2 * RESULTS_OVERSCAN);
+        const top = bodyTop();
+        let anchorIndex = null;
+        let anchorOffset = 0;
+        if (keepAnchor && n) {
+            let barBottom = null; // only measured once rows exist, i.e. long after the toolbar was built
+            for (const row of resultsBody.children) {
+                if (row.dataset.planIndex === undefined) continue; // a spacer
+                if (barBottom === null) barBottom = stuckBottom();
+                const rect = row.getBoundingClientRect();
+                if (rect.bottom > barBottom + 0.5) { anchorIndex = row.dataset.planIndex; anchorOffset = rect.top - barBottom; break; }
+            }
+        }
+        const offsets = entryOffsets();
+        // Largest entry index whose start is at or above y (binary search).
+        const indexAt = (y) => {
+            let lo = 0, hi = n;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (offsets[mid] <= y) lo = mid; else hi = mid - 1;
+            }
+            return lo;
+        };
+        const viewTop = scrollArea.scrollTop - top;
+        const first = Math.max(0, indexAt(viewTop) - RESULTS_OVERSCAN);
+        const last = Math.min(n, indexAt(viewTop + scrollArea.clientHeight) + 1 + RESULTS_OVERSCAN);
         resultsBody.innerHTML = "";
         if (!n) {
             if (allResults.length) {
@@ -2841,7 +2909,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             return;
         }
         const spacer = (px) => h("tr", { class: "results-spacer" }, [h("td", { colspan: "5", style: `height:${px}px;padding:0;border:0` })]);
-        if (first > 0) resultsBody.appendChild(spacer(first * rowH));
+        if (first > 0) resultsBody.appendChild(spacer(offsets[first]));
         for (let i = first; i < last; i++) {
             for (const row of resultsPlan[i]()) {
                 row.dataset.planIndex = String(i); // lets revealResultsPath() find where an entry really painted
@@ -2849,11 +2917,30 @@ async function renderWorkspace(projectId, targetId, tab) {
             }
             if (resultsPlanSeenKeys[i]) visitedSeenKeys.add(resultsPlanSeenKeys[i]);
         }
-        if (last < n) resultsBody.appendChild(spacer((n - last) * rowH));
-        // Refine the per-entry height estimate from what actually painted.
-        const painted = resultsBody.getBoundingClientRect().height;
-        const spacerPx = (first > 0 ? first * rowH : 0) + (last < n ? (n - last) * rowH : 0);
-        if (last > first && painted > 0) resultsRowHeight = Math.max(12, (painted - spacerPx) / (last - first));
+        if (last < n) resultsBody.appendChild(spacer(offsets[n] - offsets[last]));
+        // Record what actually painted: each entry's real height (an entry can
+        // be several <tr>), and their average as the fallback for unmeasured ones.
+        // Only measure once the table is in the real page: while the page is
+        // still being built it lives in a hidden scratch container with a
+        // different width, where text wraps differently, and those heights
+        // would poison every offset computed from them.
+        const painted = new Map();
+        if (scrollArea.contains(resultsBody)) {
+            for (const row of resultsBody.children) {
+                if (row.dataset.planIndex === undefined) continue;
+                painted.set(row.dataset.planIndex, (painted.get(row.dataset.planIndex) || 0) + row.getBoundingClientRect().height);
+            }
+        }
+        let sum = 0;
+        for (const [index, height] of painted) { entryHeights.set(entryId(Number(index)), height); sum += height; }
+        if (painted.size) resultsRowHeight = Math.max(12, sum / painted.size);
+        if (anchorIndex !== null) {
+            const row = resultsBody.querySelector(`[data-plan-index="${anchorIndex}"]`);
+            if (row) {
+                const shift = row.getBoundingClientRect().top - stuckBottom() - anchorOffset;
+                if (Math.abs(shift) > 0.5) scrollArea.scrollTop += shift;
+            }
+        }
     }
 
     let resultsRepaintQueued = false;
