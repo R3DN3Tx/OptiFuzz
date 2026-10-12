@@ -1,0 +1,1486 @@
+/* Bundled fonts, used only where the Windows ones are absent (Linux). On
+   Windows "Segoe UI" and "Cascadia Mono" resolve to the system fonts before
+   these are ever reached, so Windows renders exactly as before.
+   - OptiFuzz Sans = Selawik (Microsoft, SIL OFL), metric-compatible with
+     Segoe UI -- same advance widths, so buttons/inputs/columns size the same.
+   - OptiFuzz Mono = Cascadia Mono (Microsoft, SIL OFL), what Windows 11 uses
+     for the monospace stack. See frontend/fonts/README.txt. */
+/* size-adjust on Semibold matches Segoe UI Semibold's advance widths (measured:
+   Selawik's is 2% wider). Regular/Bold already agree within 0.3%. */
+@font-face { font-family: "OptiFuzz Sans"; font-weight: 400; src: url("/static/fonts/selawk.ttf") format("truetype"); }
+@font-face { font-family: "OptiFuzz Sans"; font-weight: 600; src: url("/static/fonts/selawksb.ttf") format("truetype");
+    size-adjust: 98%; }
+@font-face { font-family: "OptiFuzz Sans"; font-weight: 700; src: url("/static/fonts/selawkb.ttf") format("truetype"); }
+@font-face { font-family: "OptiFuzz Mono"; font-weight: 400; src: url("/static/fonts/CascadiaMono-Regular.ttf") format("truetype"); }
+@font-face { font-family: "OptiFuzz Mono"; font-weight: 600; src: url("/static/fonts/CascadiaMono-SemiBold.ttf") format("truetype"); }
+@font-face { font-family: "OptiFuzz Mono"; font-weight: 700; src: url("/static/fonts/CascadiaMono-Bold.ttf") format("truetype"); }
+
+:root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e37;
+    --text: #e6e8eb;
+    --muted: #8b90a0;
+    --accent: #4f8cff;
+    --green: #35c266;
+    --yellow: #e0b84b;
+    --red: #e0554b;
+    --blue: #4f8cff;
+    --cyan: #4bc3e0;
+    --orange: #ff9a3d;
+    font-size: 14px;
+}
+
+/* Monospace stack. Windows: unchanged. Linux (html.linux, set in index.html):
+   WebKitGTK honours ui-monospace and would pick the system's mono font ahead
+   of the bundled Cascadia Mono, so it is skipped there. */
+:root {
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "OptiFuzz Mono", "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+html.linux { --mono: "OptiFuzz Mono", "DejaVu Sans Mono", monospace; }
+
+/* Segoe UI's "normal" line height is 4/3 em (measured in Chromium on Windows:
+   14px -> 18.67, 15px -> 20, 24px -> 32); Selawik's natural one is ~1.2em, which made every line, input and button a
+   pixel or two shorter than on Windows. WebKitGTK ignores the @font-face
+   ascent/descent-override descriptors, so the line height is set directly.
+   :where() keeps specificity at zero, so any line-height the app sets
+   explicitly still wins. */
+:where(html.linux, html.linux *) { line-height: 1.3333; }
+
+/* Chromium's (WebView2's) default placeholder color, spelled out so every
+   engine paints the same: WebKit's own default is darker. */
+input::placeholder, textarea::placeholder { color: #757575; opacity: 1; }
+
+* { box-sizing: border-box; }
+
+/* header is a normal (non-scrolling) flex row, always full viewport width,
+   with #scroll-area taking the rest of the vertical space as its own,
+   separate scrolling region -- explicit request: the scrollbar should
+   start below the header, not span its full height (which also meant the
+   header's own row reserved room for the scrollbar it never actually
+   needed, keeping it a few px short of the true right edge). html/body
+   are sized to exactly the viewport and never scroll themselves; only
+   #scroll-area does. */
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    /* Belt-and-braces against a light flash at the very top/edges of the
+       page (e.g. before body's own background paints, or a WebView2
+       compositor repaint mid-resize) -- background-color: var(--bg) was
+       only ever set on body, never html, the actual outermost canvas. */
+    background-color: var(--bg);
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, Segoe UI, "OptiFuzz Sans", Roboto, "Noto Sans", "DejaVu Sans", "Liberation Sans", sans-serif;
+}
+
+/* Reserves the vertical scrollbar's gutter width always, whether or not
+   the content is actually tall enough to need one right now -- without
+   this, switching from a short tab (TREE/JOBS) to a taller one (RESULTS
+   with many rows) made the scrollbar appear and every column's content
+   jump a few pixels left as the available width suddenly shrank, and
+   switching back caused the same jump in reverse. */
+#scroll-area {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+/* WebView2 is Chromium-based, so the standard webkit scrollbar pseudo-
+   elements work -- styled to match the app instead of the OS's default
+   light/white scrollbar, which stood out against the always-dark theme. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    /* No longer position: sticky -- header now lives structurally OUTSIDE
+       #scroll-area entirely (see index.html), a plain flex row that never
+       scrolls at all, rather than a normal-flow element pinned in place
+       while the whole page scrolled behind it. flex-shrink: 0 keeps it
+       from ever being compressed by #scroll-area's own flex: 1 1 auto. */
+    flex: 0 0 auto;
+}
+
+header h1 {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 600;
+}
+
+.app-logo {
+    height: 22px;
+    width: auto;
+    display: block;
+}
+
+.breadcrumb {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.breadcrumb a { color: var(--text); text-decoration: none; }
+.breadcrumb a:hover { color: var(--accent); }
+
+.header-spacer { flex: 1; }
+
+.app-version { color: var(--muted); font-size: 11.5px; }
+
+.settings-menu { position: relative; }
+.settings-btn {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    font-size: 24px;
+    padding: 2px 8px;
+    line-height: 1;
+}
+.settings-btn:hover { color: var(--text); border-color: var(--border); }
+.settings-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    width: 320px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 12px;
+}
+.settings-panel:not([hidden]) { display: block; }
+.settings-panel h3 { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.settings-back-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.settings-back-row h3 { margin: 0; line-height: 1; }
+.settings-back-btn {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 2px 4px;
+    line-height: 1;
+    font-size: 16px;
+}
+.settings-back-btn:hover { color: var(--text); border-color: transparent; }
+.settings-menu-list { display: flex; flex-direction: column; }
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 2px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+}
+.settings-menu-item:last-child { border-bottom: none; }
+.settings-menu-item:hover .title { color: var(--accent); }
+.settings-menu-item .label-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-menu-item .title { font-size: 13px; color: var(--text); }
+.settings-menu-item .desc { font-size: 11px; color: var(--muted); }
+.settings-menu-item .chevron { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+.settings-panel .hint { margin-bottom: 10px; }
+.settings-panel .field-row { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; margin-bottom: 10px; }
+.settings-panel .field-row input { width: 100%; }
+.checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.settings-panel .browser-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12.5px;
+}
+.settings-panel .browser-option:hover { background: #232833; }
+.settings-panel .browser-option.selected { color: var(--accent); }
+/* min-width: 0 on the flex child wrapping name+path -- without it, a flex
+   item defaults to a min-width of its own unwrapped content size, which a
+   long browser executable path has no other way to shrink below: real,
+   reported bug, a long path overflowed the settings panel's own edge
+   instead of wrapping. Wraps downward now (no white-space: nowrap, no
+   ellipsis) instead of truncating horizontally, per explicit request. */
+.settings-panel .browser-option > div { min-width: 0; }
+.settings-panel .browser-option .path { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; word-break: break-word; }
+.settings-panel .loading-label { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.settings-panel .not-detected-label { color: var(--red); font-size: 11px; font-weight: 600; margin-top: 4px; }
+.settings-panel .custom-path-row { display: flex; gap: 6px; margin-top: 8px; }
+.settings-panel .custom-path-row input { flex: 1; min-width: 0; }
+.field-error { color: var(--red); font-size: 11.5px; margin-top: 6px; }
+
+main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.card {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: pointer;
+}
+.card:hover { border-color: var(--accent); }
+/* NOT display: flex -- that centered the fuzzing-dot against the FULL
+   height of a wrapped, multi-line target name (align-items: center
+   spanning every line), instead of just the first one. Plain inline flow
+   (both the dot and the name span are inline-level) plus the dot's own
+   vertical-align: middle (see .fuzzing-dot) naturally aligns it with only
+   the line it's actually part of -- the first one -- leaving any wrapped
+   line below it unaffected, per explicit request. */
+/* overflow-wrap: anywhere -- a project/target name (or URL, in .card p)
+   with no spaces or hyphens to break at otherwise overflows the card's own
+   box entirely instead of wrapping, since plain text only wraps at
+   whitespace by default. Same treatment already used for Results/TREE
+   path text. */
+.card h3 { margin: 0 24px 4px 0; font-size: 14px; overflow-wrap: anywhere; word-break: break-word; }
+.card p { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
+
+/* In-place rename input (Project/Target cards), triggered via the "⋮" menu */
+.inline-rename-input {
+    font: inherit;
+    font-size: 14px;
+    font-weight: inherit;
+    padding: 1px 4px;
+    max-width: 100%;
+}
+
+.card-menu-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 6px;
+    line-height: 1;
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+}
+.card-menu-btn:hover { color: var(--text); border-color: var(--border); }
+.card-menu {
+    position: absolute;
+    top: 30px;
+    right: 6px;
+    z-index: 20;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    min-width: 140px;
+    overflow: hidden;
+}
+.card-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+.card-menu button:hover { background: #232833; }
+.card-menu button.danger-item { color: var(--red); }
+
+.fuzzing-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--orange);
+    box-shadow: 0 0 0 3px rgba(255,154,61,.2);
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar .inline-form { margin-bottom: 0; flex: 1; min-width: 0; }
+/* .search-input lands on the WRAPPER now (buildSearchInput()'s own
+   `element`, not the <input> itself) -- still just controls overall
+   width, same as before. */
+.search-input { min-width: 220px; }
+
+/* Every <input type="search"> in the app is built via buildSearchInput()
+   (app.js), which pairs it with a custom "×" clear button
+   (.search-clear-btn, CLOSE_ICON_SVG) instead of the browser's own native
+   search-cancel button -- hidden here since it can't be restyled to match
+   the rest of the app's icon set. */
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+.search-field { position: relative; display: inline-flex; }
+.search-field-input { width: 100%; padding-right: 26px; }
+.search-clear-btn {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 2px 4px;
+    line-height: 1;
+}
+.search-clear-btn:hover { color: var(--text); border-color: transparent; }
+
+button, input, select, textarea {
+    font: inherit;
+    color: var(--text);
+    background: #1e222b;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+button { cursor: pointer; }
+/* No up/down spinner arrows on any number input (port, threads, ...) --
+   purely decorative here, just clutter. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06101f; font-weight: 600; }
+button.danger { border-color: var(--red); color: var(--red); }
+/* table-layout: fixed, explicit widths for every column except Path (the
+   one left unsized, taking whatever's left) -- jobs-table is width: 100%
+   (the global `table` rule) but was table-layout: auto, which distributes
+   "extra" fill-width unevenly across columns based on each one's own
+   natural content size. That's what made the Progress↔Results and
+   Results↔Date gaps visibly different widths even with identical padding
+   on Results -- not something padding alone could fix, since the columns
+   themselves weren't sized consistently to begin with. Same fix already
+   applied to .results-table/.tree-table. */
+/* Explicit request: every value (path, status, size, options, ...) must be
+   normally selectable (drag-select + Ctrl+C) everywhere in the app, with NO
+   visual affordance added for it -- just the browser's own native
+   selection highlight when actually dragging, nothing more. table/td
+   already default to selectable text, but a <button> (results-count-link,
+   fuzzed-tag, a job's status pill) does not in most browsers -- this makes
+   those selectable too, without changing how anything looks otherwise. */
+.jobs-table, .results-table, .tree-table, .fuzz-history-table,
+.jobs-table td, .results-table td, .tree-table td, .fuzz-history-table td,
+.results-count-link, .fuzzed-tag, .job-status {
+    -webkit-user-select: text;
+    user-select: text;
+}
+.jobs-table { table-layout: fixed; }
+/* Every one of these is scoped with a direct-child chain (table > tbody/
+   thead > tr > td/th), not a plain descendant selector, since 2026-09-24 --
+   real, reported bug: a plain ".jobs-table td:nth-child(N)" doesn't stop at
+   this table's own rows, it matches ANY <td> anywhere inside a .jobs-table
+   at ANY nesting depth, including a .fuzz-history-table's own cells sitting
+   inside one of THIS table's own <td>s (the info-button detail panel, a
+   genuinely separate <table> with its own real column count and its own
+   real width rules just below). Both rules can end up with equal CSS
+   specificity, so which one actually wins becomes a coin-flip decided by
+   declaration order rather than which one SHOULD apply -- confirmed
+   empirically (not just reasoned about) inspecting a real page's DOM: a
+   nested fuzz-history-table's "Wordlist"/"Extensions" columns rendered at
+   this table's own unrelated widths before this fix, in the export this
+   same CSS is embedded into (backend/services/export_service.py's own
+   .exp-jobs/.exp-results/.exp-tree rules had the identical bug, fixed the
+   same way there). ">" makes this structurally impossible regardless of
+   specificity/order, rather than relying on either. */
+.jobs-table > tbody > tr > td:nth-child(1), .jobs-table > thead > tr > th:nth-child(1) { width: 130px; } /* Status (badge + optional "⚠ auto" hint or "ⓘ" FAILED button) */
+/* Its own column, between Status and Actions -- explicit request: sharing
+   a cell with Resume/Pause/Stop meant "▶ Resume" (the widest label) didn't
+   fit alongside it and wrapped (icon on its own line, label below). Narrow
+   -- just the one icon, centered so it doesn't read as glued to Actions
+   right next to it. */
+.jobs-table > tbody > tr > td:nth-child(2), .jobs-table > thead > tr > th:nth-child(2) { width: 36px; text-align: center; }
+.jobs-table > tbody > tr > td:nth-child(3), .jobs-table > thead > tr > th:nth-child(3) { width: 150px; } /* Actions (Stop, + Resume/Pause) */
+/* Path (4th) -- unsized, gets whatever's left */
+.jobs-table > tbody > tr > td:nth-child(5), .jobs-table > thead > tr > th:nth-child(5) { width: 130px; } /* Progress */
+.jobs-table > tbody > tr > td:nth-child(6), .jobs-table > thead > tr > th:nth-child(6) { width: 70px; } /* Results */
+/* Rate/Errors (2026-09-24) took over Date's old slot (7th/8th columns) --
+   Date itself moved into the fuzz-options detail panel below, see
+   buildFuzzHistoryPanel's own comment. Rate needs to fit "Avg. Rate: N.N/s"
+   without wrapping; Errors is always a short integer. */
+.jobs-table > tbody > tr > td:nth-child(7), .jobs-table > thead > tr > th:nth-child(7) { width: 120px; white-space: nowrap; } /* Rate */
+.jobs-table > tbody > tr > td:nth-child(8), .jobs-table > thead > tr > th:nth-child(8) { width: 60px; } /* Errors */
+.jobs-table > tbody > tr > td:nth-child(9), .jobs-table > thead > tr > th:nth-child(9) { width: 80px; } /* Elapsed */
+.jobs-table > tbody > tr > td:nth-child(10), .jobs-table > thead > tr > th:nth-child(10) { width: 44px; } /* delete */
+.jobs-table td.job-delete-cell { text-align: right; }
+/* Only the "(done/total)" detail is muted -- the "xx%" itself stays the
+   normal/white text color, it's the number that matters at a glance. */
+.jobs-progress-detail { color: var(--muted); }
+.jobs-table th.jobs-col-center, .jobs-table td.jobs-col-center,
+.fuzz-history-table th.jobs-col-center, .fuzz-history-table td.jobs-col-center { text-align: center; }
+/* Path is the one column without an explicit width (table-layout: fixed
+   above) -- now that it's capped to "whatever's left" instead of growing
+   freely, a long path needs to wrap downward within that instead of
+   overflowing the row. */
+.jobs-table > tbody > tr > td:nth-child(4) { overflow-wrap: anywhere; word-break: break-word; }
+/* Live elapsed-time counter -- a softer, secondary color (not stark white
+   like the Path text), same idea as .hint elsewhere. Date gets the same
+   treatment now too, explicit request. */
+.jobs-elapsed-cell { color: var(--muted); font-variant-numeric: tabular-nums; }
+.jobs-date-cell { color: var(--muted); }
+/* Rate/Errors (2026-09-24, replacing the main table's own old Date column --
+   Date itself moved into the fuzz-options detail panel above, same muted
+   treatment there via the shared .jobs-date-cell class). */
+.jobs-rate-cell { color: var(--muted); font-variant-numeric: tabular-nums; text-align: left; }
+/* Errors: centered, explicit request (2026-09-24) -- reversing an earlier
+   session's own "left" fix, which was itself a response to an unreproducible
+   report. This time it's an explicit, unambiguous ask, not a bug claim. */
+.jobs-errors-cell { color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+.job-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-color: transparent;
+    color: var(--red);
+    padding: 4px 6px;
+}
+.job-delete-btn:hover { border-color: var(--red); background: rgba(224,85,75,.1); }
+.job-delete-btn:disabled { color: var(--muted); cursor: not-allowed; opacity: .5; }
+.job-delete-btn:disabled:hover { border-color: transparent; background: transparent; }
+
+.inline-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+
+.port-label { color: var(--muted); font-size: 12px; }
+.port-input { width: 80px; }
+/* Wide enough that their own placeholder text is fully visible, not
+   scrolled/cut off inside the default (browser-sized) input box. */
+.target-name-input { min-width: 240px; }
+.target-url-input { min-width: 260px; }
+
+.fuzz-form { margin-bottom: 4px; }
+.fuzz-form .inline-form { margin-bottom: 10px; }
+
+/* ---- Outputs mirror (Targets page, above the Targets list) -------------- */
+.outputs-mirror-section { margin-bottom: 20px; }
+.outputs-mirror-row { display: flex; gap: 8px; align-items: center; }
+.outputs-mirror-input { flex: 1 1 auto; min-width: 0; }
+.outputs-mirror-folder-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--yellow);
+}
+.outputs-mirror-folder-btn:hover { border-color: var(--yellow); }
+
+details.advanced {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 16px;
+}
+details.advanced summary {
+    cursor: pointer;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+    user-select: none;
+}
+details.advanced summary:hover { color: var(--text); }
+details.advanced .advanced-body {
+    padding: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+details.advanced .advanced-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+details.advanced .advanced-row .hint { color: var(--muted); font-size: 11.5px; }
+details.advanced label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+details.advanced input[type="checkbox"] { width: auto; padding: 0; }
+
+.headers-group { display: flex; flex-direction: column; gap: 8px; }
+.headers-rows { display: flex; flex-direction: column; gap: 6px; }
+.headers-rows:empty { display: none; }
+.header-row { display: flex; gap: 6px; align-items: flex-start; }
+.header-row button { padding: 4px 8px; }
+
+/* One combined "Name: Value" field per header, not separate name/value
+   inputs -- explicit request. Same single-line-ellipsis-while-not-focused,
+   grows-downward-while-focused behavior the old value-only field had (JS
+   sets an explicit height off scrollHeight on focus/input, collapses back
+   on blur) -- a header's combined "Name: Value" can be just as long as its
+   value alone used to be. */
+.header-row .header-combined-input {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.header-row .header-combined-input.expanded {
+    white-space: pre-wrap;
+    overflow-y: auto;
+    max-height: 160px;
+    text-overflow: clip;
+}
+
+.custom-options-group { display: flex; flex-direction: column; gap: 4px; }
+.custom-options-group label { font-size: 12.5px; }
+/* Grows downward as content wraps, instead of scrolling off to the right
+   (same auto-grow-height technique as .tree-path-input / .header-value-input). */
+.custom-options-input {
+    font-family: var(--mono);
+    resize: none;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.3;
+    /* Precisely line-height (18.2px at the 14px root font-size) + the
+       base rule's own 6px top/bottom padding + 1px top/bottom border
+       (box-sizing: border-box) = 32.2px. A taller min-height than the
+       single line actually needs left the leftover space sitting only at
+       the bottom (textareas render text top-down, not centered), which
+       is what read as "not vertically centered" for the common one-line
+       case -- this removes that slack instead of trying to center text a
+       textarea can't flex-align on its own. */
+    min-height: 32px;
+}
+
+.wordlist-picker { position: relative; display: inline-block; }
+.wordlist-picker-btn { min-width: 220px; text-align: left; display: flex; justify-content: space-between; gap: 8px; }
+.wordlist-picker-btn .wl-path { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wordlist-popup {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 20;
+    width: 320px;
+    max-height: 320px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    flex-direction: column;
+}
+/* `display: flex` above must not apply while [hidden] is set, or the
+   browser's default `[hidden] { display: none }` rule gets overridden and
+   the popup stays visible/open regardless of the hidden attribute/property. */
+.wordlist-popup:not([hidden]) { display: flex; }
+/* Margin/width now live on the wrapper (.search-field, from
+   buildSearchInput()) -- the inner input itself is just width: 100% of
+   that wrapper (.search-field-input's own base rule). */
+.wordlist-popup .search-field { margin: 8px; width: calc(100% - 16px); }
+.wordlist-tree { overflow-y: auto; padding: 4px 0 8px; }
+.wl-dir > .wl-dir-label { display: flex; align-items: center; gap: 4px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.wl-dir > .wl-dir-label:hover { color: var(--text); }
+.wl-dir .wl-children { margin-left: 14px; }
+.wl-file {
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.wl-file:hover { background: #232833; }
+.wl-file.selected { background: var(--accent); color: #06101f; }
+/* Gray/unfilled by default, yellow/filled once marked as this app's
+   default wordlist for new fuzzes -- .icon-btn/.icon-btn.active (shared
+   with "mark interesting" elsewhere) already handle both colors; this
+   just sizes it and keeps a long wordlist name from squeezing it. */
+.wl-default-star { flex-shrink: 0; padding: 1px; }
+.wl-file.selected .wl-default-star:not(.active) { color: #06101f; }
+.wl-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; }
+
+/* Results: Status/Size are short, fixed-shape values -- don't waste the
+   same gutter a variable-width column like Path needs, and keep every
+   column's own gutter tight (both sides trimmed, not just one).
+   table-layout: fixed (not auto) -- with auto, opening a colspan'd detail
+   row (the inline fuzz launcher, or the fuzz-history table) could contain
+   content shaped differently enough to change the browser's computed
+   column widths for the WHOLE table, visibly shifting every other row's
+   columns while the detail row was open. Fixed widths (set explicitly
+   below, since table-layout: fixed sizes columns from the first row) keep
+   every column's width stable regardless of what any row -- detail rows
+   included -- actually contains. */
+/* Every column an explicit PERCENTAGE width (summing to 100%) -- Path was
+   previously the sole unsized column, which under table-layout: fixed
+   means it absorbs 100% of whatever's left after the other four. On a
+   normal-width window that made it far wider than most actual path text
+   needs, pushing Redirect much further away from it than intended (visual
+   "gap" from the end of short path text to Redirect was really just empty
+   space inside the oversized Path cell, not padding). Percentages bound
+   Path to a reasonable, predictable share instead -- same fix already
+   applied to the fuzz-history table for the same underlying reason. */
+/* Column order: Status, Size, [fuzz/tree icons], Path, Redirect -- the
+   icons moved here (between Size and Path) from being the table's last
+   column, per explicit request. */
+.results-table { table-layout: fixed; }
+.results-table > thead > tr > th, .results-table > tbody > tr > td { padding-top: 4px; padding-bottom: 4px; }
+.results-table > thead > tr > th:nth-child(1), .results-table > tbody > tr > td:nth-child(1) { width: 7%; padding-left: 6px; padding-right: 1px; white-space: nowrap; }
+/* Half its old 9% -- explicit request: at 9%, most of the column was dead
+   space past the short "512B"-style text, well before padding-right (the
+   actual Size→icons gap) ever kicked in, so that gap read as much bigger
+   than the icons→Path one. The 4.5% freed up goes to Path (6). */
+.results-table > thead > tr > th:nth-child(2), .results-table > tbody > tr > td:nth-child(2) { width: 4.5%; padding-left: 1px; padding-right: 6px; white-space: nowrap; }
+.results-table > thead > tr > th:nth-child(3), .results-table > tbody > tr > td:nth-child(3) { width: 10%; }
+.results-table > thead > tr > th:nth-child(4), .results-table > tbody > tr > td:nth-child(4) { width: 35.5%; padding-left: 2px; padding-right: 2px; }
+.results-table > thead > tr > th:nth-child(5), .results-table > tbody > tr > td:nth-child(5) { width: 43%; padding-left: 2px; padding-right: 6px; }
+tr.new-row { animation: flash 1.4s ease-out; }
+
+/* Path column: nesting is shown with real `tree`-command-style connector
+   characters (├──/└──/│, see .tree-connector below and treeConnectorFor()
+   in app.js) instead of a --depth-driven padding-left gutter -- explicit
+   request. The connector's own width already provides the indentation, so
+   the arrow/link that follow it are just normal inline content, not
+   absolutely positioned into a fixed-width gutter the way they used to be. */
+.results-table > thead > tr > th:nth-child(4), .results-table > tbody > tr > td:nth-child(4) { padding-left: 6px; }
+.result-expand {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 0 2px;
+    line-height: 1;
+    font-size: 17px;
+    vertical-align: middle;
+}
+.result-expand:hover { color: var(--text); border-color: transparent; }
+/* An extremely long path must never push the row wider than the page --
+   wrap and grow the row downward instead of scrolling off to the right. */
+.results-table > tbody > tr > td:nth-child(4) { overflow-wrap: anywhere; word-break: break-word; }
+/* white-space: pre -- the connector string's literal spaces (continuing a
+   blank column past an ancestor that had no more siblings) would otherwise
+   collapse to one, breaking the vertical alignment across rows. Monospace
+   so the box-drawing characters actually line up between rows regardless
+   -- a proportional font renders "│" and "├──" at different widths, which
+   misaligns every line below the first mismatch. */
+.tree-connector {
+    font-family: var(--mono);
+    color: var(--muted);
+    white-space: pre;
+    vertical-align: middle;
+    display: inline-block;
+}
+/* Real, reported bug fix (docs/identacion.png): a unit continuing an
+   ancestor's "│" line downward needs that line to span this row's FULL
+   height, not just the first display line -- a row's own path text can
+   wrap onto 2-3 lines (long filename), and the line used to stop dead
+   after line 1, leaving lines 2-3 with a visible gap where it should keep
+   going. align-self: stretch (this unit only -- .tree-path-prefix's
+   sibling units, the blank/own-branch ones, stay exactly as tall as their
+   own text, unaffected) gives it the full row height to work with, via
+   .tree-path-cell-inner/.tree-path-prefix's own align-items: stretch
+   below.
+   Real, reported follow-up bug #1: the first version kept the glyph
+   CHARACTER for line 1 and only drew a pseudo-element line underneath it
+   for the wrapped lines below -- line 1 was therefore glyph+line
+   overlapping (reads as a normal-weight "│"), while every wrapped line
+   below was the pseudo-element alone, visibly thinner. Fixed by never
+   drawing the glyph for a continuing unit at all (color: transparent --
+   keeps the original "│   " text in the DOM so this unit's own width/the
+   monospace grid is completely unaffected) so every line is the exact
+   same element at the exact same thickness.
+   Real, reported follow-up bug #2: an absolutely-positioned
+   (position: absolute; top/bottom: 0) ::before pseudo-element as the line,
+   relying on align-self: stretch to give its OWN flex item a tall,
+   definite-height containing block to stretch against, still rendered
+   correctly in some engines but kept collapsing back to a single line's
+   height in others (reported repeatedly with a nested/deeper ancestor
+   column specifically) -- a fragile combination of three separate
+   mechanisms (flex stretch sizing + position: absolute + a pseudo-element)
+   all needing to agree on this element's height. A background-image
+   instead needs none of that: it paints directly within this element's
+   OWN already-stretched border box, the same box getBoundingClientRect
+   confirms is correctly sized, with no separate abs-pos layout step that
+   can disagree with it. */
+.tree-connector-line {
+    align-self: stretch;
+    color: transparent;
+    background-image: linear-gradient(var(--muted), var(--muted));
+    background-repeat: no-repeat;
+    background-position: 0.5ch 0;
+    background-size: 1.5px 100%;
+}
+/* Path column, two flex siblings (buildResultRow/buildNodeRow, Results and
+   TREE both) -- real, reported bug this fixes: a path long enough to wrap
+   onto a 2nd line used to start back at the column's own left edge, cutting
+   straight across the connector/tree-lines of whatever row came below it,
+   instead of staying indented under its own content. A flex item's own
+   wrapped text always stays inside that item's box, never under a sibling
+   -- the prefix (connector + expand arrow) never wraps and never grows, the
+   content after it is the only thing that can. Same "inner div, not the
+   <td> itself" reasoning as .tree-note-cell-inner elsewhere. */
+/* align-items: stretch (was flex-start) -- gives .tree-path-prefix the
+   row's full, possibly-wrapped height to work with, so ITS OWN children
+   (the .tree-connector-line units above) have something to stretch into.
+   Makes zero visual difference for the common unwrapped case: there's no
+   extra height to stretch into when the row is exactly one line tall. */
+.tree-path-cell-inner { display: flex; align-items: stretch; }
+/* align-items: flex-start (was center) -- same reasoning: once the prefix
+   box can be taller than one line (see above), "center" would float the
+   connector glyphs/expand arrow halfway down a wrapped row instead of
+   keeping them pinned to line 1, where the actual node name they belong to
+   is. No difference for the common unwrapped case, same as above. */
+.tree-path-prefix { flex-shrink: 0; display: inline-flex; align-items: flex-start; white-space: pre; }
+.tree-path-content { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+/* Redirect column now has a fixed width (table-layout: fixed above) -- a
+   full absolute URL must wrap downward within it instead of overflowing. */
+.results-table > tbody > tr > td:nth-child(5) { overflow-wrap: anywhere; word-break: break-word; }
+.result-path-link, .result-redirect-link { color: var(--text); text-decoration: none; cursor: pointer; }
+.result-path-link:hover, .result-redirect-link:hover { color: var(--accent); text-decoration: underline; }
+/* A redirect leaving this result's own host/port is shown as the full
+   absolute URL (not just a path) and flagged in orange -- worth a second
+   look during a pentest. */
+.result-redirect-link.redirect-cross-origin { color: var(--orange); }
+.result-redirect-link.redirect-cross-origin:hover { color: var(--orange); filter: brightness(1.2); }
+@keyframes flash { from { background: rgba(79,140,255,.25); } to { background: transparent; } }
+
+.status { font-weight: 700; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; }
+.status-2 { color: var(--green); }
+.status-3 { color: var(--cyan); }
+.status-401, .status-403 { color: var(--yellow); }
+.status-4 { color: var(--muted); }
+.status-5 { color: var(--red); }
+
+.job-status { font-size: 11px; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--border); }
+.job-QUEUED { color: var(--orange); border-color: var(--orange); }
+.job-RUNNING { color: var(--yellow); border-color: var(--yellow); }
+.job-PAUSED { color: var(--blue); border-color: var(--blue); }
+.job-COMPLETED { color: var(--green); }
+.job-FAILED { color: var(--red); border-color: var(--red); }
+.job-STOPPED { color: var(--muted); border-color: var(--muted); }
+/* .icon-btn.job-error-info, not just .job-error-info -- real bug: this
+   button carries BOTH classes, and .icon-btn's own `color: var(--muted)`
+   (declared later in this file, same specificity as a lone .job-error-info)
+   won the cascade, so the icon rendered muted/gray instead of red no
+   matter what color was set here. The extra class matches .icon-btn's own
+   specificity and wins regardless of source order. */
+.icon-btn.job-error-info { color: var(--red); font-size: 13px; padding: 0 2px; margin-left: 2px; vertical-align: middle; }
+.icon-btn.job-error-info:hover { color: var(--red); filter: brightness(1.3); border-color: transparent; }
+
+section { margin-bottom: 20px; }
+/* section > .section-header-row > h2 added 2026-09-24 -- real, reported
+   bug: wrapping the Targets page's own h2 in that new flex row (to sit it
+   next to "Export all targets") took it out from being section's DIRECT
+   child, so this rule's original ">"-only selector stopped matching it at
+   all -- it silently fell back to the browser's own default h2 styling
+   (larger, bold, default text color) instead of this one. */
+section > h2, section > .section-header-row > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+/* New Fuzz's own subtitle, explaining what configuring it (without
+   launching anything) actually does -- normal weight/case, not shouting
+   like the all-caps uppercase heading it sits next to. */
+.section-subtitle { text-transform: none; font-weight: normal; letter-spacing: normal; font-size: 11.5px; }
+
+.empty { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
+.hint { color: var(--muted); font-size: 11.5px; }
+.error-banner { background: #3a1f22; border: 1px solid var(--red); color: #ffb3ad; padding: 8px 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12.5px; }
+
+/* ---- Workspace tabs (JOBS / RESULTS / TREE) ---- */
+/* position: sticky, WITH the gap above it baked into its own box (negative
+   top margin exactly canceling #app/main's own 16px top padding, then an
+   equal padding-top restoring the same visible gap from inside) -- not
+   just `top: 0` with the gap left as #app's own padding.
+   Explicit request, second time around: the previous plain-`position:
+   sticky` attempt (no margin trick) was reverted because the gap lived
+   ONLY in #app's top padding, ABOVE this element in the document flow --
+   once scrolled even slightly, that padding scrolled out of view first,
+   and the tabs then stuck flush against #scroll-area's own top edge with
+   the gap gone entirely. Then plain static flow (no sticky at all) was
+   tried instead, which kept the gap constant but let the tabs themselves
+   scroll away -- also not what was wanted; the user explicitly asked for
+   the tabs to stay fixed on screen while scrolling AND for the gap above
+   them to never collapse. The margin/padding trick below gets both at
+   once: `margin-top: -16px` makes this element's own box start flush with
+   #app's outer top edge (canceling the padding it would otherwise sit
+   below), so its STICKY offset is computed from *that* position -- and
+   `padding-top: 16px` puts the same visible gap back, but now inside this
+   element's own box, so it travels together with it once stuck. At rest
+   (scrollTop 0) the two exactly cancel out, so nothing about the
+   unscrolled page changes -- only the SCROLLED appearance is different.
+   An explicit background (not transparent) is still required, same
+   reasoning as before, or content scrolling behind the tabs (and behind
+   this now-taller sticky box, padding included) would show through; it
+   covers the padding area too, not just the border-bottom row. */
+.workspace-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: -16px;
+    margin-bottom: 16px;
+    padding-top: 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    background: var(--bg);
+}
+.export-target-btn {
+    margin-left: auto;
+    margin-bottom: 6px;
+    font-size: 12px;
+    padding: 5px 10px;
+}
+/* Targets page's own "h2 + Export all targets" row (2026-09-24) --
+   .export-target-btn's own margin-left: auto does the right-alignment,
+   this just needs to be a flex row for that to have somewhere to push
+   against. */
+.section-header-row { display: flex; align-items: center; }
+/* "Export all targets" split button (explicit request): a small arrow
+   beside the main button, visually joined to it, opens a tiny dropdown to
+   pick the download format (.zip of separate reports vs. one combined
+   HTML) instead of changing what the main button's own single click does.
+   margin-left: auto moves from each individual .export-target-btn (still
+   needed as-is for the single-target "Export target (HTML)" button
+   elsewhere) onto this whole group instead, so the pair pushes right as
+   one unit within the "Targets" header row. */
+.export-all-group { display: inline-flex; margin-left: auto; margin-bottom: 6px; position: relative; }
+.export-all-group .export-target-btn { margin-left: 0; margin-bottom: 0; }
+.export-all-main-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.export-all-arrow-btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; padding-left: 7px; padding-right: 7px; font-size: 10px; }
+.export-all-menu { min-width: 220px; }
+.workspace-tab {
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+.workspace-tab:hover { color: var(--text); }
+.workspace-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Results/TREE's own toolbar row (search + filters + add-path) -- sticks
+   directly below the (already-sticky) workspace tabs bar on scroll too,
+   explicit request. `top` is --tabs-sticky-height, set in JS
+   (renderWorkspace) from the tabs bar's own real measured height --
+   see that assignment's own comment for why it's measured, not guessed.
+   z-index one below the tabs bar's own (15) so the tabs bar still wins if
+   either one's stuck box ever overlaps the other by a pixel of rounding.
+
+   `margin-top: -16px` + `padding-top: 16px`: the same gap-baked-into-the-
+   sticky-box trick `.workspace-tabs` uses against #app's own padding,
+   applied one level deeper here. Real, reported bug this fixes: the 16px
+   gap between the tabs bar and this toolbar used to live ONLY in the tabs
+   bar's own `margin-bottom` -- a margin is never painted, so once BOTH
+   rows were stuck on screen, that gap became a persistent see-through
+   band showing whatever content scrolled behind it instead of solid
+   background. The negative margin-top here exactly cancels the tabs bar's
+   margin-bottom (adjacent-sibling margins collapse to +16 + -16 = 0), and
+   the equal padding-top puts the same visible gap back -- but now inside
+   THIS element's own box, painted with its own background, so it travels
+   together with it once stuck. Matches --tabs-sticky-height staying
+   exactly `tabs.offsetHeight` (no margin added) in JS.
+
+   `padding-bottom: 10px`, with the previous plain `margin-bottom` this
+   toolbar relied on for its own trailing gap zeroed out below (same
+   reasoning as the top gap, just simpler -- nothing to cancel via a
+   negative margin here, a stuck element's own trailing margin doesn't
+   reserve visible space against whatever scrolls up from underneath it,
+   it just reads as flush/cut-off against the table, explicit report). */
+.results-toolbar-sticky, .tree-toolbar-sticky {
+    position: sticky;
+    top: var(--tabs-sticky-height, 49px);
+    z-index: 14;
+    background: var(--bg);
+    margin-top: -16px;
+    padding-top: 16px;
+    padding-bottom: 10px;
+}
+.results-toolbar-sticky .filter-bar { margin-bottom: 0; }
+.tree-toolbar.tree-toolbar-sticky { margin-bottom: 0; }
+
+/* ---- Small icon-only action buttons (Results actions, Tree row icons) ---- */
+.icon-btn {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 2px 5px;
+    line-height: 1;
+    font-size: 13px;
+}
+.icon-btn:hover { color: var(--text); border-color: var(--border); }
+.icon-btn.active { color: var(--yellow); }
+/* Fuzz-launcher toggle (orange, not the generic yellow .active) and
+   add-to-TREE (green once the path has a TREE node) -- separate modifier
+   classes so they don't fight over .active's color with "mark interesting". */
+.icon-btn.fuzz-active { color: var(--orange); }
+.icon-btn.in-tree { color: var(--green); }
+/* JOBS row's "fuzz options" toggle -- blue while open, matching the
+   "Fuzzed" tag's own active color (.fuzzed-tag.fuzz-history-toggle.active),
+   not the generic yellow .active (reserved for "mark as default"). */
+.icon-btn.job-info-btn-active { color: var(--accent); }
+/* Centered, not right-aligned -- this is no longer the table's last column
+   (it now sits between Size and Path), so right-alignment left it crowded
+   against the Path column's own left edge instead of looking centered in
+   its own space. */
+.results-table > tbody > tr > td.result-actions { white-space: nowrap; text-align: center; }
+
+.new-badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    color: #06101f;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+/* Redirect cell now also carries NEW (2026-09-26, moved from Status --
+   "a la derecha del todo") -- an inner div, not the <td> itself, same
+   reasoning as .tree-note-cell-inner: flex lives one level in so the fixed
+   column width/table-layout above it is never affected. margin-left: auto
+   on the badge (not justify-content on the container) is what actually
+   pins it to the row's own right edge whether or not a redirect link is
+   also present as an earlier sibling. */
+.result-redirect-cell-inner { display: flex; align-items: center; min-height: 100%; }
+.result-redirect-cell-inner .new-badge { margin-left: auto; }
+
+/* ---- FUZZ TREE ---- */
+/* Same table-layout: fixed reasoning as .results-table above -- keeps
+   column widths stable whether or not the inline fuzz launcher or the
+   fuzz-history table is open underneath a row. */
+.tree-table { table-layout: fixed; }
+/* Size's own right-padding IS the "gap" toward the icons column -- explicit
+   here (not left at the base th/td default) so it can be kept equal to
+   .results-table's own Size→icons gap below. */
+.tree-table > thead > tr > th:nth-child(1), .tree-table > tbody > tr > td:nth-child(1) { width: 64px; }
+/* 84px -> 50px (-40%) / 56px -> 70px (+25%), explicit request -- Size had
+   more room than its content needs, the icons column felt cramped. */
+.tree-table > thead > tr > th:nth-child(2), .tree-table > tbody > tr > td:nth-child(2) { width: 50px; padding-right: 6px; }
+/* Interesting/fuzz icons -- its own column (see .tree-actions-cell below),
+   not indented content inline before the path text. */
+.tree-table > thead > tr > th:nth-child(3), .tree-table > tbody > tr > td:nth-child(3) { width: 70px; text-align: center; }
+/* Path gets a reasonable, modest width (still wraps for a long path,
+   overflow-wrap/word-break already handle that) -- Note is the one column
+   left unsized, so it gets as much of the remaining space as possible
+   instead of being capped at a small fixed width. Left-aligned, same as
+   every other text column (a prior "centered" attempt here was wrong --
+   the actual ask was about the column-to-column gap, not the text
+   alignment within it). */
+/* 260px -> 480px (2026-09-26, explicit request, image-measured): Path had
+   far more empty space than its content ever used, while Note (unsized,
+   right after it) started uncomfortably close -- the "Fuzzed: wordlist
+   (ext)" tag living in Note's own flex row (.tree-note-cell-inner) had
+   barely any room before the note textarea placeholder, visibly crowding
+   it. Widening Path is the single change that both uses that dead space
+   and pushes Note's own start further right. */
+.tree-table > thead > tr > th:nth-child(4), .tree-table > tbody > tr > td.tree-path-cell { width: 480px; padding-left: 6px; }
+.tree-table > thead > tr > th:nth-child(5), .tree-table > tbody > tr > td:nth-child(5) { padding-left: 8px; } /* Note -- unsized */
+.tree-table > thead > tr > th:nth-child(6), .tree-table > tbody > tr > td:nth-child(6) { width: 40px; }
+/* Nesting shown with .tree-connector's real tree-line characters now, not
+   a --depth-driven padding-left -- see .results-table's own identical
+   comment above (same fix, same reasoning, both tables). */
+.tree-table > tbody > tr > td { vertical-align: middle; }
+
+/* "Add path" -- grows with what's typed instead of scrolling horizontally;
+   "+ Add path" stays pinned to the row's right edge no matter how tall the
+   textarea gets (align-items: flex-start on the row, not center/stretch).
+   flex-wrap: nowrap overrides .inline-form's own wrap -- sharing the row
+   with the search/filters bar (.tree-toolbar) can leave this form less
+   width than its two children would take stacked, and .inline-form's
+   default wrap dropped the button below the textarea instead of just
+   letting the (shrinkable) textarea itself get narrower. */
+.tree-add-form { align-items: flex-start; flex-wrap: nowrap; }
+/* Wide enough that the full placeholder text is visible on one line
+   without wrapping, and wide enough overall that "+ Add path" lands
+   roughly at the horizontal middle of the page -- explicit request, not
+   just "a bit bigger". A prior width bump (340px -> 500px) here visibly
+   did nothing: `min-width: 0` (below) is what actually let flex-shrink
+   crush it back down to fit next to the search/filters bar regardless of
+   the basis, since min-width is the real floor flex-shrink can't go
+   under -- an explicit min-width now enforces the width that was actually
+   being asked for, not just a basis flex-shrink was free to ignore. */
+.tree-path-input {
+    flex: 0 1 700px;
+    min-width: 600px;
+    resize: none;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.3;
+}
+.tree-add-form button { flex-shrink: 0; }
+/* TREE's toolbar: Add path form + search + filters dropdown, all one row
+   (wraps to a second line on a narrow window instead of overflowing). */
+.tree-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.tree-toolbar .tree-add-form { margin-bottom: 0; }
+.tree-toolbar .filter-bar { margin-bottom: 0; margin-left: auto; }
+
+/* ---- Inline "Fuzz this path" launcher (Results row / TREE detail drawer) */
+.inline-fuzz-row td { background: #14161c; padding: 12px 14px; }
+.inline-fuzz-launcher .fuzz-form { margin-bottom: 0; }
+.inline-fuzz-launcher .fuzz-form .inline-form { margin-bottom: 8px; }
+
+/* An extremely long path in the TREE must never push the row wider than the
+   page either -- same treatment as .results-table td:nth-child(4). */
+.tree-table > tbody > tr > td.tree-path-cell { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Star (interesting) + fuzz-launcher icon: their own column (nth-child(3)
+   above), same x position for every row regardless of depth -- reverses an
+   earlier decision that kept them inline right before the path text
+   specifically so they'd shift right along with a child row's own
+   indentation; explicit request to align them like Results' own
+   fuzz/Add-to-TREE icons instead. */
+.tree-actions-cell { white-space: nowrap; }
+.tree-row-prefix-btn { padding: 1px 2px; }
+
+/* "Fuzzed: wordlist (ext,ext)" tag -- itself the toggle for a brief
+   read-only history panel/table (shown after the path text in Results;
+   already in place before the note in TREE, see .tree-note-cell). */
+.fuzzed-tag.fuzz-history-toggle { cursor: pointer; }
+.fuzzed-tag.fuzz-history-toggle:hover { border-color: var(--accent); color: var(--text); }
+.fuzzed-tag.fuzz-history-toggle.active { border-color: var(--accent); color: var(--accent); }
+/* > direct-child, not a plain descendant selector -- same leakage bug class
+   as the .jobs-table fix above: this rule is only meant to style the ONE
+   wrapping <td colspan> that holds the whole detail panel, but a plain
+   ".fuzz-history-row td" also matches every <td> inside the NESTED
+   .fuzz-history-table sitting inside that wrapping cell, stomping their own
+   (smaller, 11.5px-scale) padding and misaligning them against their own
+   <th>s -- confirmed empirically: JOBS' single-row "i" detail panel showed
+   its Date value shifted ~6px right of the "Date" header because of this. */
+.fuzz-history-row > td { background: #14161c; padding: 10px 14px; }
+/* No overflow-x here on purpose -- a table wide enough to need one would
+   show a page-breaking horizontal scrollbar the app never wants (see the
+   file-wide "no horizontal scrollbar" rule below every table-like block).
+   Cell content wraps downward instead (no white-space: nowrap). */
+.fuzz-history-panel { font-size: 12px; }
+.fuzz-history-table { width: 100%; table-layout: fixed; }
+.fuzz-history-table th, .fuzz-history-table td {
+    font-size: 11.5px;
+    text-align: left;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+/* Every column gets an explicit PERCENTAGE width (summing to 100%) --
+   deliberately not a mix of fixed px columns plus "leave some unsized and
+   let table-layout: fixed split the rest", which is what caused Other
+   options to render squeezed twice already: percentages scale with
+   whatever width this table actually has (it lives inside a colspan'd
+   <td>, not a fixed viewport), so there's no ambiguity left about how the
+   remaining space divides. Other options carries the most (longest
+   combined content: threads/method/force-ext/proxy/extra_args), Headers
+   next. Padding between columns is deliberately asymmetric: a bit of
+   breathing room after Status, then as little as possible from Wordlist
+   onward. */
+/* white-space: nowrap here specifically -- status values are a short,
+   fixed set of words (QUEUED/RUNNING/PAUSED/COMPLETED/FAILED/STOPPED), so
+   this guarantees the badge never wraps onto two lines even if the
+   percentage above computes narrower than expected in some container. */
+.fuzz-history-table th:nth-child(1), .fuzz-history-table td:nth-child(1) { width: 12%; padding-right: 10px; white-space: nowrap; }
+/* The status BADGE (.job-status) has its own 6px left padding on top of
+   this cell's own 8px (from the base th/td rule, left untouched above) --
+   stacked, that put the badge's actual TEXT a further 6px right of where
+   "Status" (the header, no badge wrapping it) starts. Only the <td> needs
+   this -- reduce its own padding-left by that same 6px so the two line up
+   (2px cell padding + 6px badge padding = 8px, matching the header). */
+.fuzz-history-table td:nth-child(1) { padding-left: 2px; }
+.fuzz-history-table th:nth-child(2), .fuzz-history-table td:nth-child(2) { width: 18%; padding-left: 4px; padding-right: 2px; }
+.fuzz-history-table th:nth-child(3), .fuzz-history-table td:nth-child(3) { width: 12%; padding-left: 2px; }
+/* Headers/Other options each gave up more (20->17, 26->21) to fit a 7th
+   column, Results (2026-09-26, explicit request: between Other options and
+   Date) -- same "take it from these two, they have the most slack"
+   reasoning as Date's own addition (see this comment's own history) --
+   12+18+12+17+21+8+12 = 100%. */
+.fuzz-history-table th:nth-child(4), .fuzz-history-table td:nth-child(4) { width: 17%; }
+.fuzz-history-table th:nth-child(5), .fuzz-history-table td:nth-child(5) { width: 21%; }
+.fuzz-history-table th:nth-child(6), .fuzz-history-table td:nth-child(6) { width: 8%; white-space: nowrap; }
+.fuzz-history-table th:nth-child(7), .fuzz-history-table td:nth-child(7) { width: 12%; white-space: nowrap; }
+/* JOBS' own "i" info panel (one single-row table, always exactly this
+   job): Status dropped as redundant there (see buildFuzzHistoryPanel's own
+   comment) -- the freed 12% redistributed proportionally across the
+   remaining four real columns (18:12:26:32 -> ~20:14:29:37) instead of
+   left unused. Every cell already inherits text-align: left from the base
+   th/td rule above -- explicit request confirmed this is what "left-align
+   the columns" meant once Status (whose own left-aligned badge visually
+   read as more indented) was gone. */
+.fuzz-history-table.no-status th:nth-child(1), .fuzz-history-table.no-status td:nth-child(1) { width: 18%; padding-left: 4px; padding-right: 2px; }
+.fuzz-history-table.no-status th:nth-child(2), .fuzz-history-table.no-status td:nth-child(2) { width: 12%; padding-left: 2px; }
+.fuzz-history-table.no-status th:nth-child(3), .fuzz-history-table.no-status td:nth-child(3) { width: 22%; }
+/* Results dropped out of this panel entirely (2026-10-09, explicit request --
+   it overflowed JOBS' own narrower single-job panel; the main JOBS row's own
+   Results count is the clickable one there instead). Its 9% went to Other
+   options (27 -> 36); Date is the 5th column now, not the 6th.
+   18+12+22+36+12 = 100%. */
+.fuzz-history-table.no-status th:nth-child(4), .fuzz-history-table.no-status td:nth-child(4) { width: 36%; }
+.fuzz-history-table.no-status th:nth-child(5), .fuzz-history-table.no-status td:nth-child(5) { width: 12%; white-space: nowrap; }
+.fuzz-history-header-chip {
+    color: var(--text);
+    border-bottom: 1px dotted var(--muted);
+    /* pointer, not help -- it's clickable now too (copies "Name: Value"
+       to the clipboard), the dotted underline alone still signals "hover
+       for more". */
+    cursor: pointer;
+}
+/* Hovering ONE header name chip grows a small box with the full
+   "Name: value", positioned by JS (position: fixed, sized/flipped to
+   whichever side of the chip actually has room -- see
+   positionFloatingBox() in app.js) so it can use the full screen instead of
+   being clipped to this table's own width, and closes the instant the
+   mouse leaves that specific chip (mouseenter/mouseleave in JS, not CSS
+   :hover, precisely so JS can compute the position first). */
+/* Shared base for every custom hover tooltip in the app (replaces native
+   `title=`, which WebView2 renders with a plain white background that
+   can't be restyled) -- attachTooltip() in app.js builds one of these for
+   a given element; buildHeaderNameChip() below builds its own directly
+   since its content (header name chips) needs the monospace/pre-wrap
+   treatment .app-tooltip alone doesn't have. */
+.app-tooltip, .fuzz-history-header-hover {
+    display: none;
+    position: fixed;
+    z-index: 200;
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 6px 8px;
+    color: var(--text);
+    font-size: 11.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.fuzz-history-header-hover {
+    font-family: var(--mono);
+}
+.running-jobs-tooltip { white-space: normal; }
+.running-jobs-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 2px 0;
+}
+.running-jobs-tooltip-path { color: var(--muted); }
+.running-jobs-tooltip-percent { color: var(--orange); font-weight: 600; }
+
+/* "Fuzzed" tag -- shared by Results (next to the path; no wordlist/ext
+   detail there, just the tag itself) and TREE (before the note, with the
+   wordlist+extensions detail -- see .tree-note-cell-inner below). The flex
+   row that lays out the tag next to the note lives on an INNER wrapper div,
+   never on the <td> itself: an explicit display: flex on a table cell can
+   pull it out of normal table-row layout in some engines, which is exactly
+   what caused the row's own bottom border to render a little higher
+   starting at this column -- a plain <td> containing a flex div has no
+   such risk. */
+/* min-width: 0 -- a flex row's children default to a min-width of their own
+   unwrapped content size, which a plain text child (export's own read-only
+   .export-note span, see export_service.py) has no other way to shrink
+   below: without this, a note longer than the column's own share of space
+   pushed the whole row wider instead of wrapping, overflowing past the
+   Notes column -- only visible/reported once a real export had more than a
+   couple of rows to make the overflow obvious against its neighbors. The
+   live app's own note field (an actual <textarea>, not a plain span) never
+   hit this, which is why it went unnoticed there. */
+.tree-note-cell-inner { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fuzzed-tag {
+    display: inline-block;
+    flex-shrink: 0;
+    margin-left: 6px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    color: var(--muted);
+    background: #1e222b;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    white-space: nowrap;
+}
+/* Directly-editable note, right in the row -- deliberately NOT rendered in
+   plain white like the path, so it reads as a secondary/muted field, the
+   same subtle gray already used for .hint text elsewhere -- but legible on
+   hover/focus so it's still comfortable to actually edit. A textarea (not
+   an input) so a long note grows downward instead of getting cut off,
+   same auto-grow-height technique as .tree-path-input. */
+.tree-note-input {
+    flex: 1;
+    min-width: 100px;
+    resize: none;
+    overflow: hidden;
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.3;
+    padding: 3px 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.tree-note-input::placeholder { color: var(--muted); opacity: .7; }
+.tree-note-input:hover, .tree-note-input:focus {
+    border-color: var(--border);
+    background: #1e222b;
+    color: var(--text);
+}
+
+.tree-table > tbody > tr > td.tree-status-cell { vertical-align: middle; }
+/* Give the "no status yet" placeholder the same box (padding/line-height)
+   as the .status badge it stands in for, so the row centers identically
+   whether or not the node has a status -- otherwise the plain "—" text sits
+   noticeably higher/lower than a badge would in the same cell. */
+.tree-status-empty { display: inline-block; padding: 1px 6px; line-height: 1.5; }
+
+.tree-table > tbody > tr > td.tree-delete-cell { text-align: right; }
+
+/* ---- Filter bar (Results / TREE): search + toggle chips + composable
+   "hide" filter rules -- kept deliberately compact, one wrapping row. ---- */
+.filter-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filter-bar input[type="search"] { min-width: 160px; }
+.filter-chip {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+}
+.filter-chip:hover { color: var(--text); }
+.filter-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(79,140,255,.12); }
+.filter-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    padding: 3px 6px 3px 9px;
+    border-radius: 12px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    background: rgba(79,140,255,.12);
+    /* A long filter value (e.g. a long parent-path) must never force this
+       chip -- and with it the whole filter-bar row -- wider than the page;
+       wrap its own text downward inside the chip instead. */
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.filter-chip-remove button {
+    background: transparent;
+    border-color: transparent;
+    color: inherit;
+    padding: 0 2px;
+    font-size: 12px;
+    line-height: 1;
+}
+.filter-chip-remove button:hover { border-color: transparent; filter: brightness(1.3); }
+.filter-add-form {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* Explicit nowrap -- the three inputs + "+ Hide" button must stay on
+       one row, per explicit request; .hide-rules-popup's own min-width
+       below already gives this enough room. */
+    flex-wrap: nowrap;
+}
+.filter-add-form input { width: 90px; font-size: 11.5px; padding: 3px 7px; }
+/* Parent path is typically the longest of the three values -- 50% wider
+   than Status/Size, per explicit request. */
+.filter-add-form input.filter-parent-input { width: 135px; }
+/* Just a small integer (path levels below "Parent path") -- narrower than
+   the other fields. */
+.filter-add-form input.filter-depth-input { width: 48px; }
+.filter-add-form button { font-size: 11.5px; padding: 3px 8px; }
+/* "Hide rules" dropdown holds the add-form (Status/Size/Parent path + the
+   "+ Hide" button, all on one row) PLUS every already-added rule stacked
+   below it (.filters-popup's own flex-direction: column handles the
+   stacking) -- wide enough that those four fields don't wrap onto their
+   own lines the moment the dropdown opens. */
+/* width: max-content (not just a guessed min-width pixel value) --
+   guarantees the popup is always exactly as wide as the add-form row
+   actually needs, regardless of how font/padding renders in practice.
+   min-width is still the floor so it doesn't shrink below a reasonable
+   size once rules are added below it (those wrap, so they don't force
+   their own width the same way). */
+/* Fixed width (not max-content): with max-content the popup grew to fit every
+   added rule on one line, so they never wrapped downward. The add-form needs
+   ~460px, so 540px is enough and everything else wraps inside it. */
+.hide-rules-popup { width: 540px; max-width: 90vw; }
+.hide-rules-popup .filter-add-form input, .hide-rules-popup .filter-add-form button { flex-shrink: 0; }
+/* Already-added rules: as many per row as fit (not one full-width row
+   each, per explicit request) -- a dedicated row-wrapping container, kept
+   separate from .filters-popup's own column stacking (which still applies
+   to "add-form row" vs "chips row" as the two top-level groups). */
+.hide-rules-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    /* Long rule lists scroll inside the dropdown instead of running off the
+       bottom of the screen. */
+    max-height: max(120px, calc(100vh - 260px));
+    overflow-y: auto;
+}
+.filter-status-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); padding: 2px 4px; white-space: nowrap; }
+/* Right-click "Copy full path" menu (attachCopyPathContextMenu) -- a tiny,
+   viewport-positioned popup, same visual language as .filters-popup. */
+.path-context-menu {
+    position: fixed;
+    z-index: 50;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 4px;
+}
+.path-context-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.path-context-menu-item:hover { background: rgba(79,140,255,.12); color: var(--accent); }
+/* Clickable Results count (JOBS' own main row, and TREE's Fuzzed-history
+   panel) -- goes to Results, scrolled/expanded to that exact path. */
+.results-count-link {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.results-count-link:hover { filter: brightness(1.2); }
+.filter-status-input { width: 150px; font-size: 11.5px; padding: 3px 7px; }
+/* Same highlight as an active .filter-chip (e.g. the "Fuzzed" toggle) once a
+   value has actually been typed in -- explicit request. */
+.filter-status-input.active { color: var(--accent); border-color: var(--accent); background: rgba(79,140,255,.12); }
+.hide-rules-chips .filter-chip-remove { width: auto; max-width: 100%; box-sizing: border-box; }
+
+/* TREE's simpler filter set (Interesting/Fuzzed) lives behind a "Filters ▾"
+   dropdown instead of always-visible chips -- same popup pattern as the
+   wordlist picker (position: relative trigger + absolute panel, closed by
+   a self-removing document click listener). */
+.filters-dropdown { position: relative; }
+/* Centered on its trigger button (not right-aligned to it) -- explicit
+   request: right: 0 anchored the popup's own right edge to the button's,
+   which (since the popup is always wider than the button) visually read as
+   the popup sitting off to the right of it, not aligned with it at all. */
+.filters-popup {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    min-width: 160px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 6px;
+    flex-direction: column;
+    gap: 4px;
+}
+.filters-popup:not([hidden]) { display: flex; }
+/* Every option inside the dropdown centered as a unit -- text-align here
+   covers a plain-text chip ("Fuzzed"); an icon+label one (buildIconTextButton,
+   "⭐ Interesting") already centers itself via .icon-text-btn's own flex
+   layout, so this is just making sure both look the same, not fighting it. */
+.filters-popup .filter-chip { width: 100%; text-align: center; border-radius: 4px; }
+
+/* Icon-only or icon+label buttons using the inline SVGs (LIGHTNING/TREE/
+   STAR/TRASH/CHECK) instead of emoji. flex + centered on the BUTTON itself
+   (not just the icon span) -- plain inline content left the icon+text
+   pair baseline-aligned and off-center within the button's own padding box
+   instead of centered as a unit. */
+.icon-text-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.btn-icon { display: inline-flex; }
+.btn-icon svg { display: block; }
+
+/* ---- In-app modal (replaces native alert() for the FAILED job error, etc.) */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+}
+.modal-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5);
+    max-width: 560px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { margin: 0; font-size: 13px; color: var(--text); }
+.modal-close-btn { background: transparent; border-color: transparent; color: var(--muted); padding: 2px 6px; font-size: 16px; line-height: 1; }
+.modal-close-btn:hover { color: var(--text); border-color: var(--border); }
+.modal-body {
+    /* flex: 1 1 auto + min-height: 0 -- without both, a flex item's default
+       min-height is "auto" (content-based), which refuses to shrink below
+       its own content's natural height. A long FAILED job's error text
+       could then push .modal-box taller than its own max-height: 80vh
+       instead of .modal-body's overflow-y: auto ever actually kicking in
+       -- explicit report: "no se ve todo el error", and this is exactly
+       why (the scroll mechanism was already there, it just never got the
+       chance to activate). */
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 14px;
+    overflow-y: auto;
+    color: var(--text);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--mono);
+    /* Explicit, defensive -- this text (a job's full error output) is
+       exactly the kind of thing someone wants to copy out, so it must
+       always be selectable even if something upstream sets user-select
+       differently. */
+    -webkit-user-select: text;
+    user-select: text;
+}

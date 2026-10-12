@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# OptiFuzz runtime data (kept in the user's data directory, never in the repository)
+workspace/
+projects/
+outputs/
+sessions/
+*.session

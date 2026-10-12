@@ -1,0 +1,25 @@
+# Fuzzing engine (V1). Pinned to a specific commit before implementation begins
+# so the integration is reproducible; update deliberately, not via `pip install -U`.
+dirsearch @ git+https://github.com/maurosoria/dirsearch.git@b1e08a1acd58de256b1a71e042e470c29b0c6538
+
+# Testing (required by project spec: parser, models, persistence, engine tests)
+pytest>=9.0
+pytest-asyncio>=0.24
+
+# Backend (Phase 0, see docs/ARCHITECTURE.md §3.1)
+fastapi>=0.115
+uvicorn[standard]>=0.32
+
+# Cross-platform process pause/resume and PID liveness (docs/ARCHITECTURE.md §2.6)
+psutil>=6.1
+
+# Windows pseudo-console (ConPTY) support, so dirsearch believes it's attached to a
+# real terminal and emits its live per-request progress bar instead of silently
+# suppressing it (docs/ARCHITECTURE.md §2.3b). POSIX has this built into the stdlib
+# `pty` module; this dependency is Windows-only.
+pywinpty>=3.0; sys_platform == "win32"
+
+# Desktop window (run_desktop.py): opens the app in its own native window
+# instead of a browser tab -- on Windows, backed by the system's WebView2
+# runtime via pythonnet, not a bundled Chromium (docs/ARCHITECTURE.md §13).
+pywebview>=6.0

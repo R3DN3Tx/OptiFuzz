@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # What a Linux user actually has: the distribution's own Python plus the system GTK/WebKit
+  # packages (pywebview needs them; PyGObject cannot be installed reliably with pip). Runs the
+  # whole test suite, a real dirsearch end-to-end check, and starts the real desktop window under
+  # a virtual display. (Ubuntu 22.04 is not tested: its Python 3.10 is older than dirsearch's
+  # minimum of 3.11.)
+  linux-distro-python:
+    name: Linux (ubuntu-24.04, distribution Python)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
+            xvfb scrot git fonts-dejavu-core fonts-noto-core
+      - name: Virtual environment and requirements
+        run: |
+          python3 --version
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+      - name: Tests
+        run: .venv/bin/python -m pytest -q
+      - name: End-to-end with real dirsearch (run, pause, resume, stop, failed job)
+        run: .venv/bin/python dev/ci_e2e.py
+      - name: Desktop window smoke test (virtual display)
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" .venv/bin/python dev/ci_smoke.py
+      - name: Upload screenshot and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-smoke
+          path: |
+            shot.png
+            app.log
+          if-no-files-found: ignore
+
+  # The Python versions the project supports, on Linux, without the window (no GTK needed for the
+  # tests): 3.11 is the minimum (dirsearch's own requirement), 3.13 the newest tested.
+  linux-python:
+    name: Linux (ubuntu-24.04, Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Tests
+        run: python -m pytest -q
+      - name: End-to-end with real dirsearch
+        run: python dev/ci_e2e.py
+
+  windows:
+    name: Windows (Python 3.13)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Tests
+        run: python -m pytest -q
+      - name: End-to-end with real dirsearch
+        run: python dev/ci_e2e.py

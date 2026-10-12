@@ -1,0 +1,632 @@
+"""Run OptiFuzz as its own desktop window instead of a browser tab.
+
+Starts the same FastAPI app (backend.main:app) in a background thread on a
+free local port, waits for it to actually be listening, then opens it in a
+native window via pywebview. On Windows this is backed by the system's own
+WebView2 runtime (already present with any current Edge/Windows install, via
+the pythonnet/WinForms integration pywebview uses) -- not a bundled Chromium
+like Electron, so this adds one small pure-Python dependency rather than a
+whole separate toolchain (docs/ARCHITECTURE.md §13).
+
+Run via `pythonw.exe` -- no console window is created at all, not even
+briefly. This used to require `python.exe` plus code to hide that console
+again at startup (a real console, kept alive but hidden, was believed
+necessary for ConPTY, the pseudo-console dirsearch's subprocess is spawned
+through -- see docs/ARCHITECTURE.md §13 for the retired approach). That
+belief was wrong: reproduced directly, a fuzz job COMPLETES normally with
+zero console ever created for *this* process, as long as the dirsearch
+CHILD subprocess itself is never spawned via `pythonw.exe` --
+`backend/engine/dirsearch.py::_default_python_executable()` now guarantees
+that regardless of what interpreter this app itself is running under.
+
+Usage: .venv/Scripts/OptiFuzz.exe run_desktop.py
+(`OptiFuzz.exe` is a renamed copy of `pythonw.exe`, same folder -- purely so
+Task Manager shows "OptiFuzz" instead of the generic "Python"; plain
+`pythonw.exe` still works identically otherwise. See docs/ARCHITECTURE.md
+§13 for how/why -- rebuilding the venv from scratch loses this copy, it
+needs recreating by hand.)
+"""
+from __future__ import annotations
+
+import os
+import socket
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+from backend.persistence.paths import app_data_dir
+from backend.platform_compat import IS_WINDOWS
+
+if IS_WINDOWS:
+    import ctypes
+    import winreg
+
+# Launched via a genuine double-click (the Start Menu shortcut, a taskbar
+# pin, ...) rather than from a terminal, `pythonw.exe`/`OptiFuzz.exe` gets no
+# console AND no inherited pipes -- sys.stdout/sys.stderr are then literally
+# `None`, not just redirected. uvicorn.Config() unconditionally calls
+# `sys.stdout.isatty()` while setting up its default logging formatter, which
+# raises `AttributeError: 'NoneType' object has no attribute 'isatty'` on
+# that None -- an *uncaught* exception, so the whole process exits before the
+# window ever opens. And because stderr is also None, nothing ever prints
+# the traceback either: the app just silently fails to appear. (Ran fine in
+# every dev-session test throughout this project so far only because a
+# terminal/IDE always gave it a real, non-None stdout/stderr -- this only
+# reproduces launched fully detached, e.g. `Start-Process` on the .lnk
+# itself, which is exactly how a real double-click launches it too.)
+# Fix: give both a harmless real file object before anything else can touch
+# them, instead of `None`.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
+import webview
+
+# uvicorn, backend.main (FastAPI + every router/service) and app_settings are
+# deliberately NOT imported here at module level any more: that import chain
+# alone is ~1s warm and several times that on a cold start (disk cache
+# dropped, antivirus scanning each .pyc), and it all ran BEFORE any window
+# existed -- the app looked dead for 10-20s on a cold launch. They're
+# imported by _boot_backend() below, on a worker thread, while the window is
+# already up showing a loading indicator.
+
+_FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+# Two ink colors, picked to actually stay legible against whichever the
+# *shell chrome* (taskbar/Start menu/Alt-Tab) is -- not to match OptiFuzz's
+# own always-dark in-page theme. Verified by compositing each onto a dark
+# and a light swatch locally: the light-ink mark all but disappears on a
+# dark background and vice versa.
+# .ico on Windows (what the Win32 shell wants); .png elsewhere (what GTK's
+# icon loader handles reliably).
+_ICON_EXT = ".ico" if IS_WINDOWS else ".png"
+_ICON_FOR_DARK_SHELL = _FRONTEND_DIR / f"icon-dark{_ICON_EXT}"  # light ink, for a dark taskbar
+_ICON_FOR_LIGHT_SHELL = _FRONTEND_DIR / f"icon-light{_ICON_EXT}"  # dark ink, for a light taskbar
+
+
+def _system_uses_light_theme() -> bool | None:
+    """Whether Windows' *shell chrome* (taskbar, Start menu, Alt-Tab) is in
+    light or dark mode. Deliberately reads `SystemUsesLightTheme`, not
+    `AppsUseLightTheme` (the value pywebview's own dark-title-bar check
+    uses, see _style_title_bar) -- Windows lets apps and shell chrome run
+    opposite themes independently in Settings, and it's the chrome one that
+    actually determines what our taskbar/Start-menu/Alt-Tab icon renders
+    against. Returns None if it can't be read (missing key on older
+    Windows, permissions, ...) -- callers should treat that as "assume dark".
+    Always None off Windows: there is no single shell-wide theme setting to
+    read, so the dark-shell icon is used.
+    """
+    if not IS_WINDOWS:
+        return None
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            0,
+            winreg.KEY_READ,
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "SystemUsesLightTheme")
+        return bool(value)
+    except OSError:
+        return None
+
+
+def _select_icon_path() -> Path | None:
+    """Picks whichever of the two ink-color icon variants actually exists
+    and matches the current shell theme -- falls back to the other variant
+    if the preferred one is missing, and to None (pywebview's own default,
+    the interpreter's icon) only if neither file is present at all."""
+    uses_light = _system_uses_light_theme()
+    preferred = _ICON_FOR_LIGHT_SHELL if uses_light else _ICON_FOR_DARK_SHELL
+    fallback = _ICON_FOR_DARK_SHELL if uses_light else _ICON_FOR_LIGHT_SHELL
+    if preferred.is_file():
+        return preferred
+    if fallback.is_file():
+        return fallback
+    return None
+
+# Without this, Windows groups this window's taskbar button under whichever
+# generic AppUserModelID python.exe/pythonw.exe has (if any) and shows the
+# interpreter's own icon there instead of the window's -- the title bar icon
+# (set via webview.start(icon=...) below) is unaffected either way, only the
+# taskbar button/thumbnail is. Must be called before any window is created.
+def _claim_windows_app_identity() -> None:
+    if not IS_WINDOWS:
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("OptiFuzz.DesktopApp")
+    except (AttributeError, OSError):
+        pass
+
+
+_DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+_DWMWA_TEXT_COLOR = 36  # Windows 11 (build 22000+) only
+
+# Windows' own default dark-mode caption background (RGB 32,32,32) -- not an
+# officially documented constant, but the consistently observed shade every
+# dark-mode Win32/WinForms app gets from DWMWA_USE_IMMERSIVE_DARK_MODE alone
+# with no DWMWA_CAPTION_COLOR override. Matching the text to *this* (rather
+# than overriding the caption to an exact app color) keeps the title bar
+# visually distinct from the page content below it -- a custom exact match
+# made the whole window read as one undifferentiated block, which the user
+# didn't want.
+_DEFAULT_DARK_CAPTION_COLOR = "#202020"
+
+
+def _colorref(hex_color: str) -> int:
+    """DWM text color attribute takes a Win32 COLORREF, which is
+    0x00BBGGRR -- byte order reversed from the usual #RRGGBB."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    return (b << 16) | (g << 8) | r
+
+
+def _style_title_bar(window: webview.Window) -> None:
+    """Dark title bar, with its text invisible against it.
+
+    - DWMWA_USE_IMMERSIVE_DARK_MODE: pywebview only darkens the title bar
+      when *Windows'* own system theme is dark -- OptiFuzz has no light
+      variant at all, so this is forced unconditionally rather than left to
+      follow the OS setting. Works on Windows 10 2004+ and 11. The caption
+      *background* itself is left as whatever this puts there (Windows'
+      standard dark default) -- deliberately not overridden to an exact app
+      color; see _DEFAULT_DARK_CAPTION_COLOR above for why.
+    - DWMWA_TEXT_COLOR (Windows 11 only): painted the same as that default
+      dark background. The window's title string is still the real
+      "OptiFuzz" (so the taskbar tooltip and Alt-Tab switcher, which read
+      the title directly rather than rendering DWM's caption text, still
+      show it) -- painting the caption text the same color as its
+      background just makes it visually disappear there specifically,
+      without touching either of those. On Windows 10 (no attribute 36),
+      the title text stays visible in the title bar itself -- a known gap.
+
+    window.native (the underlying WinForms Form, with a real HWND) only
+    exists once the window has actually been shown, hence the event hook
+    rather than calling this immediately after create_window().
+    """
+    def _apply(*_args, **_kwargs) -> None:
+        try:
+            hwnd = window.native.Handle.ToInt32()
+        except (AttributeError, OSError):
+            return
+
+        def _set(attr: int, value: int) -> None:
+            try:
+                cval = ctypes.c_int(value)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(cval), ctypes.sizeof(cval))
+            except OSError:
+                pass  # attribute not supported on this Windows version -- skip it, not fatal
+
+        _set(_DWMWA_USE_IMMERSIVE_DARK_MODE, 1)
+        _set(_DWMWA_TEXT_COLOR, _colorref(_DEFAULT_DARK_CAPTION_COLOR))
+
+    # Not just `shown` (once, at startup) -- real, reported bug: the title
+    # bar's dark styling sometimes reverted to Windows' own light default
+    # later in a session. DWM repaints the non-client area from the system
+    # theme on its own in several situations this app has no direct hook
+    # for (a system light/dark toggle while the window is open, waking from
+    # sleep, certain display/DPI changes) -- `_apply` is deliberately cheap
+    # and idempotent (just re-asserts the same two attributes), so
+    # re-running it on every un-minimize/un-maximize is a safe, low-cost
+    # way to correct that without needing to catch the underlying
+    # WM_SETTINGCHANGE/theme-change message itself (pywebview exposes no
+    # hook for that).
+    window.events.shown += _apply
+    window.events.restored += _apply
+    window.events.maximized += _apply
+
+
+_GWL_EXSTYLE = -20
+_WS_EX_DLGMODALFRAME = 0x00000001
+_SWP_NOMOVE = 0x0002
+_SWP_NOSIZE = 0x0001
+_SWP_NOZORDER = 0x0004
+_SWP_FRAMECHANGED = 0x0020
+_WM_SETICON = 0x0080
+_ICON_SMALL = 0
+
+
+def _hide_title_bar_icon(window: webview.Window) -> None:
+    """Removes just the small caption icon glyph from the native title bar
+    (and the taskbar's hover-preview thumbnail header, which shows the same
+    glyph) -- the app's own in-page header already shows the logo, and the
+    user didn't want it duplicated in the OS chrome above it.
+
+    Deliberately only raw Win32 API calls (ctypes against the HWND directly)
+    -- NOT `window.native.ShowIcon = False`, WinForms' own documented
+    property for this, which was tried here first. pywebview's `shown`
+    event runs its handlers on a freshly spawned Python thread, never the
+    window's own UI thread (see webview/event.py: `Event.set()` always
+    starts a `threading.Thread` unless the event was constructed with
+    `should_lock=True`, and pywebview's own `shown` isn't). WinForms
+    objects are single-threaded-apartment and not safe to touch from any
+    other thread; `ShowIcon`'s setter did exactly that and froze the whole
+    window (verified: removing it was what fixed the freeze). Reading
+    `window.native.Handle` below is fine -- it's a plain stored field, not
+    a call into WinForms' own UI-thread-affine logic -- and every call after
+    that is a direct `user32`/`dwmapi` Win32 API call against that raw HWND,
+    which Windows explicitly supports from any thread.
+    """
+    def _apply(*_args, **_kwargs) -> None:
+        try:
+            hwnd = window.native.Handle.ToInt32()
+            ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
+            ctypes.windll.user32.SetWindowLongW(hwnd, _GWL_EXSTYLE, ex_style | _WS_EX_DLGMODALFRAME)
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOZORDER | _SWP_FRAMECHANGED,
+            )
+            ctypes.windll.user32.SendMessageW(hwnd, _WM_SETICON, _ICON_SMALL, 0)
+        except (AttributeError, OSError):
+            pass
+
+    window.events.shown += _apply
+
+
+def _webview_storage_path() -> str:
+    """A stable WebView2 profile directory, next to the workspace data but
+    not inside it (workspace_root() is specifically Projects/Targets/Jobs
+    data). Without this, pywebview's own default (`private_mode=True`)
+    picks a fresh temp folder every single launch -- verified directly: a
+    running instance's `msedgewebview2.exe --user-data-dir=...` pointed at
+    a path under `%TEMP%`, a different one than a previous launch's. That
+    silently discards the page's own localStorage on every restart, which
+    breaks anything meant to be *remembered* (e.g. the last-used wordlist)
+    across sessions, not just across in-app navigation.
+    """
+    path = app_data_dir() / "webview_profile"
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
+class _Api:
+    """Exposed to the frontend as `window.pywebview.api.*` (pywebview's own
+    js_api bridge -- every public method becomes an async-callable JS
+    function). Only `pick_folder` so far: the native "choose a folder"
+    dialog the outputs-mirror-directory setting needs, which a browser
+    (even a Chromium one like WebView2) never exposes to a plain web page
+    for security reasons -- this is the one thing that genuinely needs the
+    desktop app specifically, not just "a web page pywebview happens to be
+    showing". `_window` is set once main() actually creates it (this class
+    is instantiated before that), since create_file_dialog needs the real
+    window object.
+
+    STANDING RULE: this attribute MUST stay named with a leading underscore
+    -- real, reproduced bug otherwise. pywebview's own js_api bridge
+    (webview/util.py::get_functions) walks every PUBLIC, non-callable
+    attribute of this object with `dir()`/`getattr()` to auto-generate the
+    JS-side function list, recursing into any attribute that's itself a
+    non-callable object. A plain `self.window = window` (no underscore) got
+    walked straight into the live `webview.Window` instance, which
+    eventually reaches `window.native` -- the raw WinForms Form/COM object,
+    whose reflected property surface (`.native.AccessibilityObject.Bounds
+    .Empty.Empty.Empty...`, endlessly) is effectively unbounded and never
+    trips get_functions' own id()-based cycle guard (each COM property
+    access hands back a distinct wrapper object). Confirmed directly: a
+    `py-spy dump` of a hung, unresponsive launch showed the MAIN thread
+    stuck forever inside `webview.create_window()`, waiting on exactly this
+    recursive walk on a *separate* thread to finish -- it never does.
+    get_functions skips any attribute starting with `_` unconditionally, so
+    the leading underscore here is the actual, real fix -- not cosmetic.
+    This is also what those `[pywebview] Error while processing
+    window.native.AccessibilityObject...` log lines from earlier testing
+    actually were (misread then as some external accessibility tool
+    walking the window -- it was this, self-inflicted, the whole time).
+    """
+
+    _window: webview.Window | None = None
+
+    def pick_folder(self, initial_dir: str = "") -> str | None:
+        if self._window is None:
+            return None
+        result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=initial_dir or "")
+        return result[0] if result else None
+
+
+def _free_port(preferred: int) -> int:
+    for candidate in (preferred, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", candidate))
+                return sock.getsockname()[1]
+            except OSError:
+                continue
+    raise RuntimeError("Could not bind to any local port")
+
+
+def _wait_until_listening(port: int, timeout: float = 60.0) -> None:
+    # 60s (was 10s): this no longer gates the window appearing, so a very
+    # slow cold start just keeps showing the loading indicator instead of
+    # having to fit inside a tight budget.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.05)
+    raise RuntimeError(f"OptiFuzz backend did not start listening on port {port} in time")
+
+
+# Shown the instant the window opens, until the backend is up and the real
+# page replaces it. Same dark background as styles.css's --bg so there is no
+# flash between this and the app itself.
+_LOADING_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><title>OptiFuzz</title>
+<style>
+html, body { height: 100%; margin: 0; background: #0f1115; color: #8b90a0;
+  font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+.spinner { width: 30px; height: 30px; border: 3px solid #232833; border-top-color: #4f8cff;
+  border-radius: 50%; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style></head>
+<body><div class="spinner"></div><div>Loading OptiFuzz&hellip;</div></body></html>"""
+
+
+def _error_html(message: str) -> str:
+    import html as html_lib
+
+    return (
+        _LOADING_HTML.split("<body>")[0]
+        + "<body><div style='max-width:640px;padding:0 24px;text-align:center'>"
+        + "<div style='color:#ff6b6b;font-size:16px;margin-bottom:10px'>OptiFuzz could not start</div>"
+        + f"<div style='white-space:pre-wrap'>{html_lib.escape(message)}</div></div></body></html>"
+    )
+
+
+def _zoom_for_display(window: webview.Window) -> None:
+    scale = _linux_ui_scale()
+    if scale:
+        _apply_page_zoom(window, scale)
+
+
+def _boot_backend(window: webview.Window) -> None:
+    """Runs on pywebview's worker thread (webview.start(func)), after the
+    window already exists: imports the heavy backend, starts uvicorn on a
+    free port, waits for it, then points the window at it. Importing here
+    (rather than at module level) is what lets the window appear
+    immediately instead of after the whole import chain."""
+    if not IS_WINDOWS:
+        # Own thread: querying the display scaling can take ~1s under WSL
+        # and must not delay the backend starting.
+        threading.Thread(target=_zoom_for_display, args=(window,), daemon=True).start()
+    try:
+        import uvicorn
+
+        from backend.main import app
+        from backend.persistence.app_settings import DEFAULT_PORT, get_custom_port
+
+        port = _free_port(get_custom_port() or DEFAULT_PORT)
+        config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        server = uvicorn.Server(config)
+        # daemon=True: this thread (and the server it runs) dies with the
+        # process once the desktop window closes and main() returns -- no
+        # separate shutdown step needed for a local dev tool.
+        threading.Thread(target=server.run, daemon=True).start()
+        _wait_until_listening(port)
+    except Exception as exc:  # shown in the window itself -- pythonw has no console to print to
+        _wait_for_first_page(window)
+        window.load_html(_error_html(f"{type(exc).__name__}: {exc}"))
+        return
+    _wait_for_first_page(window)
+    window.load_url(f"http://127.0.0.1:{port}")
+
+
+# pywebview's load_url()/load_html() give up with "Main window failed to start" if the window has
+# not finished loading its first page (the "Loading OptiFuzz..." one) within 20 seconds. A cold
+# WebKit start, software rendering or a busy virtual machine can take longer -- observed on
+# GitHub's Linux runners -- and the app then sat on the loading page forever. Waiting here, for up
+# to three minutes, makes pywebview's own 20s wait return immediately. On Windows the first page
+# loads at once, so this changes nothing there.
+_FIRST_PAGE_TIMEOUT_SECONDS = 180
+
+
+def _wait_for_first_page(window: webview.Window) -> None:
+    window.events.loaded.wait(_FIRST_PAGE_TIMEOUT_SECONDS)
+
+
+def _prefer_dark_gtk_theme() -> None:
+    """Linux counterpart of _style_title_bar: OptiFuzz has no light variant,
+    so ask GTK for its dark theme variant (dark title bar and scrollbars)
+    regardless of the desktop's own setting. Best-effort -- a missing
+    PyGObject or a desktop that ignores the hint just keeps its normal
+    chrome. Runs on the main thread before any window exists, so it never
+    touches GTK from pywebview's worker threads."""
+    try:
+        import gi
+
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+
+        settings = Gtk.Settings.get_default()
+        if settings is not None:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+            # GTK's built-in default layout is "menu:close" -- what you get
+            # when nothing configured the desktop's own (no dconf, e.g. WSLg
+            # or a minimal install): a window with only a close button.
+            # Anything else was set deliberately by the user's desktop, so
+            # it's left alone.
+            if settings.get_property("gtk-decoration-layout") == "menu:close":
+                settings.set_property("gtk-decoration-layout", ":minimize,maximize,close")
+    except (ImportError, ValueError):
+        pass
+
+
+def _use_fractional_font_metrics() -> None:
+    """Makes WebKitGTK lay text out like Chromium/DirectWrite on Windows.
+
+    GTK's default cairo font options hint the *metrics*, rounding every
+    glyph's advance to a whole pixel. Measured against the Windows build:
+    the same 14px sentence came out 560px wide (hinted) vs 540.2px
+    (unhinted) vs 538.9px on Windows, and Cascadia Mono 648px vs exactly
+    664.45px -- so every button, input and column rendered visibly wider
+    than on Windows (a "Resume" button wrapped onto two lines). Fractional
+    advances remove that. Grayscale antialiasing is kept as it is (no
+    subpixel colour fringes depending on the desktop's setting).
+
+    Like _prefer_dark_gtk_theme: main thread, before any window exists;
+    best-effort."""
+    try:
+        import gi
+
+        gi.require_foreign("cairo")
+        import cairo
+        from gi.repository import Gdk
+
+        screen = Gdk.Screen.get_default()
+        if screen is None:
+            return
+        options = cairo.FontOptions()
+        options.set_hint_metrics(cairo.HINT_METRICS_OFF)
+        options.set_hint_style(cairo.HINT_STYLE_NONE)
+        options.set_antialias(cairo.ANTIALIAS_GRAY)
+        screen.set_font_options(options)
+    except (ImportError, ValueError, RuntimeError):
+        pass
+
+
+def _download_attachments_instead_of_navigating() -> None:
+    """Makes `Content-Disposition: attachment` responses (Export HTML) save a
+    file instead of replacing the app's own page.
+
+    WebView2 honours that header natively and shows a Save As dialog.
+    pywebview's GTK backend only starts a download when WebKit cannot
+    *display* the response's MIME type -- an HTML export can, so it simply
+    navigated the app window to the downloaded file (the app disappeared,
+    replaced by the export). This wraps its policy handler so an attachment
+    is always downloaded; pywebview's own download-started handler then
+    shows its Save As dialog.
+
+    Patches the class before any window exists (pywebview connects the
+    handler when it builds the window); a no-op if pywebview's GTK backend
+    isn't importable."""
+    try:
+        from webview.platforms import gtk as pywebview_gtk
+    except ImportError:
+        return
+
+    browser_view = pywebview_gtk.BrowserView
+    webkit = pywebview_gtk.webkit
+    original = browser_view.on_navigation
+
+    def on_navigation(self, web_view, decision, decision_type):
+        if type(decision) is webkit.ResponsePolicyDecision:
+            headers = decision.get_response().get_http_headers()
+            disposition = headers.get_one("Content-Disposition") if headers else None
+            if disposition and disposition.strip().lower().startswith("attachment"):
+                decision.download()
+                return True
+        return original(self, web_view, decision, decision_type)
+
+    browser_view.on_navigation = on_navigation
+
+
+def _linux_ui_scale() -> float | None:
+    """Extra zoom to apply on Linux, or None for none.
+
+    OPTIFUZZ_UI_SCALE overrides (e.g. "1.5"). Otherwise, only under WSLg:
+    it hands GTK scale 1 whatever the Windows display scaling is, so on a
+    150% display the whole UI renders 1.5x too small next to the Windows
+    build. Reads the scaling Windows itself applied. A native Linux desktop
+    does its own scaling, so nothing is done there."""
+    override = os.environ.get("OPTIFUZZ_UI_SCALE")
+    if override:
+        try:
+            return float(override)
+        except ValueError:
+            return None
+    if not os.environ.get("WSL_DISTRO_NAME"):
+        return None
+    try:
+        out = subprocess.run(
+            [
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                r"(Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics').AppliedDPI",
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        scale = int(out.stdout.strip()) / 96
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return scale if scale > 1.0 else None
+
+
+def _apply_page_zoom(window: webview.Window, scale: float) -> None:
+    """Zooms the web view. Scheduled onto GTK's own main loop: the WebView
+    is only safe to touch from the UI thread, and this is called from
+    pywebview's worker thread (same rule as the Windows-side window.native
+    handlers). window.native is deliberately not used here."""
+    try:
+        from gi.repository import GLib
+        from webview.platforms.gtk import BrowserView
+    except ImportError:
+        return
+
+    def _do() -> bool:
+        view = BrowserView.instances.get(window.uid)
+        if view is not None:
+            view.webview.set_zoom_level(scale)
+        return False  # run once
+
+    GLib.idle_add(_do)
+
+
+def main() -> None:
+    _claim_windows_app_identity()
+    if not IS_WINDOWS:
+        _prefer_dark_gtk_theme()
+        _use_fractional_font_metrics()
+        _download_attachments_instead_of_navigating()
+    # pywebview disables downloads by default (webview.settings['ALLOW_DOWNLOADS']
+    # is False out of the box) -- without this, a Content-Disposition: attachment
+    # response (Export HTML) is just silently swallowed by the WebView2 view: no
+    # error, no dialog, nothing happens at all. Must be set before
+    # create_window()/start(), not just before start() -- webview.settings is read
+    # at window-creation time on the WebView2 backend.
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
+    api = _Api()
+    window = webview.create_window(
+        # Kept as a real title (not blanked) -- the taskbar tooltip and
+        # Alt-Tab switcher read this string directly, and the user wants
+        # "OptiFuzz" to still show up *there*. _style_title_bar() paints the
+        # caption text the same color as its own background instead, which
+        # makes it invisible in the title bar specifically without touching
+        # either of those.
+        "OptiFuzz",
+        # The loading page, not the app: the real URL needs the backend up
+        # first, which now happens on a worker thread (see _boot_backend)
+        # AFTER this window is already visible.
+        html=_LOADING_HTML,
+        width=1280,
+        height=820,
+        min_size=(900, 600),
+        # Starts maximized (not a fixed 1280x820 box) -- that fixed size
+        # rendered noticeably off-center on some displays/multi-monitor
+        # setups; width/height above are still what it restores to if the
+        # user un-maximizes it by hand.
+        maximized=True,
+        # Matches styles.css's --bg -- avoids a flash of white while the
+        # page's own CSS is still loading, before the dark background paints.
+        background_color="#0f1115",
+        js_api=api,
+    )
+    api._window = window
+    if IS_WINDOWS:
+        _style_title_bar(window)
+        _hide_title_bar_icon(window)
+    icon_path = _select_icon_path()
+    webview.start(
+        _boot_backend,
+        (window,),
+        icon=str(icon_path) if icon_path else None,
+        private_mode=False,
+        storage_path=_webview_storage_path(),
+    )
+
+
+if __name__ == "__main__":
+    main()

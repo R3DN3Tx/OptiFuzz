@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>OptiFuzz</title>
+    <link rel="icon" type="image/png" href="/static/icon-dark.png" id="favicon">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        // Two ink colors (see run_desktop.py's _select_icon_path for the
+        // same logic on the desktop window's own icon): a light-ink mark
+        // for a dark browser chrome, dark-ink for a light one -- picked so
+        // the favicon actually stays visible against the tab bar, not to
+        // match OptiFuzz's own always-dark in-page theme.
+        // Lets styles.css pick the bundled monospace font on Linux only.
+        if (/Linux/.test(navigator.userAgent)) document.documentElement.classList.add("linux");
+        (function () {
+            var favicon = document.getElementById("favicon");
+            var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+            function applyFavicon() {
+                favicon.href = "/static/icon-" + (darkQuery.matches ? "dark" : "light") + ".png";
+            }
+            applyFavicon();
+            darkQuery.addEventListener("change", applyFavicon);
+        })();
+    </script>
+</head>
+<body>
+    <header>
+        <img class="app-logo" src="/static/logo.png" alt="">
+        <h1>OptiFuzz</h1>
+        <span class="breadcrumb" id="breadcrumb"></span>
+        <div class="header-spacer"></div>
+        <span class="app-version" id="app-version"></span>
+        <div class="settings-menu" id="settings-menu">
+            <button type="button" class="settings-btn" id="settings-btn" title="Settings">&#9881;</button>
+            <div class="settings-panel" id="settings-panel" hidden></div>
+        </div>
+    </header>
+    <div id="scroll-area">
+        <main id="app"></main>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
