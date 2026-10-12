@@ -40,7 +40,8 @@ no cloud, and the app only listens on `127.0.0.1`.
 **Fuzzing**
 - Starts dirsearch jobs from a form: path, wordlist, extensions, threads, *force extensions*,
   extra headers, any other dirsearch flag as free text, and an optional *authenticated* tag that
-  is added to the report's file name.
+  appends `__AUTH` to the file name of the job's raw dirsearch output (its `.txt` and `.json`
+  files), so authenticated runs are easy to tell apart.
 - **Pause, Resume and Stop** at any time. A paused job resumes from where it stopped, not from the
   start, and progress is checkpointed regularly, so an app crash does not lose a long run: jobs
   that were running come back as paused.
@@ -48,8 +49,8 @@ no cloud, and the app only listens on `127.0.0.1`.
 - A per-target limit on concurrent jobs, with a queue for the rest.
 - Live progress (percentage, request rate, errors, elapsed time) for every running job.
 - A **failed** job is not a **stopped** one: failures keep their reason, one click away.
-- Every job keeps the exact options it ran with, and its raw dirsearch reports (`.txt` and
-  `.json`) are preserved on disk.
+- Every job keeps the exact options it ran with. dirsearch's own raw output for each job is kept on
+  disk as two files, a readable `.txt` and a structured `.json`, in the target's `outputs` folder.
 
 **Results**
 - Status codes colour-coded at a glance, size, and redirect destination.
@@ -69,10 +70,12 @@ no cloud, and the app only listens on `127.0.0.1`.
 ![The tree with notes and interesting markers](docs/images/tree.png)
 
 **Export**
-- A single, self-contained **HTML report** for a target (tree, results, jobs), which opens offline
-  with no backend and keeps its interactivity.
+- A single, self-contained **HTML report** for a target (tree, results, jobs). It opens offline with
+  no backend and is **interactive**: search, filters and hide rules keep working inside the file.
 - Export every target of a project at once, as a `.zip` of reports or one combined HTML page.
-- Optionally mirror each job's reports into a folder of your choice.
+- Optionally mirror dirsearch's raw output (the `.txt` file of every job) into a folder of your
+  choice, with one subfolder per target. It is a convenience copy, set per project in its
+  *Outputs mirror* section; the original files stay where they are.
 
 ## Installation
 
@@ -116,9 +119,10 @@ manager:
 | Fedora | `python3 python3-gobject gtk3 webkit2gtk4.1 git dejavu-sans-fonts google-noto-sans-fonts` | not tested |
 | Arch | `python python-gobject gtk3 webkit2gtk-4.1 git ttf-dejavu noto-fonts` | not tested |
 
-On any other distribution, install the equivalents yourself and run `install.sh` again for the
-Python part. If you would rather not use `sudo`, install those packages by hand first: the script
-only installs what is missing.
+On any other distribution, install the equivalents yourself (including the DejaVu and Noto fonts,
+which provide the icon glyphs such as the gear and the pause symbol) and run `install.sh` again for
+the Python part. If you would rather not use `sudo`, install those packages by hand first: the
+script only installs what is missing.
 
 The virtual environment is created with `--system-site-packages` because PyGObject comes from
 your distribution and cannot be installed reliably with `pip`.
@@ -196,7 +200,8 @@ and resume from their last checkpoint. Several jobs can run at once (the limit i
 
 **Sharing findings.** *Export target (HTML)*, at the top right of a target, saves a single HTML
 file with that target's jobs, results and tree. It has no dependencies, so you can open it anywhere,
-offline. On a project's targets page, *Export all targets* has a small arrow to choose between two
+offline, and it stays interactive: you can still search and use the filters and hide rules. On a
+project's targets page, *Export all targets* has a small arrow to choose between two
 formats:
 
 - **`.zip`**: one separate HTML report per target, inside a zip file.
@@ -275,12 +280,9 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
 
 ## Troubleshooting
 
-- **Linux: icons (the gear, pause or play symbols) show as empty boxes or are missing.** The UI text
-  uses fonts bundled with the app, but those icons are glyphs that come from your system fonts, and
-  a minimal install may have none. `install.sh` installs DejaVu and Noto for you; if you set the
-  system up by hand, install them (`fonts-dejavu-core fonts-noto-core` on Debian-family systems).
 - **Linux under WSL (WSLg).** Rendering is done in software, so scrolling long result lists can
-  stutter. This is a WSLg limitation; on a native Linux desktop with a GPU it is not an issue.
+  stutter. This comes from WSLg itself; a native Linux desktop with a GPU is expected to be much
+  smoother (not verified).
   The window zooms automatically to match your Windows display scaling; set
   `OPTIFUZZ_UI_SCALE` (for example `1.25`) to override it.
 - **"Open in browser" does nothing.** Pick a browser in *Settings -> Browser for opening results*.
