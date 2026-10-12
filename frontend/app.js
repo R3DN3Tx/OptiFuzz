@@ -2784,20 +2784,33 @@ async function renderWorkspace(projectId, targetId, tab) {
 
         const index = resultsPlanKeys.indexOf(key);
         if (index === -1 || !resultsBody.parentElement) return;
-        const table = resultsBody.parentElement;
-        const tableTop = table.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top + scrollArea.scrollTop;
         // The workspace tabs bar + this filter toolbar are both `position:
         // sticky` INSIDE scrollArea, so once scrolled they visually cover
-        // the top `tabsHeight + toolbarHeight` px of the viewport -- landing
-        // the target row a flat 40px from the top (the old behaviour) put it
-        // right behind those bars, invisible, while its children (further
-        // down the list) still cleared them and showed up fine. Scroll it
-        // just below both sticky bars instead, so the row itself is visible.
-        const tabsHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tabs-sticky-height")) || 0;
-        const toolbarHeight = filterBarContainer.offsetHeight || 0;
-        const topOffset = tabsHeight + toolbarHeight + 12;
-        scrollArea.scrollTop = Math.max(0, tableTop + index * resultsRowHeight - topOffset);
+        // the top `tabs + toolbar` px of the viewport. The target row must
+        // land flush BELOW them, as the first visible row, with its children
+        // right after it -- nothing of the rows before it peeking in (unless
+        // the list is too short to scroll that far, where the browser's own
+        // clamping applies).
+        //
+        // Two steps, because the per-row height used to estimate the
+        // position is only an average: (1) jump to an estimate, paint, then
+        // (2) measure where the row REALLY painted and correct by the
+        // difference. The estimate is measured from the tbody (not the
+        // table: that would include the column-header row, ~25px, and leave
+        // the row that far too low with the previous rows showing above it).
+        const areaTop = () => scrollArea.getBoundingClientRect().top;
+        const stuckBottom = () => areaTop() + tabs.getBoundingClientRect().height + filterBarContainer.getBoundingClientRect().height;
+        const bodyTop = () => resultsBody.getBoundingClientRect().top - areaTop() + scrollArea.scrollTop;
+        scrollArea.scrollTop = Math.max(0, bodyTop() + index * resultsRowHeight - (stuckBottom() - areaTop()));
         paintResultsWindow();
+        for (let pass = 0; pass < 4; pass++) {
+            const row = resultsBody.querySelector(`[data-plan-index="${index}"]`);
+            if (!row) break;
+            const delta = row.getBoundingClientRect().top - stuckBottom();
+            if (Math.abs(delta) < 0.5) break;
+            scrollArea.scrollTop += delta;
+            paintResultsWindow();
+        }
     }
     resultsReveal = (path) => revealResultsPath(path);
 
@@ -2830,7 +2843,10 @@ async function renderWorkspace(projectId, targetId, tab) {
         const spacer = (px) => h("tr", { class: "results-spacer" }, [h("td", { colspan: "5", style: `height:${px}px;padding:0;border:0` })]);
         if (first > 0) resultsBody.appendChild(spacer(first * rowH));
         for (let i = first; i < last; i++) {
-            for (const row of resultsPlan[i]()) resultsBody.appendChild(row);
+            for (const row of resultsPlan[i]()) {
+                row.dataset.planIndex = String(i); // lets revealResultsPath() find where an entry really painted
+                resultsBody.appendChild(row);
+            }
             if (resultsPlanSeenKeys[i]) visitedSeenKeys.add(resultsPlanSeenKeys[i]);
         }
         if (last < n) resultsBody.appendChild(spacer((n - last) * rowH));
