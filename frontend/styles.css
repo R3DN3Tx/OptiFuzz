@@ -1135,6 +1135,8 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    18+12+22+36+12 = 100%. */
 .fuzz-history-table.no-status th:nth-child(4), .fuzz-history-table.no-status td:nth-child(4) { width: 36%; }
 .fuzz-history-table.no-status th:nth-child(5), .fuzz-history-table.no-status td:nth-child(5) { width: 12%; white-space: nowrap; }
+/* Footnote under a history table that has a "query*" chip. */
+.fuzz-history-table .fuzz-history-note { color: var(--muted); font-size: 11px; padding-top: 6px; text-align: left; }
 .fuzz-history-header-chip {
     color: var(--text);
     border-bottom: 1px dotted var(--muted);

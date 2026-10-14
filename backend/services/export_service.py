@@ -497,9 +497,10 @@ function positionFloatingBox(anchor, box, maxWidth) {
 // dump every "Name: value" pair in plain, always-visible text, unlike the
 // live app's name-only chip), hover reveals "Name: value" in a floating
 // box, click copies the same text to the clipboard.
-function buildHeaderNameChip(name, value) {
+function buildHeaderNameChip(name, value, fullText) {
+    if (fullText === undefined) fullText = name + ": " + value;
     var chip = h("span", { class: "fuzz-history-header-chip", text: name });
-    var hoverBox = h("div", { class: "fuzz-history-header-hover", text: name + ": " + value });
+    var hoverBox = h("div", { class: "fuzz-history-header-hover", text: fullText });
     chip.appendChild(hoverBox);
     chip.addEventListener("mouseenter", function () {
         hoverBox.style.display = "block";
@@ -519,7 +520,7 @@ function buildHeaderNameChip(name, value) {
             copyResetTimer = setTimeout(function () { label.textContent = name; copyResetTimer = null; }, 1000);
         }
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(name + ": " + value).then(afterCopy, function () {});
+            navigator.clipboard.writeText(fullText).then(afterCopy, function () {});
         }
     });
     return chip;
@@ -760,14 +761,24 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
     // practice; the .some() guard is just defensive.
     var showDate = history.some(function (entry) { return entry.date || entry.created_at; });
     if (showDate) headCells.push(h("th", { text: "Date" }));
+    var anyQuery = false;
     var rows = history.map(function (entry) {
         var headerEntries = Object.entries(entry.config && entry.config.headers || {});
         var headersCell = h("td", {});
+        // A query string in the job's URL is not a header: shown first as
+        // "query*" (hover = the full query), explained by the footnote below.
+        var queryText = String(entry.path || (entry.config && entry.config.url) || "").split("#")[0];
+        var queryAt = queryText.indexOf("?");
+        var query = queryAt >= 0 && queryAt < queryText.length - 1 ? queryText.slice(queryAt) : "";
+        if (query) {
+            headersCell.appendChild(buildHeaderNameChip("query*", query, query));
+            anyQuery = true;
+        }
         headerEntries.forEach(function (pair, idx) {
-            if (idx > 0) headersCell.appendChild(document.createTextNode(", "));
+            if (idx > 0 || query) headersCell.appendChild(document.createTextNode(", "));
             headersCell.appendChild(buildHeaderNameChip(pair[0], String(pair[1])));
         });
-        if (!headerEntries.length) headersCell.appendChild(document.createTextNode("—"));
+        if (!headerEntries.length && !query) headersCell.appendChild(document.createTextNode("—"));
         var other = [];
         var cfg = entry.config || {};
         // Same explicit order as the live app: threads, force-ext, AUTH, auto
@@ -810,10 +821,13 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         }
         return h("tr", {}, cells);
     });
-    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, [
-        h("thead", {}, [h("tr", {}, headCells)]),
-        h("tbody", {}, rows),
-    ]);
+    var sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
+    if (anyQuery) {
+        sections.push(h("tfoot", {}, [h("tr", {}, [
+            h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
+        ])]));
+    }
+    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, sections);
 }
 function buildFuzzHistoryRow(colspan, history, hideStatus, path) {
     return h("tr", { class: "fuzz-history-row hidden" }, [
@@ -1710,9 +1724,10 @@ function positionFloatingBox(anchor, box, maxWidth) {
 // dump every "Name: value" pair in plain, always-visible text, unlike the
 // live app's name-only chip), hover reveals "Name: value" in a floating
 // box, click copies the same text to the clipboard.
-function buildHeaderNameChip(name, value) {
+function buildHeaderNameChip(name, value, fullText) {
+    if (fullText === undefined) fullText = name + ": " + value;
     var chip = h("span", { class: "fuzz-history-header-chip", text: name });
-    var hoverBox = h("div", { class: "fuzz-history-header-hover", text: name + ": " + value });
+    var hoverBox = h("div", { class: "fuzz-history-header-hover", text: fullText });
     chip.appendChild(hoverBox);
     chip.addEventListener("mouseenter", function () {
         hoverBox.style.display = "block";
@@ -1732,7 +1747,7 @@ function buildHeaderNameChip(name, value) {
             copyResetTimer = setTimeout(function () { label.textContent = name; copyResetTimer = null; }, 1000);
         }
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(name + ": " + value).then(afterCopy, function () {});
+            navigator.clipboard.writeText(fullText).then(afterCopy, function () {});
         }
     });
     return chip;
@@ -1990,14 +2005,24 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
     // practice; the .some() guard is just defensive.
     var showDate = history.some(function (entry) { return entry.date || entry.created_at; });
     if (showDate) headCells.push(h("th", { text: "Date" }));
+    var anyQuery = false;
     var rows = history.map(function (entry) {
         var headerEntries = Object.entries(entry.config && entry.config.headers || {});
         var headersCell = h("td", {});
+        // A query string in the job's URL is not a header: shown first as
+        // "query*" (hover = the full query), explained by the footnote below.
+        var queryText = String(entry.path || (entry.config && entry.config.url) || "").split("#")[0];
+        var queryAt = queryText.indexOf("?");
+        var query = queryAt >= 0 && queryAt < queryText.length - 1 ? queryText.slice(queryAt) : "";
+        if (query) {
+            headersCell.appendChild(buildHeaderNameChip("query*", query, query));
+            anyQuery = true;
+        }
         headerEntries.forEach(function (pair, idx) {
-            if (idx > 0) headersCell.appendChild(document.createTextNode(", "));
+            if (idx > 0 || query) headersCell.appendChild(document.createTextNode(", "));
             headersCell.appendChild(buildHeaderNameChip(pair[0], String(pair[1])));
         });
-        if (!headerEntries.length) headersCell.appendChild(document.createTextNode("—"));
+        if (!headerEntries.length && !query) headersCell.appendChild(document.createTextNode("—"));
         var other = [];
         var cfg = entry.config || {};
         // Same explicit order as the live app: threads, force-ext, AUTH, auto
@@ -2040,10 +2065,13 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         }
         return h("tr", {}, cells);
     });
-    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, [
-        h("thead", {}, [h("tr", {}, headCells)]),
-        h("tbody", {}, rows),
-    ]);
+    var sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
+    if (anyQuery) {
+        sections.push(h("tfoot", {}, [h("tr", {}, [
+            h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
+        ])]));
+    }
+    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, sections);
 }
 function buildFuzzHistoryRow(colspan, history, hideStatus, path) {
     return h("tr", { class: "fuzz-history-row hidden" }, [

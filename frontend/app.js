@@ -498,9 +498,11 @@ function attachRunningJobsTooltip(el, runningJobs) {
 // "Name: value" text to the clipboard, with a brief "Copied!" swap on the
 // chip's own label as the only feedback (this app has no toast/snackbar
 // system to reuse).
-function buildHeaderNameChip(name, value) {
+// `fullText` overrides what hover shows and click copies (default "Name: value");
+// the job's query string chip passes the bare "?a=a" so it never reads like a header.
+function buildHeaderNameChip(name, value, fullText = `${name}: ${value}`) {
     const chip = h("span", { class: "fuzz-history-header-chip", text: name });
-    const hoverBox = h("div", { class: "fuzz-history-header-hover", text: `${name}: ${value}` });
+    const hoverBox = h("div", { class: "fuzz-history-header-hover", text: fullText });
     chip.appendChild(hoverBox);
     chip.addEventListener("mouseenter", () => {
         hoverBox.style.display = "block";
@@ -510,7 +512,7 @@ function buildHeaderNameChip(name, value) {
     let copyResetTimer = null;
     chip.addEventListener("click", async () => {
         try {
-            await navigator.clipboard.writeText(`${name}: ${value}`);
+            await navigator.clipboard.writeText(fullText);
         } catch (e) {
             return; // clipboard permission denied or unavailable -- fail silently, no feedback to show
         }
@@ -551,17 +553,26 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     // silently showed "—" for every Results row's Extensions column before
     // this fix, unnoticed until Date needed the same raw-job fallback.
     const anyDate = history.some((entry) => entry.date || entry.started_at || entry.created_at);
+    let anyQuery = false;
     const rows = history.map((entry) => {
         const cfg = entry.config || {};
         const extensions = entry.extensions || cfg.extensions || [];
 
         const headersCell = h("td", {});
         const headerEntries = Object.entries(cfg.headers || {});
+        // A query string in the job's URL ("?a=a") is not a header, but it is
+        // a per-request addition just like one: shown first as "query*" (hover
+        // = the full query), with the footnote under the table explaining it.
+        const query = queryOfUrl(entry.path || cfg.url);
+        if (query) {
+            headersCell.appendChild(buildHeaderNameChip("query*", query, query));
+            anyQuery = true;
+        }
         headerEntries.forEach(([name, value], idx) => {
-            if (idx > 0) headersCell.appendChild(document.createTextNode(", "));
+            if (idx > 0 || query) headersCell.appendChild(document.createTextNode(", "));
             headersCell.appendChild(buildHeaderNameChip(name, String(value)));
         });
-        if (!headerEntries.length) headersCell.appendChild(document.createTextNode("—"));
+        if (!headerEntries.length && !query) headersCell.appendChild(document.createTextNode("—"));
 
         // Explicit order (2026-10-10): threads, force-ext, AUTH, auto pause,
         // THEN whatever else was actually set -- not alphabetical/insertion
@@ -618,10 +629,13 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     );
     if (!hideStatus) headCells.push(h("th", { text: "Results", class: "jobs-col-center" }));
     if (anyDate) headCells.push(h("th", { text: "Date" }));
-    return h("table", { class: `fuzz-history-table${hideStatus ? " no-status" : ""}${anyDate ? " with-date" : ""}` }, [
-        h("thead", {}, [h("tr", {}, headCells)]),
-        h("tbody", {}, rows),
-    ]);
+    const sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
+    if (anyQuery) {
+        sections.push(h("tfoot", {}, [h("tr", {}, [
+            h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
+        ])]));
+    }
+    return h("table", { class: `fuzz-history-table${hideStatus ? " no-status" : ""}${anyDate ? " with-date" : ""}` }, sections);
 }
 
 // Full-width row under the triggering row (same shape as the inline fuzz
@@ -993,6 +1007,13 @@ function normalizeKey(path) {
 // is only the path before it.
 function pathWithoutQuery(path) {
     return String(path || "").split(/[?#]/)[0];
+}
+
+// The "?a=a" part of a path or URL ("" when there is none).
+function queryOfUrl(value) {
+    const text = String(value || "").split("#")[0];
+    const at = text.indexOf("?");
+    return at >= 0 && at < text.length - 1 ? text.slice(at) : "";
 }
 
 function parentKeyOf(path) {
