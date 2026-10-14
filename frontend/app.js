@@ -2727,6 +2727,10 @@ async function renderWorkspace(projectId, targetId, tab) {
 
     function appendHierarchyRows(hierarchy, node, depth, parentPath, prefix, isLast) {
         const children = hierarchy.childrenOf.get(node.key) || [];
+        // The "(N)" next to a folder counts RESULTS, not tree positions: a 301
+        // stub "x" and its directory "x/" share one position but are two
+        // distinct results, so each one counts.
+        const childResultCount = children.reduce((sum, child) => sum + child.items.length, 0);
         // Every genuinely distinct result at this position gets its own row
         // now (2026-09-25 -- see buildPathHierarchy's own comment), sharing
         // this one connector/indent since they occupy the same tree
@@ -2739,7 +2743,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             // the ones above it continue it (├) -- otherwise "x" and "x/" both
             // drew └ and the line looked broken.
             const connector = treeConnectorFor(depth, prefix, isLastItem ? isLast : false);
-            resultsPlan.push(() => buildResultRow(item, depth, isLastItem ? children.length : 0, parentPath, connector));
+            resultsPlan.push(() => buildResultRow(item, depth, isLastItem ? childResultCount : 0, parentPath, connector));
             resultsPlanKeys.push(node.key);
             resultsPlanPaths.push(item.path);
             resultsPlanSeenKeys.push(item.seen_key);
