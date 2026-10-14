@@ -1007,9 +1007,9 @@ renderTree();
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 // Exact job paths, same rule as the live app: "path/" and "path" are separate.
-DATA.jobs.forEach(function (j) { fuzzedPaths[j.path] = true; });
+DATA.jobs.forEach(function (j) { fuzzedPaths[String(j.path).split(/[?#]/)[0]] = true; });
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return j.path === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return String(j.path).split(/[?#]/)[0] === path; }).map(function (j) {
         return {
             job_id: j.id, status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
@@ -1380,7 +1380,7 @@ if (!DATA.jobs.length) {
             });
             resultsLink.addEventListener("click", function (e) {
                 e.stopPropagation();
-                goToResultsAndReveal(job.path);
+                goToResultsAndReveal(String(job.path).split(/[?#]/)[0]);
             });
             resultsCell.appendChild(resultsLink);
         } else {
@@ -2236,7 +2236,7 @@ treeSearchInput.addEventListener("input", renderTree);
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return j.path === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return String(j.path).split(/[?#]/)[0] === path; }).map(function (j) {
         return {
             job_id: j.id, status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
@@ -2608,7 +2608,7 @@ function renderJobs() {
             });
             resultsLink.addEventListener("click", function (e) {
                 e.stopPropagation();
-                goToResultsAndReveal(job.path);
+                goToResultsAndReveal(String(job.path).split(/[?#]/)[0]);
             });
             resultsCell.appendChild(resultsLink);
         } else {
@@ -2695,7 +2695,7 @@ function loadTarget(t) {
     resultsStatusSet = [];
     resultsHideFilters = [];
     fuzzedPaths = {};
-    DATA.jobs.forEach(function (j) { fuzzedPaths[j.path] = true; });
+    DATA.jobs.forEach(function (j) { fuzzedPaths[String(j.path).split(/[?#]/)[0]] = true; });
     renderBreadcrumb();
     renderTree();
     renderHideChips();

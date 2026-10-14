@@ -251,6 +251,18 @@ def test_fuzz_history_matches_jobs_by_normalized_path(workspace_root) -> None:
     assert history[0]["job_id"] == "job1"
 
 
+def test_fuzz_history_ignores_the_query_string_of_a_job_path(workspace_root) -> None:
+    project_id, target_id = _setup(workspace_root)
+    node = trs.add_path(project_id, target_id, "/gs/htc/")
+
+    with_query = _job("job1", target_id, project_id, "/gs/htc/?a=a")
+    other_dir = _job("job2", target_id, project_id, "/gs/htc?a=a")  # "htc" without slash is a different node
+
+    history = trs.fuzz_history(node, [with_query, other_dir])
+
+    assert [h["job_id"] for h in history] == ["job1"]
+
+
 def test_record_fuzz_discoveries_updates_an_already_tracked_node(workspace_root) -> None:
     # Real, reported bug (2026-09-25): a path added to TREE manually, with
     # no status/size yet, never picked one up even once a later fuzz job

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from backend.models.discovery import Discovery
@@ -296,7 +297,9 @@ def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
 
 
 def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
-    matching = [j for j in jobs if normalize_path(j.path) == path]
+    # A job's path may carry a query string ("/gs/htc/?a=a"); the node it
+    # fuzzed is the path before it.
+    matching = [j for j in jobs if normalize_path(re.split(r"[?#]", j.path, maxsplit=1)[0]) == path]
     matching.sort(key=lambda j: j.created_at, reverse=True)
     return [
         {

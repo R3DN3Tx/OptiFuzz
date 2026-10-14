@@ -987,6 +987,14 @@ function normalizeKey(path) {
     return path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
+// A job's path may carry a query string ("/gs/htc/?a=a": dirsearch appends it
+// to every word). The query is part of what gets requested, but the place
+// being fuzzed -- what TREE, Results grouping and the "Fuzzed" tags match on --
+// is only the path before it.
+function pathWithoutQuery(path) {
+    return String(path || "").split(/[?#]/)[0];
+}
+
 function parentKeyOf(path) {
     const key = normalizeKey(path);
     if (key === "/") return null;
@@ -2140,7 +2148,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         allJobs = jobs;
         jobsByPathKey = new Map();
         for (const j of jobs) {
-            const key = j.path;
+            const key = pathWithoutQuery(j.path);
             if (!jobsByPathKey.has(key)) jobsByPathKey.set(key, []);
             jobsByPathKey.get(key).push(j);
         }
@@ -2265,7 +2273,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                         ? h("button", {
                             type: "button", class: "results-count-link", text: String(job.result_count),
                             title: "Go to Results",
-                            onclick: () => goToResultsAndReveal(projectId, targetId, job.path),
+                            onclick: () => goToResultsAndReveal(projectId, targetId, pathWithoutQuery(job.path)),
                         })
                         : h("span", { text: "0" }),
                 ]),
@@ -3275,7 +3283,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                 cell.innerHTML = "";
                 cell.appendChild(h("button", {
                     type: "button", class: "results-count-link", text: String(newCount), title: "Go to Results",
-                    onclick: () => goToResultsAndReveal(projectId, targetId, job ? job.path : ""),
+                    onclick: () => goToResultsAndReveal(projectId, targetId, job ? pathWithoutQuery(job.path) : ""),
                 }));
             }
         }
