@@ -2766,8 +2766,15 @@ async function renderWorkspace(projectId, targetId, tab) {
         // position -- only the LAST one carries the expand arrow/child
         // count, so children render (and collapse) exactly once per
         // position, not once per item sharing it.
-        node.items.forEach((item, i) => {
-            const isLastItem = i === node.items.length - 1;
+        // The row carrying the arrow/children is the LAST one, so when a 301
+        // stub "x" and its directory "x/" share a position the directory goes
+        // last (stable sort) -- otherwise the children hung off the stub while
+        // the "Fuzzed" tag (exact path) sat on the directory row above it.
+        const items = node.items.length > 1
+            ? node.items.slice().sort((a, b) => Number(a.path.endsWith("/")) - Number(b.path.endsWith("/")))
+            : node.items;
+        items.forEach((item, i) => {
+            const isLastItem = i === items.length - 1;
             // Only the bottom item of a shared position closes the branch (└);
             // the ones above it continue it (├) -- otherwise "x" and "x/" both
             // drew └ and the line looked broken.
