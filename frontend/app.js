@@ -476,7 +476,7 @@ function attachTooltip(el, text, maxWidth) {
 function attachRunningJobsTooltip(el, runningJobs) {
     const box = h("div", { class: "app-tooltip running-jobs-tooltip" }, runningJobs.map((j) =>
         h("div", { class: "running-jobs-tooltip-row" }, [
-            h("span", { class: "running-jobs-tooltip-path", text: j.path }),
+            h("span", { class: "running-jobs-tooltip-path", text: pathWithoutQuery(j.path) }),
             h("span", { class: "running-jobs-tooltip-percent", text: `${j.percent}%` }),
         ])
     ));
@@ -2280,7 +2280,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                 statusCell,
                 h("td", { class: "job-info-cell" }, [infoBtn]),
                 h("td", {}, [actions]),
-                h("td", {}, [buildClickablePath(job.path, target.base_url)]),
+                h("td", {}, [buildClickablePath(job.path, target.base_url, pathWithoutQuery(job.path))]),
                 (() => {
                     const cell = h("td", { class: "jobs-progress-cell" });
                     renderProgressCell(cell, formatProgress(job));

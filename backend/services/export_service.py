@@ -1382,7 +1382,7 @@ if (!DATA.jobs.length) {
 
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
-        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: job.path });
+        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);
 
@@ -2624,7 +2624,7 @@ function renderJobs() {
 
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
-        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: job.path });
+        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);
 
