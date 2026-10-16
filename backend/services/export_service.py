@@ -10,6 +10,7 @@ from typing import Any
 
 from backend.job_manager.manager import JobManager
 from backend.models.timestamps import now_iso
+from backend.persistence import app_settings
 from backend.persistence.slug import slugify
 from backend.services import project_service, results_service, target_service, tree_service
 
@@ -69,6 +70,22 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
         "tree": tree_view,
         "results": results_view,
         "jobs": jobs_view,
+        "view": _saved_results_view(project_id, target_id),
+    }
+
+
+def _saved_results_view(project_id: str, target_id: str) -> dict[str, Any]:
+    """The Results filters/hide rules saved for this target in the live app
+    (hide_rules.json + the `results/{project}/{target}` ui-pref). Embedded in
+    EVERY export so a downloaded report always opens exactly as the user left
+    the app -- never depends on what the browser happens to send."""
+    memo = app_settings.get_ui_prefs().get(f"results/{project_id}/{target_id}")
+    memo = memo if isinstance(memo, dict) else {}
+    return {
+        "hide_rules": results_service.get_hide_rules(project_id, target_id),
+        "search": str(memo.get("search") or ""),
+        "fuzzedOnly": bool(memo.get("fuzzedOnly")),
+        "statuses": str(memo.get("statuses") or ""),
     }
 
 
@@ -191,6 +208,7 @@ def build_project_export_data(project_id: str, job_manager: JobManager) -> dict[
             "tree": data["tree"],
             "results": data["results"],
             "jobs": data["jobs"],
+            "view": data["view"],
         })
     return {
         "project": {"id": project.id, "name": project.name},
@@ -1293,6 +1311,17 @@ hideForm.addEventListener("submit", function (e) {
     renderHideChips();
     renderResults();
 });
+function applyResultsView(view) {
+    view = view || {};
+    resultsSearchInput.value = view.search || "";
+    resultsFuzzedBtn.classList.toggle("active", !!view.fuzzedOnly);
+    resultsStatusInput.value = view.statuses || "";
+    resultsStatusInput.classList.toggle("active", resultsStatusInput.value.trim().length > 0);
+    resultsStatusSet = resultsStatusInput.value.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return /^\d+$/.test(s); }).map(Number);
+    updateResultsFiltersCount();
+}
+if (!resultsHideFilters.length) resultsHideFilters = (DATA.view && DATA.view.hide_rules) || [];
+applyResultsView(DATA.view);
 renderHideChips();
 renderResults();
 
@@ -2273,10 +2302,8 @@ function fuzzHistoryForPath(path) {
     });
 }
 
-// No query-param seed here (unlike the single-target export) -- hide
-// rules are a per-TARGET concept and this page holds every target at
-// once, so every target starts unfiltered, same as its own entry in the
-// .zip export already does; still fully editable from here on, per target.
+// Seeded per target from the hide rules/filters saved in the live app
+// (t.view, see loadTarget) -- still fully editable from here on.
 var resultsHideFilters = [];
 function matchesHideFilter(result, f) {
     if (f.status && String(result.status) !== String(f.status)) return false;
@@ -2705,23 +2732,26 @@ function renderTargetsGrid() {
 targetsSearchInput.addEventListener("input", renderTargetsGrid);
 
 // ---- Switching between the Targets list and a target's own workspace --
-// loadTarget(t) resets every filter/search control to a fresh state (no
-// live backend to persist per-target state against here, and each
-// target's own entry in the .zip export already starts unfiltered the
-// same way), rebuilds TREE/Results/JOBS from that target's own data, and
+// loadTarget(t) seeds every filter/search control from that target's saved
+// live-app view (t.view), rebuilds TREE/Results/JOBS from that target's own data, and
 // shows the workspace; showTargetsList() (the project-name breadcrumb
 // link's own handler) reverses it.
+function applyResultsView(view) {
+    view = view || {};
+    resultsSearchInput.value = view.search || "";
+    resultsFuzzedBtn.classList.toggle("active", !!view.fuzzedOnly);
+    resultsStatusInput.value = view.statuses || "";
+    resultsStatusInput.classList.toggle("active", resultsStatusInput.value.trim().length > 0);
+    resultsStatusSet = resultsStatusInput.value.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return /^\d+$/.test(s); }).map(Number);
+    updateResultsFiltersCount();
+}
 function loadTarget(t) {
     DATA = t;
     treeSearchInput.value = "";
     treeInterestingBtn.classList.remove("active");
     treeFuzzedBtn.classList.remove("active");
-    resultsSearchInput.value = "";
-    resultsFuzzedBtn.classList.remove("active");
-    resultsStatusInput.value = "";
-    resultsStatusInput.classList.remove("active");
-    resultsStatusSet = [];
-    resultsHideFilters = [];
+    applyResultsView(t.view);
+    resultsHideFilters = ((t.view && t.view.hide_rules) || []).map(function (r) { return Object.assign({}, r); });
     fuzzedPaths = {};
     DATA.jobs.forEach(function (j) { fuzzedPaths[String(j.path).split(/[?#]/)[0]] = true; });
     renderBreadcrumb();

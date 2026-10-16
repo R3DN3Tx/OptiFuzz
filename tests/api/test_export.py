@@ -165,3 +165,28 @@ def test_export_missing_target_404s(client: TestClient) -> None:
     response = client.get(f"/api/projects/{project['id']}/targets/does-not-exist/export")
 
     assert response.status_code == 404
+
+
+def test_exports_embed_the_saved_hide_rules_and_results_filters(client: TestClient) -> None:
+    # Whatever the app has saved for the target travels in EVERY export
+    # (single, .zip, combined) -- never depends on what the browser sends.
+    project, target = _make_project_and_target(client)
+    pid, tid = project["id"], target["id"]
+    client.put(
+        f"/api/projects/{pid}/targets/{tid}/results/hide-rules",
+        json={"rules": [{"status": "404", "size": "", "parentPath": "", "depth": 0}]},
+    )
+    client.put(
+        "/api/settings/ui-prefs",
+        json={"key": f"results/{pid}/{tid}", "value": {"search": "needle-q", "fuzzedOnly": True, "statuses": "200,301"}},
+    )
+
+    single = client.get(f"/api/projects/{pid}/targets/{tid}/export").text
+    combined = client.get(f"/api/projects/{pid}/export-all-combined").text
+    archive = zipfile.ZipFile(io.BytesIO(client.get(f"/api/projects/{pid}/export-all").content))
+    zipped = archive.read(archive.namelist()[0]).decode("utf-8")
+
+    for body in (single, combined, zipped):
+        assert '"search": "needle-q"' in body
+        assert '"statuses": "200,301"' in body
+        assert '"status": "404"' in body
