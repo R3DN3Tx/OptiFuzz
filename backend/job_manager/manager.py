@@ -388,6 +388,16 @@ class JobManager:
 
         return job
 
+    def pause_all(self) -> int:
+        """Pause every QUEUED/RUNNING job (any target); returns how many were
+        asked to pause. Used by the in-app update, which replaces the code the
+        runner threads and dirsearch run from."""
+        with self._lock:
+            active = [j.id for j in self._jobs.values() if j.status in (JobStatus.QUEUED, JobStatus.RUNNING)]
+        for job_id in active:
+            self.pause_job(job_id)
+        return len(active)
+
     def resume_job(self, job_id: str) -> FuzzJob:
         """Resume a PAUSED job from `job.completed_lines` (docs/ARCHITECTURE.md
         §2.6) -- a freshly-sliced remainder wordlist, not a pre-existing

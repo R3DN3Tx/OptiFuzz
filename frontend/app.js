@@ -298,8 +298,9 @@ function h(tag, attrs, children) {
 }
 
 function statusClass(status) {
-    if (status === 401 || status === 403) return `status status-${status}`;
-    return `status status-${Math.floor(status / 100)}`;
+    if (status === 401 || status === 403 || status === 429) return `status status-${status}`;
+    const family = Math.floor(status / 100);
+    return family >= 1 && family <= 5 ? `status status-${family}` : "status status-other";
 }
 
 // ---- In-app modal (replaces native alert() for content that needs real
@@ -1223,7 +1224,7 @@ const SETTINGS_PAGES = [
     {
         id: "output-filename",
         title: "Output filenames",
-        desc: "Naming pattern for each job's saved .txt/.json report files",
+        desc: "Naming pattern for each job's raw dirsearch output file (.txt)",
     },
     {
         id: "port",
@@ -1234,6 +1235,11 @@ const SETTINGS_PAGES = [
         id: "default-extensions",
         title: "Default extensions (Force extensions)",
         desc: "What dirsearch uses when Force extensions is on but a fuzz picks none",
+    },
+    {
+        id: "updates",
+        title: "Updates",
+        desc: "Check for a newer version and update in place; your projects are kept",
     },
 ];
 
@@ -1285,6 +1291,7 @@ function setupSettingsMenu() {
             else if (pageId === "output-filename") await renderOutputFilenamePage();
             else if (pageId === "port") await renderPortPage();
             else if (pageId === "default-extensions") await renderDefaultExtensionsPage();
+            else if (pageId === "updates") renderUpdatesPage();
         } catch (err) {
             panel.innerHTML = "";
             pageHeader(page.title);
@@ -1371,6 +1378,56 @@ function setupSettingsMenu() {
         });
         panel.appendChild(h("div", { class: "custom-path-row" }, [customInput, customBtn]));
         panel.appendChild(customError);
+    }
+
+    function renderUpdatesPage() {
+        panel.innerHTML = "";
+        pageHeader("Updates");
+        panel.appendChild(h("div", {
+            class: "hint",
+            text: "Downloads the latest version from the repository you installed from and refreshes the "
+                + "dependencies. Your projects, targets, jobs and wordlists are kept. Running and queued jobs "
+                + "are paused when you update; resume them after restarting OptiFuzz.",
+        }));
+        const result = h("div", { class: "hint" });
+        const checkBtn = h("button", { type: "button", text: "Check for updates" });
+        const updateBtn = h("button", { type: "button", class: "primary", text: "Update now", hidden: "hidden" });
+        const busy = (btn, label) => { checkBtn.disabled = true; updateBtn.disabled = true; btn.textContent = label; };
+        checkBtn.addEventListener("click", async () => {
+            busy(checkBtn, "Checking…");
+            updateBtn.hidden = true;
+            try {
+                const s = await api("/api/update/check");
+                if (!s.behind) result.textContent = `You are up to date (v${s.current}).`;
+                else if (s.can_update) {
+                    result.textContent = `v${s.latest} is available (you have v${s.current}).`;
+                    updateBtn.hidden = false;
+                } else {
+                    result.textContent = `v${s.latest} is available, but this copy has local changes `
+                        + "(modified files or its own commits), so it cannot be updated automatically.";
+                }
+            } catch (err) {
+                result.textContent = `Could not check: ${err.message}`;
+            }
+            checkBtn.disabled = false; updateBtn.disabled = false; checkBtn.textContent = "Check for updates";
+        });
+        updateBtn.addEventListener("click", async () => {
+            busy(updateBtn, "Updating…");
+            try {
+                const s = await api("/api/update/apply", { method: "POST" });
+                const pausedNote = s.paused_jobs ? ` ${s.paused_jobs} job(s) were paused; resume them after restarting.` : "";
+                result.textContent = s.updated
+                    ? `Updated to v${s.current}. Restart OptiFuzz to start using it.${pausedNote}`
+                    : "Already up to date.";
+                updateBtn.hidden = true;
+            } catch (err) {
+                result.textContent = `Update failed: ${err.message}`;
+                updateBtn.disabled = false;
+            }
+            checkBtn.disabled = false; updateBtn.textContent = "Update now";
+        });
+        panel.appendChild(h("div", { class: "field-row" }, [checkBtn, updateBtn]));
+        panel.appendChild(result);
     }
 
     async function renderOutputFilenamePage() {

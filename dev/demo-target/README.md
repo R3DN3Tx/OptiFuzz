@@ -73,7 +73,7 @@ above plus plenty of common words that do **not** exist, so you see both hits an
 4. Watch the job run in the table (progress, rate, results). Open **RESULTS**: hits are coloured
    by status code, redirects show their destination, and new entries carry a **NEW** badge until
    you have seen them.
-5. Go deeper: in RESULTS or **TREE**, use the lightning icon on `/admin`, `/api` or `/wp-admin`
+5. Go deeper: in RESULTS or **TREE**, use the lightning icon on `/admin/`, `/api/` or `/wp-admin/`
    to fuzz that path with the same wordlist. The children (`/api/v1/`, `/api/v2/`,
    `/admin/panel/`, ...) fill in the tree.
 6. Try the job controls: start another job on `/` with a low thread count (1-2), then **Pause**,

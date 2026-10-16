@@ -28,6 +28,7 @@
     --blue: #4f8cff;
     --cyan: #4bc3e0;
     --orange: #ff9a3d;
+    --purple: #b07cff;
     font-size: 14px;
 }
 
@@ -759,11 +760,14 @@ tr.new-row { animation: flash 1.4s ease-out; }
 @keyframes flash { from { background: rgba(79,140,255,.25); } to { background: transparent; } }
 
 .status { font-weight: 700; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; }
+.status-1 { color: var(--purple); }        /* 1xx informational */
 .status-2 { color: var(--green); }
 .status-3 { color: var(--cyan); }
 .status-401, .status-403 { color: var(--yellow); }
 .status-4 { color: var(--muted); }
 .status-5 { color: var(--red); }
+.status-429 { color: var(--orange); }     /* rate limited */
+.status-other { color: var(--muted); }   /* anything outside 100-599 */
 
 .job-status { font-size: 11px; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--border); }
 .job-QUEUED { color: var(--orange); border-color: var(--orange); }

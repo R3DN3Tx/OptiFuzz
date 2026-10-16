@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import engine_info, jobs, projects, results, settings, stream, targets, tree, wordlists
+from backend.api import engine_info, jobs, projects, results, settings, stream, targets, tree, update, wordlists
 from backend.engine.dirsearch import DirsearchEngine
 from backend.job_manager.manager import JobManager, JobNotFoundError
 from backend.services.project_service import DuplicateProjectNameError, ProjectNotFoundError
@@ -40,6 +40,7 @@ app.include_router(engine_info.router)
 app.include_router(wordlists.router)
 app.include_router(settings.router)
 app.include_router(tree.router)
+app.include_router(update.router)
 
 if FRONTEND_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")

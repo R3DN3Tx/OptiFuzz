@@ -476,8 +476,9 @@ var INFO_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
 
 function statusClass(status) {
     if (status == null) return "hint";
-    if (status === 401 || status === 403) return "status status-401";
-    return "status status-" + Math.floor(status / 100);
+    if (status === 401 || status === 403 || status === 429) return "status status-" + status;
+    var family = Math.floor(status / 100);
+    return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
 function wordlistBaseName(path) {
     if (!path) return "?";
@@ -1714,8 +1715,9 @@ var INFO_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
 
 function statusClass(status) {
     if (status == null) return "hint";
-    if (status === 401 || status === 403) return "status status-401";
-    return "status status-" + Math.floor(status / 100);
+    if (status === 401 || status === 403 || status === 429) return "status status-" + status;
+    var family = Math.floor(status / 100);
+    return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
 function wordlistBaseName(path) {
     if (!path) return "?";

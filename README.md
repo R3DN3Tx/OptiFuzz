@@ -5,9 +5,10 @@ in a desktop app that organises fuzzing by project and target, lets you pause an
 and turns the raw output into a browsable, annotated map of what you have found.
 
 It runs entirely on your machine, on **Windows and Linux**. Nothing is sent anywhere: no telemetry,
-no cloud, and the app only listens on `127.0.0.1`.
+no cloud, and the app only listens on `127.0.0.1`. It only goes online when you ask it to check for
+updates (see [Updating](#updating)).
 
-![Jobs: running, paused, stopped, failed and completed fuzzes for one target](docs/images/jobs.png)
+![Jobs: queued, running, paused, stopped, failed and completed fuzzes for one target](docs/images/jobs.png)
 
 > **Legal notice.** OptiFuzz is provided for educational purposes and for security testing of
 > systems you own or have explicit authorisation to test. Using it against anything else may be
@@ -18,11 +19,11 @@ no cloud, and the app only listens on `127.0.0.1`.
 
 - [Features](#features)
 - [Installation](#installation)
+- [Updating](#updating)
 - [Quick start](#quick-start)
 - [Trying it safely: the demo target](#trying-it-safely-the-demo-target)
 - [Using OptiFuzz](#using-optifuzz)
 - [Settings](#settings)
-- [Where your data lives](#where-your-data-lives)
 - [How it works](#how-it-works)
 - [Development and tests](#development-and-tests)
 - [Troubleshooting](#troubleshooting)
@@ -40,8 +41,8 @@ no cloud, and the app only listens on `127.0.0.1`.
 **Fuzzing**
 - Starts dirsearch jobs from a form: path, wordlist, extensions, threads, *force extensions*,
   extra headers, any other dirsearch flag as free text, and an optional *authenticated* tag that
-  appends `__AUTH` to the file name of the job's raw dirsearch output (its `.txt` and `.json`
-  files), so authenticated runs are easy to tell apart.
+  appends `__AUTH` to the file name of the job's raw dirsearch output (its `.txt` file), so
+  authenticated runs are easy to tell apart.
 - **Pause, Resume and Stop** at any time. A paused job resumes from where it stopped, not from the
   start, and progress is checkpointed regularly, so an app crash does not lose a long run: jobs
   that were running come back as paused.
@@ -50,10 +51,11 @@ no cloud, and the app only listens on `127.0.0.1`.
 - Live progress (percentage, request rate, errors, elapsed time) for every running job.
 - A **failed** job is not a **stopped** one: failures keep their reason, one click away.
 - Every job keeps the exact options it ran with. dirsearch's own raw output for each job is kept on
-  disk as two files, a readable `.txt` and a structured `.json`, in the target's `outputs` folder.
+  disk as a readable `.txt` file in the target's `outputs` folder.
 
 **Results**
-- Status codes colour-coded at a glance, size, and redirect destination.
+- Status codes colour-coded by class at a glance (1xx, 2xx, 3xx, 4xx, 5xx, with 401 and 403
+  highlighted), size, and redirect destination.
 - A **NEW** badge on everything you have not seen yet, so a re-run shows only what changed for you.
 - Search, filters (status, size, parent path) and persistent **hide rules** to cut noise.
 - One click to **fuzz deeper** from any result, or to open it in your browser of choice.
@@ -124,9 +126,6 @@ which provide the icon glyphs such as the gear and the pause symbol) and run `in
 the Python part. If you would rather not use `sudo`, install those packages by hand first: the
 script only installs what is missing.
 
-The virtual environment is created with `--system-site-packages` because PyGObject comes from
-your distribution and cannot be installed reliably with `pip`.
-
 ### Manual installation
 
 ```bash
@@ -145,6 +144,18 @@ The window is a thin shell around a local web app. You can also run it in your b
 
 then open <http://127.0.0.1:8000>.
 
+## Updating
+
+Open **Settings -> Updates** and click *Check for updates*; if there is a newer version, *Update now*
+downloads it and refreshes the dependencies, then you restart OptiFuzz. Running and queued jobs
+are paused when you update (resume them afterwards). You do not need to download
+the repository again, and your projects, targets, jobs and wordlists are kept (your data is stored
+outside the program folder). It works on any copy installed with `git clone`; if you changed tracked
+files yourself, it refuses to overwrite them.
+
+The same thing by hand: `git pull`, then `.venv/bin/pip install -r requirements.txt`
+(Windows: `.venv\Scripts\pip ...`).
+
 ## Quick start
 
 1. Start OptiFuzz.
@@ -156,13 +167,14 @@ then open <http://127.0.0.1:8000>.
 5. In the **TREE**, mark what looks interesting and write down why.
 6. Click **Export target (HTML)** when you want a report.
 
-The repository ships one example wordlist, `wordlists/test_wordlist.txt`. For real work, point
-the wordlist picker at your own lists (any file on disk) and star your favourite as the default.
+The repository ships one example wordlist, `wordlists/test_wordlist.txt`. For real work, add your
+own lists: they must be inside the `wordlists` folder of OptiFuzz for the app to be able to read
+them. Then pick one in the wordlist picker and star your favourite as the default.
 
 ## Trying it safely: the demo target
 
-`dev/demo-target/` is a tiny fake website that runs on `127.0.0.1:8910` and answers with every
-kind of status code (200, 301, 302, 403, 404, 500) at several directory levels. It exists so you
+`dev/demo-target/` is a tiny fake website that runs on `127.0.0.1:8910` and answers with a
+variety of status codes (200, 301, 302, 403, 404, 500, among others) at several directory levels. It exists so you
 can try every feature without touching a real system, and it is what the screenshots above were
 taken against.
 
@@ -215,43 +227,10 @@ The gear icon in the header opens:
 | Setting | What it does |
 |---|---|
 | Browser for opening results | The browser launched when you open a result's URL (detected automatically; or a custom path) |
-| Output filenames | The naming pattern of each job's saved report files |
+| Output filenames | The naming pattern of each job's raw dirsearch output file (`.txt`) |
 | Desktop app port | A custom local port for the app to listen on, instead of the built-in default |
+| Updates | Check for a newer version and update in place, keeping your projects |
 | Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
-
-## Where your data lives
-
-| | Workspace (projects, targets, jobs, reports) |
-|---|---|
-| Windows | `%APPDATA%\OptiFuzz\workspace` |
-| Linux | `$XDG_DATA_HOME/OptiFuzz/workspace` (default `~/.local/share/OptiFuzz/workspace`) |
-
-The workspace is plain JSON plus the original dirsearch reports, so it is easy to back up, inspect
-or delete. It is never inside this repository.
-
-**Using a different folder.** `OPTIFUZZ_WORKSPACE_ROOT` is an *environment variable*: a setting you
-give to a program from outside, before starting it. If it is set, OptiFuzz keeps its data in that
-folder instead of the default one (for example on another drive, or one folder per engagement).
-
-```powershell
-# Windows (PowerShell): for this terminal session only
-$env:OPTIFUZZ_WORKSPACE_ROOT = "D:\pentests\optifuzz"
-.\run.ps1
-
-# Windows: permanently for your user (applies to programs you open afterwards)
-setx OPTIFUZZ_WORKSPACE_ROOT "D:\pentests\optifuzz"
-```
-
-```bash
-# Linux: for one launch
-OPTIFUZZ_WORKSPACE_ROOT=~/pentests/optifuzz ./run.sh
-
-# Linux: permanently, add this line to ~/.bashrc (or ~/.zshrc) and open a new terminal
-export OPTIFUZZ_WORKSPACE_ROOT=~/pentests/optifuzz
-```
-
-A new folder starts empty: projects stored in the default location do not appear there unless you
-copy them over.
 
 ## How it works
 
@@ -261,7 +240,7 @@ copy them over.
   server-sent events for live updates.
 - **pywebview** shows the frontend in a native window: WebView2 on Windows, GTK + WebKit2GTK on
   Linux.
-- State is stored as JSON files and the untouched dirsearch reports, written atomically.
+- State is stored as JSON files plus dirsearch's untouched raw output (`.txt`), written atomically.
 
 ## Development and tests
 
