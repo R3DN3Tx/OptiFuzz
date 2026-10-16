@@ -6,7 +6,7 @@
 # (pacman). Debian-family is the tested path; the Fedora and Arch package names are provided but
 # not tested. Any other distribution: install the equivalents by hand, then run this again.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../.."  # repository root (this script lives in scripts/linux)
 
 if ! command -v python3 >/dev/null; then
     echo "python3 is required (3.11 or newer)." >&2
@@ -46,4 +46,4 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
 
 echo
-echo "Done. Start OptiFuzz with: ./run-linux.sh"
+echo "Done. Start OptiFuzz with: ./scripts/linux/run-linux.sh"

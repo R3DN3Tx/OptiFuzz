@@ -98,8 +98,8 @@ cd OptiFuzz
 The window uses WebView2, which ships with current Windows.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-.\run-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1
+.\scripts\windows\run-windows.ps1
 ```
 
 ### Linux (Debian, Ubuntu, Kali and derivatives)
@@ -107,11 +107,11 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 The window uses GTK 3 and WebKit2GTK 4.1 from your distribution.
 
 ```bash
-./install.sh        # installs the system packages with sudo, then the virtual environment
-./run-linux.sh
+./scripts/linux/install-linux.sh   # installs the system packages with sudo, then the virtual environment
+./scripts/linux/run-linux.sh
 ```
 
-`install.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon
+`install-linux.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon
 glyphs, and then the Python environment. It does the system part with `sudo` using your package
 manager:
 
@@ -122,7 +122,7 @@ manager:
 | Arch | `python python-gobject gtk3 webkit2gtk-4.1 git ttf-dejavu noto-fonts` | not tested |
 
 On any other distribution, install the equivalents yourself (including the DejaVu and Noto fonts,
-which provide the icon glyphs such as the gear and the pause symbol) and run `install.sh` again for
+which provide the icon glyphs such as the gear and the pause symbol) and run `install-linux.sh` again for
 the Python part. If you would rather not use `sudo`, install those packages by hand first: the
 script only installs what is missing.
 

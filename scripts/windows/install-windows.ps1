@@ -1,6 +1,6 @@
 # Installs OptiFuzz's dependencies on Windows: a virtual environment with the Python requirements.
 $ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot
+Set-Location (Split-Path (Split-Path $PSScriptRoot))  # repository root (this script lives in scripts\windows)
 
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
@@ -19,4 +19,4 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 Write-Host ""
-Write-Host "Done. Start OptiFuzz with: .\run-windows.ps1"
+Write-Host "Done. Start OptiFuzz with: .\scripts\windows\run-windows.ps1"
