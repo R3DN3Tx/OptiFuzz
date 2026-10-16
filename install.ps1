@@ -19,4 +19,4 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 Write-Host ""
-Write-Host "Done. Start OptiFuzz with: .\run.ps1"
+Write-Host "Done. Start OptiFuzz with: .\run-windows.ps1"

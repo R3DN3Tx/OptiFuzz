@@ -99,7 +99,7 @@ The window uses WebView2, which ships with current Windows.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
-.\run.ps1
+.\run-windows.ps1
 ```
 
 ### Linux (Debian, Ubuntu, Kali and derivatives)
@@ -108,7 +108,7 @@ The window uses GTK 3 and WebKit2GTK 4.1 from your distribution.
 
 ```bash
 ./install.sh        # installs the system packages with sudo, then the virtual environment
-./run.sh
+./run-linux.sh
 ```
 
 `install.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon

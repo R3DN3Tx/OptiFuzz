@@ -46,4 +46,4 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.txt
 
 echo
-echo "Done. Start OptiFuzz with: ./run.sh"
+echo "Done. Start OptiFuzz with: ./run-linux.sh"
