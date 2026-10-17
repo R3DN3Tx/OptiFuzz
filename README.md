@@ -202,7 +202,7 @@ taken against.
 python dev/demo-target/demo_server.py
 ```
 
-Create a target for `http://127.0.0.1:8910`, fuzz it with `test_wordlist.txt`, and follow the
+Create a target with base URL `http://127.0.0.1` and port `8910` (in the separate *Port* field), fuzz it with `test_wordlist.txt`, and follow the
 guided walkthrough, including what each path returns and what to try (deeper fuzzing, pause and
 resume, a failed job, the tree, the export), in
 [`dev/demo-target/README.md`](dev/demo-target/README.md).

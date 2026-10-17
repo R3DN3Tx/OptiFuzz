@@ -1915,8 +1915,8 @@ async function renderTargets(projectId) {
     // (backend ui-prefs, not localStorage -- see loadPref's own comment),
     // across every project and across an app restart, explicit request.
     const EXPORT_ALL_FORMATS = {
-        zip: { label: "Export all targets (.zip)", title: "Download a .zip with a self-contained HTML report of every target in this project.", path: "export-all" },
-        html: { label: "Export all targets (.html)", title: "Download one combined, self-contained HTML page with every target in this project.", path: "export-all-combined" },
+        zip: { label: "Export all targets: separate reports (.zip)", title: "Download a .zip with a self-contained HTML report of every target in this project.", path: "export-all" },
+        html: { label: "Export all targets: combined report (.html)", title: "Download one combined, self-contained HTML page with every target in this project.", path: "export-all-combined" },
     };
     const exportAllMainBtn = h("button", { type: "button", class: "export-target-btn export-all-main-btn" });
     function currentExportAllFormat() {

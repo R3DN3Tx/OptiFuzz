@@ -65,8 +65,8 @@ The repository ships one example wordlist, `wordlists/test_wordlist.txt`. It con
 above plus plenty of common words that do **not** exist, so you see both hits and misses.
 
 1. Start the demo server (above) and OptiFuzz.
-2. Create a **Project** (any name) and, inside it, a **Target** with base URL
-   `http://127.0.0.1:8910`.
+2. Create a **Project** (any name) and, inside it, a **Target**: base URL `http://127.0.0.1` and,
+   in the separate **Port** field next to it, `8910` (do not type the port into the URL).
 3. **JOBS tab -> New Fuzz**: path `/`, wordlist `test_wordlist.txt`, extensions
    `html,php,txt,sql,bak` and, under *Advanced options*, turn on **Force extensions** (without it
    dirsearch only appends extensions to wordlist entries that contain `%EXT%`). Click **Fuzz**.
