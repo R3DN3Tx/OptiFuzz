@@ -27,3 +27,13 @@ def apply_update(job_manager: JobManager = Depends(get_job_manager)) -> dict:
         return {**result, "paused_jobs": paused}
     except update_service.UpdateError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/api/update/restart")
+def restart_after_update() -> dict:
+    # Desktop app only: closes the window and starts OptiFuzz again by itself.
+    try:
+        update_service.restart()
+    except update_service.UpdateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"restarting": True}

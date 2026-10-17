@@ -22,3 +22,16 @@ def test_apply_endpoint_pauses_jobs_only_when_the_update_can_go_ahead(monkeypatc
     monkeypatch.setattr(update_service, "apply", refuse)
     response = client.post("/api/update/apply")
     assert response.status_code == 400 and not paused
+
+
+def test_restart_endpoint_refuses_outside_the_desktop_app(monkeypatch: pytest.MonkeyPatch, client) -> None:
+    monkeypatch.setattr(update_service, "_restart_close_window", None)
+    response = client.post("/api/update/restart")
+    assert response.status_code == 400 and "desktop app" in response.json()["detail"]
+
+
+def test_restart_endpoint_triggers_the_restart(monkeypatch: pytest.MonkeyPatch, client) -> None:
+    called: list[int] = []
+    monkeypatch.setattr(update_service, "restart", lambda: called.append(1))
+    assert client.post("/api/update/restart").json() == {"restarting": True}
+    assert called == [1]

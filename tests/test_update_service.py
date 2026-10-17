@@ -66,3 +66,75 @@ def test_not_a_git_checkout_is_a_clear_error(tmp_path: Path, monkeypatch: pytest
     with pytest.raises(update_service.UpdateError, match="not installed with git"):
         update_service.check()
 
+
+
+# ---- automatic restart after an update --------------------------------------------------------
+
+
+def test_restart_needs_the_desktop_app_and_a_fresh_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_service, "_restart_close_window", None)
+    monkeypatch.setattr(update_service, "_restart_command", None)
+    assert update_service.can_restart() is False
+    with pytest.raises(update_service.UpdateError, match="desktop app"):
+        update_service.restart()
+
+    monkeypatch.setattr(update_service, "_restart_close_window", lambda: None)
+    monkeypatch.setattr(update_service, "_restart_command", ["python", "run_desktop.py"])
+    monkeypatch.setattr(update_service, "_updated_since_start", False)
+    assert update_service.can_restart() is True
+    with pytest.raises(update_service.UpdateError, match="no update"):
+        update_service.restart()
+
+
+def test_restart_starts_the_helper_then_closes_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    closed = threading.Event()
+    launched: list[list[str]] = []
+    monkeypatch.setattr(update_service, "_restart_close_window", closed.set)
+    monkeypatch.setattr(update_service, "_restart_command", ["python", "run_desktop.py"])
+    monkeypatch.setattr(update_service, "_updated_since_start", True)
+    monkeypatch.setattr(update_service, "_CLOSE_DELAY_SECONDS", 0.05)
+    monkeypatch.setattr(update_service.subprocess, "Popen", lambda cmd, **kw: launched.append(cmd))
+
+    update_service.restart()
+
+    assert closed.wait(5)
+    (cmd,) = launched
+    assert cmd[1].endswith("relaunch.py") and cmd[2] == str(__import__("os").getpid())
+    assert cmd[-2:] == ["python", "run_desktop.py"]
+
+
+def _run_relaunch(pid: int, marker: Path) -> subprocess.Popen:
+    import sys
+
+    helper = Path(update_service.__file__).resolve().parent.parent / "relaunch.py"
+    command = [sys.executable, "-c", f"open({str(marker)!r}, 'w').write('started')"]
+    return subprocess.Popen([sys.executable, str(helper), str(pid), str(marker.parent), *command])
+
+
+def _wait_for(path: Path, seconds: float) -> bool:
+    import time
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if path.exists():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def test_relaunch_helper_starts_the_command_once_the_old_process_is_gone(tmp_path: Path) -> None:
+    import sys
+    import time
+
+    old = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(2)"])
+    marker = tmp_path / "started.txt"
+    helper = _run_relaunch(old.pid, marker)
+    try:
+        time.sleep(0.7)
+        assert not marker.exists(), "must wait while the old process is still running"
+        assert _wait_for(marker, 20), "must start the command after the old process exits"
+    finally:
+        old.kill()
+        helper.wait(timeout=20)

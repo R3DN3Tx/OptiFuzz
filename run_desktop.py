@@ -328,6 +328,12 @@ class _Api:
 def _free_port(preferred: int) -> int:
     for candidate in (preferred, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            if not IS_WINDOWS:
+                # Same option uvicorn binds with: without it a port still in TIME_WAIT (right after
+                # the previous copy closed, e.g. the restart after an update) looks taken and the app
+                # would move to a random port. Not set on Windows, where it would also let a port
+                # that another program is listening on look free.
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 sock.bind(("127.0.0.1", candidate))
                 return sock.getsockname()[1]
@@ -398,6 +404,10 @@ def _boot_backend(window: webview.Window) -> None:
 
         from backend.main import app
         from backend.persistence.app_settings import DEFAULT_PORT, get_custom_port
+        from backend.services import update_service
+
+        # Lets Settings -> Updates restart the app by itself: close this window, start this script again.
+        update_service.register_desktop_restart(window.destroy, [sys.executable, str(Path(__file__).resolve())])
 
         port = _free_port(get_custom_port() or DEFAULT_PORT)
         config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

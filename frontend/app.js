@@ -1393,21 +1393,30 @@ function setupSettingsMenu() {
             class: "hint",
             text: "Downloads the latest version from the repository you installed from and refreshes the "
                 + "dependencies. Your projects, targets, jobs and wordlists are kept. Running and queued jobs "
-                + "are paused when you update; resume them after restarting OptiFuzz.",
+                + "are paused when you update; resume them once OptiFuzz has restarted.",
         }));
         const result = h("div", { class: "hint" });
+        // Filled in by the check (it knows whether this is the desktop app, which can restart itself).
+        const restartNote = h("div", { class: "hint", hidden: "hidden" });
         const checkBtn = h("button", { type: "button", text: "Check for updates" });
         const updateBtn = h("button", { type: "button", class: "primary", text: "Update now", hidden: "hidden" });
         const busy = (btn, label) => { checkBtn.disabled = true; updateBtn.disabled = true; btn.textContent = label; };
         checkBtn.addEventListener("click", async () => {
             busy(checkBtn, "Checking…");
             updateBtn.hidden = true;
+            restartNote.hidden = true;
             try {
                 const s = await api("/api/update/check");
                 if (!s.behind) result.textContent = `You are up to date (v${s.current}).`;
                 else if (s.can_update) {
                     result.textContent = `v${s.latest} is available (you have v${s.current}).`;
                     updateBtn.hidden = false;
+                    restartNote.replaceChildren(h("strong", {
+                        text: s.can_restart
+                            ? "When the update finishes, OptiFuzz restarts by itself."
+                            : "When the update finishes, close and reopen OptiFuzz to start using it.",
+                    }));
+                    restartNote.hidden = false;
                 } else {
                     result.textContent = `v${s.latest} is available, but this copy has local changes `
                         + "(modified files or its own commits), so it cannot be updated automatically.";
@@ -1421,11 +1430,23 @@ function setupSettingsMenu() {
             busy(updateBtn, "Updating…");
             try {
                 const s = await api("/api/update/apply", { method: "POST" });
-                const pausedNote = s.paused_jobs ? ` ${s.paused_jobs} job(s) were paused; resume them after restarting.` : "";
-                result.textContent = s.updated
-                    ? `Updated to v${s.current}. Restart OptiFuzz to start using it.${pausedNote}`
-                    : "Already up to date.";
+                const pausedNote = s.paused_jobs ? ` ${s.paused_jobs} job(s) were paused; resume them once it is back.` : "";
                 updateBtn.hidden = true;
+                restartNote.hidden = true;
+                if (!s.updated) {
+                    result.textContent = "Already up to date.";
+                } else if (s.can_restart) {
+                    result.textContent = `Updated to v${s.current}. Restarting OptiFuzz…${pausedNote}`;
+                    try {
+                        await api("/api/update/restart", { method: "POST" });
+                        return; // the window closes by itself in a moment and the new copy opens
+                    } catch (err) {
+                        result.textContent = `Updated to v${s.current}, but OptiFuzz could not restart itself `
+                            + `(${err.message}). Close and reopen it to start using the new version.${pausedNote}`;
+                    }
+                } else {
+                    result.textContent = `Updated to v${s.current}. Close and reopen OptiFuzz to start using it.${pausedNote}`;
+                }
             } catch (err) {
                 result.textContent = `Update failed: ${err.message}`;
                 updateBtn.disabled = false;
@@ -1433,6 +1454,7 @@ function setupSettingsMenu() {
             checkBtn.disabled = false; updateBtn.textContent = "Update now";
         });
         panel.appendChild(h("div", { class: "field-row" }, [checkBtn, updateBtn]));
+        panel.appendChild(restartNote);
         panel.appendChild(result);
     }
 
@@ -1886,9 +1908,10 @@ async function renderTargets(projectId) {
     // Target" form, no Outputs mirror section, no export buttons) that, in
     // turn, opens any target's own JOBS/RESULTS/TREE workspace in place,
     // exactly like clicking a card does here live -- see
-    // export_service.export_project_html. The main button's own label and
-    // one-click action always reflect whichever format was picked last --
-    // not necessarily .zip -- and that choice is remembered globally
+    // export_service.export_project_html. Picking a format in the menu only
+    // changes the main button (its label and what a click downloads); nothing
+    // is downloaded until the button itself is clicked (explicit request,
+    // 2026-10-17). The picked format -- not necessarily .zip -- is remembered globally
     // (backend ui-prefs, not localStorage -- see loadPref's own comment),
     // across every project and across an app restart, explicit request.
     const EXPORT_ALL_FORMATS = {
@@ -1922,7 +1945,6 @@ async function renderTargets(projectId) {
             onclick: () => {
                 exportAllMenu.hidden = true;
                 setExportAllFormat("zip");
-                downloadExportAll("zip");
             },
         }),
         h("button", {
@@ -1930,7 +1952,6 @@ async function renderTargets(projectId) {
             onclick: () => {
                 exportAllMenu.hidden = true;
                 setExportAllFormat("html");
-                downloadExportAll("html");
             },
         }),
     ]);

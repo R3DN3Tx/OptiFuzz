@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +78,55 @@ def check() -> dict[str, Any]:
         "ahead": ahead,
         "dirty": dirty,
         "can_update": behind > 0 and ahead == 0 and not dirty,
+        "can_restart": can_restart(),
     }
+
+
+# Automatic restart after an update. Only the desktop window can offer it: run_desktop.py registers
+# how to close its own window and how to start itself again (a browser tab / bare uvicorn run has
+# neither, so there the user restarts by hand, as before).
+_restart_close_window: Callable[[], None] | None = None
+_restart_command: list[str] | None = None
+_updated_since_start = False  # set by apply(); restart() refuses to run without a fresh update
+
+_RELAUNCH_SCRIPT = Path(__file__).resolve().parent.parent / "relaunch.py"
+_CLOSE_DELAY_SECONDS = 1.0  # lets the HTTP response that triggered the restart reach the page first
+
+
+def register_desktop_restart(close_window: Callable[[], None], command: list[str]) -> None:
+    global _restart_close_window, _restart_command
+    _restart_close_window = close_window
+    _restart_command = command
+
+
+def can_restart() -> bool:
+    return _restart_close_window is not None and _restart_command is not None
+
+
+def restart() -> None:
+    """Starts a detached helper that relaunches OptiFuzz once this process is gone, then closes
+    the window (which ends this process) a moment later."""
+    if not can_restart():
+        raise UpdateError("Automatic restart is only available in the OptiFuzz desktop app.")
+    if not _updated_since_start:
+        raise UpdateError("There is no update waiting for a restart.")
+    options: dict[str, Any] = {"close_fds": True}
+    if sys.platform == "win32":
+        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: no console, and it outlives this process.
+        options["creationflags"] = 0x00000008 | 0x00000200
+    else:
+        options["start_new_session"] = True
+    try:
+        subprocess.Popen(
+            [_pip_python(), str(_RELAUNCH_SCRIPT), str(os.getpid()), str(REPO_ROOT), *_restart_command],
+            cwd=str(REPO_ROOT), **options,
+        )
+    except OSError as exc:
+        raise UpdateError(f"Could not start the restart helper: {exc}") from exc
+    close = _restart_close_window
+    timer = threading.Timer(_CLOSE_DELAY_SECONDS, close)
+    timer.daemon = True
+    timer.start()
 
 
 def _pip_python() -> str:
@@ -104,6 +154,8 @@ def apply() -> dict[str, Any]:
     if pip.returncode != 0:
         tail = (pip.stderr or pip.stdout).strip().splitlines()[-5:]
         raise UpdateError("Code updated, but installing the dependencies failed: " + " | ".join(tail))
+    global _updated_since_start
+    _updated_since_start = True
     return {
         **status, "current": current_version(), "updated": True, "restart_required": True,
         "behind": 0, "can_update": False,

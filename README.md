@@ -183,8 +183,10 @@ then open <http://127.0.0.1:8000>.
 ## Updating
 
 Open **Settings -> Updates** and click *Check for updates*; if there is a newer version, *Update now*
-downloads it and refreshes the dependencies, then you restart OptiFuzz. Running and queued jobs
-are paused when you update (resume them afterwards). You do not need to download
+downloads it and refreshes the dependencies, and then **OptiFuzz restarts by itself** (the window
+closes and opens again a few seconds later; if you run OptiFuzz in a browser tab instead of the
+desktop window, close and reopen it yourself). Running and queued jobs
+are paused when you update (resume them after it is back). You do not need to download
 the repository again, and your projects, targets, jobs and wordlists are kept (your data is stored
 outside the program folder). It works on any copy installed with `git clone`; if you changed tracked
 files yourself, it refuses to overwrite them.
@@ -250,7 +252,8 @@ and resume from their last checkpoint. Several jobs can run at once (the limit i
 file with that target's jobs, results and tree. It has no dependencies, so you can open it anywhere,
 offline, and it stays interactive: you can still search and use the filters and hide rules. On a
 project's targets page, *Export all targets* has a small arrow to choose between two
-formats:
+formats. Choosing one only changes the button's label; the file is downloaded when you click the
+button itself, and your choice is remembered:
 
 - **`.zip`**: one separate HTML report per target, inside a zip file.
 - **`.html`**: one single HTML file containing every target of the project, with navigation
