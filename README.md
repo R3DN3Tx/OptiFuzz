@@ -103,9 +103,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1
 
 The installer also adds an **OptiFuzz** shortcut to the Start menu: search for "OptiFuzz" there to launch
 it, or pin it to the taskbar. No administrator rights are needed. If you move the program folder, run the
-installer again to refresh the shortcut. To launch from a terminal instead:
-`powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1` (the policy flag is needed
-because Windows blocks `.ps1` scripts by default).
+installer again to refresh the shortcut.
 
 ### Linux (Debian, Ubuntu, Kali and derivatives)
 
@@ -113,7 +111,6 @@ The window uses GTK 3 and WebKit2GTK 4.1 from your distribution.
 
 ```bash
 ./scripts/linux/install-linux.sh   # installs the system packages with sudo, then the virtual environment
-./scripts/linux/run-linux.sh
 ```
 
 `install-linux.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon
@@ -133,6 +130,23 @@ script only installs what is missing.
 
 The installer also adds an **OptiFuzz** entry to the application menu. If you move the program folder,
 run the installer again to refresh it.
+
+### Run without installing a shortcut
+
+If you would rather leave nothing outside the program folder (no Start menu or application menu entry),
+install with the shortcut turned off and launch OptiFuzz from the folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1 -NoShortcut
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1
+```
+```bash
+./scripts/linux/install-linux.sh --no-shortcut
+./scripts/linux/run-linux.sh
+```
+
+The policy flag is needed because Windows blocks `.ps1` scripts by default. The program, its virtual
+environment and your data stay where they are; only the shortcut is skipped.
 
 ### Uninstall
 

@@ -2,6 +2,8 @@
 # Installs everything OptiFuzz needs on Linux: the system packages (window toolkit, fonts, git),
 # then a virtual environment with the Python requirements.
 #
+# Also adds an application menu entry; pass --no-shortcut to skip it.
+#
 # System packages are installed with sudo on Debian-family systems (apt), Fedora (dnf) and Arch
 # (pacman). Debian-family is the tested path; the Fedora and Arch package names are provided but
 # not tested. Any other distribution: install the equivalents by hand, then run this again.
@@ -44,6 +46,12 @@ fi
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
+
+if [ "${1:-}" = "--no-shortcut" ]; then
+    echo
+    echo "Done (no menu entry created). Start OptiFuzz with: ./scripts/linux/run-linux.sh"
+    exit 0
+fi
 
 # Application menu entry, so OptiFuzz is found and launched like any installed app.
 entry_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"

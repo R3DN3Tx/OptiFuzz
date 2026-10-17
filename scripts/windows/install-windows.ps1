@@ -1,4 +1,6 @@
-# Installs OptiFuzz's dependencies on Windows: a virtual environment with the Python requirements.
+# Installs OptiFuzz's dependencies on Windows: a virtual environment with the Python requirements,
+# and a Start Menu shortcut. Pass -NoShortcut to skip the shortcut and leave nothing outside this folder.
+param([switch]$NoShortcut)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path (Split-Path $PSScriptRoot))  # repository root (this script lives in scripts\windows)
 
@@ -17,6 +19,12 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 & python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+if ($NoShortcut) {
+    Write-Host ""
+    Write-Host "Done (no shortcut created). Start OptiFuzz with: powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1"
+    return
+}
 
 # Start Menu shortcut, so OptiFuzz is found and launched like any installed app (no .ps1 needed).
 $root = (Get-Location).Path
