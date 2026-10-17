@@ -11,11 +11,11 @@ It listens on **`127.0.0.1:8910` only** (never on your network) and serves stati
 
 ## Start it
 
-From the repository root, with the OptiFuzz virtual environment active (or any Python 3.9+):
+From the repository root, with any Python 3.9 or newer (on some Linux distributions the command is
+`python3`):
 
 ```bash
-python dev/demo-target/demo_server.py          # Linux / macOS
-.venv\Scripts\python dev\demo-target\demo_server.py   # Windows
+python dev/demo-target/demo_server.py
 ```
 
 Stop it with `Ctrl+C`. Check it: <http://127.0.0.1:8910/>.

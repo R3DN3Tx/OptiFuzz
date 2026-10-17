@@ -138,6 +138,15 @@ def _pip_python() -> str:
     return str(exe)
 
 
+def _pip_install_flags() -> list[str]:
+    """Extra `pip install` flags. On Linux the venv is created with --system-site-packages (the window
+    toolkit, PyGObject, comes from the distribution), so without --ignore-installed pip reuses a system
+    copy of a dependency (Kali's old httpcore, which crashes on Python 3.14) instead of installing it
+    in the venv; --no-warn-conflicts hides its complaints about unrelated system tools. Same flags as
+    scripts/linux/install-linux.sh. Windows has no system packages in its venv."""
+    return [] if sys.platform == "win32" else ["--ignore-installed", "--no-warn-conflicts"]
+
+
 def apply() -> dict[str, Any]:
     status = check()
     if status["dirty"]:
@@ -148,7 +157,7 @@ def apply() -> dict[str, Any]:
         return {**status, "updated": False, "restart_required": False}
     _git("pull", "--ff-only", "--quiet", timeout=300)
     pip = subprocess.run(
-        [_pip_python(), "-m", "pip", "install", "-r", str(REPO_ROOT / "requirements.txt")],
+        [_pip_python(), "-m", "pip", "install", *_pip_install_flags(), "-r", str(REPO_ROOT / "requirements.txt")],
         capture_output=True, text=True, timeout=900, env=_ENV, cwd=str(REPO_ROOT), **no_window_kwargs(),
     )
     if pip.returncode != 0:

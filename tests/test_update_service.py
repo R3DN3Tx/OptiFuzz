@@ -68,6 +68,35 @@ def test_not_a_git_checkout_is_a_clear_error(tmp_path: Path, monkeypatch: pytest
 
 
 
+def test_pip_install_flags_isolate_the_linux_venv_from_system_packages(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An old system httpcore (Kali) reused by pip instead of a venv copy crashes dirsearch on Python 3.14.
+    monkeypatch.setattr(update_service.sys, "platform", "linux")
+    assert "--ignore-installed" in update_service._pip_install_flags()
+    monkeypatch.setattr(update_service.sys, "platform", "win32")
+    assert update_service._pip_install_flags() == []
+
+
+def test_apply_runs_pip_with_those_flags(clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    origin, _local = clone
+    _release(origin, "1.0.1")
+    seen: list[list[str]] = []
+    real_run = subprocess.run
+
+    def spy(cmd, *args, **kwargs):
+        if "pip" in cmd:
+            seen.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(update_service.subprocess, "run", spy)
+    monkeypatch.setattr(update_service, "_pip_install_flags", lambda: ["--ignore-installed", "--no-warn-conflicts"])
+
+    update_service.apply()
+
+    (cmd,) = seen
+    assert cmd[cmd.index("install") + 1:cmd.index("-r")] == ["--ignore-installed", "--no-warn-conflicts"]
+
+
 # ---- automatic restart after an update --------------------------------------------------------
 
 

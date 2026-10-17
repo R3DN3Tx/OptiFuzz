@@ -286,6 +286,10 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
   smoother (not verified).
   The window zooms automatically to match your Windows display scaling; set
   `OPTIFUZZ_UI_SCALE` (for example `1.25`) to override it.
+- **On Linux, a fuzz fails with `AttributeError: 'typing.Union' object has no attribute '__module__'`
+  (in `httpcore`).** An old copy of a library that comes with the distribution was used instead of
+  the one OptiFuzz installs. Update from *Settings -> Updates*, or run `./scripts/linux/install-linux.sh`
+  again: both now install OptiFuzz's own copies.
 - **Text too small, or wide empty margins, on Linux.** The window uses your desktop's scaling, and
   the content is limited to a fixed width, so on a high-resolution screen at 100% it looks small and
   centred. Set a larger percentage in *Settings -> Display zoom*.

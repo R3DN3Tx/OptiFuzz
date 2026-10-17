@@ -45,7 +45,11 @@ fi
 # --system-site-packages: PyGObject (gi) is provided by the distribution.
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+# --ignore-installed: the venv sees the distribution's own packages (for PyGObject), and without this
+# pip reuses a system copy of a dependency instead of installing it here. Kali ships an old httpcore
+# that crashes on its newer Python ('typing.Union' object has no attribute '__module__') the moment a
+# fuzz starts. --no-warn-conflicts hides pip's complaints about unrelated system tools (mitmproxy...).
+.venv/bin/pip install --ignore-installed --no-warn-conflicts -r requirements.txt
 
 if [ "${1:-}" = "--no-shortcut" ]; then
     echo
