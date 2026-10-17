@@ -1079,7 +1079,11 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    show a page-breaking horizontal scrollbar the app never wants (see the
    file-wide "no horizontal scrollbar" rule below every table-like block).
    Cell content wraps downward instead (no white-space: nowrap). */
-.fuzz-history-panel { font-size: 12px; }
+/* white-space: normal -- the cell wrapping this panel is the FIRST column of its parent table
+   (Results' own first column is white-space: nowrap), and white-space is inherited, so without
+   this reset every cell below inherited nowrap and a long Options (or Wordlist, ...) ran on one
+   line over the neighbouring columns instead of wrapping inside its own. */
+.fuzz-history-panel { font-size: 12px; white-space: normal; }
 .fuzz-history-table { width: 100%; table-layout: fixed; }
 .fuzz-history-table th, .fuzz-history-table td {
     font-size: 11.5px;
@@ -1119,8 +1123,8 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    12+18+12+17+21+8+12 = 100%. */
 .fuzz-history-table th:nth-child(4), .fuzz-history-table td:nth-child(4) { width: 17%; }
 .fuzz-history-table th:nth-child(5), .fuzz-history-table td:nth-child(5) { width: 21%; }
-.fuzz-history-table th:nth-child(6), .fuzz-history-table td:nth-child(6) { width: 8%; white-space: nowrap; }
-.fuzz-history-table th:nth-child(7), .fuzz-history-table td:nth-child(7) { width: 12%; white-space: nowrap; }
+.fuzz-history-table th:nth-child(6), .fuzz-history-table td:nth-child(6) { width: 8%; }
+.fuzz-history-table th:nth-child(7), .fuzz-history-table td:nth-child(7) { width: 12%; }
 /* JOBS' own "i" info panel (one single-row table, always exactly this
    job): Status dropped as redundant there (see buildFuzzHistoryPanel's own
    comment) -- the freed 12% redistributed proportionally across the
@@ -1138,7 +1142,7 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    options (27 -> 36); Date is the 5th column now, not the 6th.
    18+12+22+36+12 = 100%. */
 .fuzz-history-table.no-status th:nth-child(4), .fuzz-history-table.no-status td:nth-child(4) { width: 36%; }
-.fuzz-history-table.no-status th:nth-child(5), .fuzz-history-table.no-status td:nth-child(5) { width: 12%; white-space: nowrap; }
+.fuzz-history-table.no-status th:nth-child(5), .fuzz-history-table.no-status td:nth-child(5) { width: 12%; }
 /* Footnote under a history table that has a "query*" chip. */
 .fuzz-history-table .fuzz-history-note { color: var(--muted); font-size: 11px; padding-top: 6px; text-align: left; }
 .fuzz-history-header-chip {
