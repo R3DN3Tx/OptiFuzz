@@ -125,6 +125,12 @@ def test_select_icon_path_returns_none_when_neither_variant_exists(
     assert run_desktop._select_icon_path() is None
 
 
+def test_effective_zoom_scale_prefers_the_setting_over_the_automatic_one() -> None:
+    assert run_desktop._effective_zoom_scale(125, 1.5) == 1.25
+    assert run_desktop._effective_zoom_scale(None, 1.5) == 1.5
+    assert run_desktop._effective_zoom_scale(None, None) is None
+
+
 def test_title_bar_icon_is_the_dark_ink_variant() -> None:
     # icon-light is the black-ink one: it blends into the forced-dark title bar instead of
     # repeating the light logo of the app's own header.

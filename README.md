@@ -251,6 +251,7 @@ The gear icon in the header opens:
 | Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
 | Wordlists folder | The folder the wordlist picker browses: the `wordlists` folder of OptiFuzz by default, or one you already have (type the path or use the folder button) |
 | Desktop app port | A custom local port for the app to listen on, instead of the built-in default |
+| Display zoom (Linux only) | Makes the whole app bigger or smaller, in percent (50 to 300). Empty means automatic. It applies right away; on Windows the app follows the system display scaling by itself |
 | Updates | Check for a newer version and update in place, keeping your projects |
 
 ## How it works
@@ -285,6 +286,9 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
   smoother (not verified).
   The window zooms automatically to match your Windows display scaling; set
   `OPTIFUZZ_UI_SCALE` (for example `1.25`) to override it.
+- **Text too small, or wide empty margins, on Linux.** The window uses your desktop's scaling, and
+  the content is limited to a fixed width, so on a high-resolution screen at 100% it looks small and
+  centred. Set a larger percentage in *Settings -> Display zoom*.
 - **"Open in browser" does nothing.** Pick a browser in *Settings -> Browser for opening results*.
 - **The window does not open.** Start it from a terminal to see errors:
   `.venv/bin/python run_desktop.py`.

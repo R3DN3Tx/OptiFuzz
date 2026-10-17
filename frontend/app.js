@@ -1242,6 +1242,12 @@ const SETTINGS_PAGES = [
         desc: "Custom local port the app listens on, instead of the built-in default",
     },
     {
+        id: "ui-zoom",
+        title: "Display zoom",
+        desc: "Make the whole app bigger or smaller (Linux)",
+        onlyWhenZoomSupported: true,
+    },
+    {
         id: "updates",
         title: "Updates",
         desc: "Check for a newer version and update in place; your projects are kept",
@@ -1261,11 +1267,18 @@ function setupSettingsMenu() {
     // closed instead of just going back to the menu.
     panel.addEventListener("click", (e) => e.stopPropagation());
 
+    // Display zoom only exists on Linux (Windows follows the system scaling by itself): the
+    // backend says which one this is. The menu is rebuilt on every open, so a reply that
+    // arrives after startup is picked up the first time the gear is clicked.
+    let zoomSupported = false;
+    api("/api/settings/ui-zoom").then((d) => { zoomSupported = !!d.supported; }).catch(() => {});
+
     function renderMenu() {
         panel.innerHTML = "";
         panel.appendChild(h("h3", { text: "Settings" }));
         const list = h("div", { class: "settings-menu-list" });
         for (const page of SETTINGS_PAGES) {
+            if (page.onlyWhenZoomSupported && !zoomSupported) continue;
             const item = h("button", { type: "button", class: "settings-menu-item" }, [
                 h("span", { class: "label-group" }, [
                     h("span", { class: "title", text: page.title }),
@@ -1295,6 +1308,7 @@ function setupSettingsMenu() {
             if (pageId === "browser") await renderBrowserPage();
             else if (pageId === "output-filename") await renderOutputFilenamePage();
             else if (pageId === "port") await renderPortPage();
+            else if (pageId === "ui-zoom") await renderZoomPage();
             else if (pageId === "default-extensions") await renderDefaultExtensionsPage();
             else if (pageId === "wordlists-dir") await renderWordlistsDirPage();
             else if (pageId === "updates") renderUpdatesPage();
@@ -1522,6 +1536,43 @@ function setupSettingsMenu() {
             }
         });
         panel.appendChild(h("div", { class: "field-row" }, [input, saveBtn]));
+        panel.appendChild(fieldError);
+    }
+
+    async function renderZoomPage() {
+        const data = await api("/api/settings/ui-zoom");
+
+        panel.innerHTML = "";
+        pageHeader("Display zoom");
+        panel.appendChild(h("div", {
+            class: "hint",
+            text: `Makes the whole app bigger or smaller, in percent (${data.min_percent} to ${data.max_percent}). `
+                + "Leave it empty for automatic. It applies right away and is remembered.",
+        }));
+
+        const input = h("input", {
+            type: "number",
+            min: String(data.min_percent),
+            max: String(data.max_percent),
+            step: "5",
+            placeholder: "Automatic",
+            value: data.configured_percent ? String(data.configured_percent) : "",
+        });
+        const fieldError = h("div", { class: "field-error", hidden: "hidden" });
+        const saveBtn = h("button", { type: "button", class: "primary", text: "Apply" });
+        saveBtn.addEventListener("click", async () => {
+            const raw = input.value.trim();
+            const percent = raw ? Number(raw) : null;
+            fieldError.hidden = true;
+            try {
+                await api("/api/settings/ui-zoom", { method: "PUT", body: JSON.stringify({ percent }) });
+                await renderPage("ui-zoom");
+            } catch (err) {
+                fieldError.textContent = `Could not apply: ${err.message}`;
+                fieldError.hidden = false;
+            }
+        });
+        panel.appendChild(h("div", { class: "field-row" }, [input, h("span", { class: "hint", text: "%" }), saveBtn]));
         panel.appendChild(fieldError);
     }
 

@@ -416,8 +416,32 @@ def _error_html(message: str) -> str:
     )
 
 
+_auto_ui_scale: float | None = None
+_auto_ui_scale_known = False
+
+
+def _auto_scale() -> float | None:
+    """The automatic zoom (see _linux_ui_scale), worked out once: under WSL it asks Windows and
+    can take a second, which a later change of the zoom setting must not wait for again."""
+    global _auto_ui_scale, _auto_ui_scale_known
+    if not _auto_ui_scale_known:
+        _auto_ui_scale = _linux_ui_scale()
+        _auto_ui_scale_known = True
+    return _auto_ui_scale
+
+
+def _effective_zoom_scale(configured_percent: int | None, auto_scale: float | None) -> float | None:
+    """The zoom to apply: the one chosen in Settings -> Display zoom, else the automatic one
+    (None = leave the view as it is)."""
+    if configured_percent:
+        return configured_percent / 100
+    return auto_scale
+
+
 def _zoom_for_display(window: webview.Window) -> None:
-    scale = _linux_ui_scale()
+    from backend.persistence.app_settings import get_ui_zoom_percent
+
+    scale = _effective_zoom_scale(get_ui_zoom_percent(), _auto_scale())
     if scale:
         _apply_page_zoom(window, scale)
 
@@ -441,6 +465,13 @@ def _boot_backend(window: webview.Window) -> None:
 
         # Lets Settings -> Updates restart the app by itself: close this window, start this script again.
         update_service.register_desktop_restart(window.destroy, [sys.executable, str(Path(__file__).resolve())])
+        if not IS_WINDOWS:
+            # Settings -> Display zoom (Linux only): applies a new zoom to this window right away.
+            from backend.services import display_service
+
+            display_service.register_zoom_applier(
+                lambda percent: _apply_page_zoom(window, _effective_zoom_scale(percent, _auto_scale()) or 1.0)
+            )
 
         port = _free_port(get_custom_port() or DEFAULT_PORT)
         config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

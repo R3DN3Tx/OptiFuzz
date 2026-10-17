@@ -120,6 +120,21 @@ def set_wordlists_dir(path: str | None) -> None:
     save_settings(settings)
 
 
+# Display zoom of the desktop window, in percent (Linux only, see display_service). None/absent =
+# automatic (what run_desktop.py works out from the desktop's own scaling), never stored as a value.
+def get_ui_zoom_percent() -> int | None:
+    return load_settings().get("ui_zoom_percent")
+
+
+def set_ui_zoom_percent(percent: int | None) -> None:
+    settings = load_settings()
+    if percent:
+        settings["ui_zoom_percent"] = percent
+    else:
+        settings.pop("ui_zoom_percent", None)
+    save_settings(settings)
+
+
 # dirsearch's own shipped config.ini value -- the Settings UI shows this as
 # the field's own placeholder (see get_default_extensions_fallback's own
 # docstring just below for why).

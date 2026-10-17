@@ -11,10 +11,11 @@ from backend.api.schemas import (
     UiPrefRequest,
     OutputFilenameTemplateRequest,
     PortSettingsRequest,
+    UiZoomRequest,
     WordlistsDirRequest,
 )
 from backend.persistence import app_settings
-from backend.services import browser_service, output_naming, wordlist_service
+from backend.services import browser_service, display_service, output_naming, wordlist_service
 
 router = APIRouter(tags=["settings"])
 
@@ -94,6 +95,29 @@ def set_port_settings(body: PortSettingsRequest) -> dict:
         "configured_port": app_settings.get_custom_port(),
         "default_port": app_settings.DEFAULT_PORT,
     }
+
+
+def _ui_zoom_payload() -> dict:
+    return {
+        "supported": display_service.zoom_supported(),
+        "configured_percent": app_settings.get_ui_zoom_percent(),
+        "min_percent": display_service.MIN_ZOOM_PERCENT,
+        "max_percent": display_service.MAX_ZOOM_PERCENT,
+    }
+
+
+@router.get("/api/settings/ui-zoom")
+def get_ui_zoom_settings() -> dict:
+    return _ui_zoom_payload()
+
+
+@router.put("/api/settings/ui-zoom")
+def set_ui_zoom_settings(body: UiZoomRequest) -> dict:
+    try:
+        display_service.set_zoom_percent(body.percent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _ui_zoom_payload()
 
 
 @router.get("/api/settings/default-extensions-fallback")

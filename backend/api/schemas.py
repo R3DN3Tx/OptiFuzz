@@ -107,6 +107,11 @@ class WordlistsDirRequest(BaseModel):
     dir: str | None = None
 
 
+class UiZoomRequest(BaseModel):
+    # None clears it (back to automatic); the range is checked by display_service.
+    percent: int | None = None
+
+
 class DefaultExtensionsFallbackRequest(BaseModel):
     # None clears the override (back to dirsearch's own real
     # default-extensions behavior, untouched). "" means "use none, ever". A

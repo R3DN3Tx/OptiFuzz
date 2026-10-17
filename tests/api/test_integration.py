@@ -543,6 +543,41 @@ def test_wordlists_dir_setting_rejects_a_missing_folder(client: TestClient, tmp_
     assert client.get("/api/settings/wordlists-dir").json()["configured_dir"] is None
 
 
+def test_ui_zoom_setting_round_trip_and_applies_to_the_window(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.services import display_service
+
+    applied: list = []
+    monkeypatch.setattr(display_service, "zoom_supported", lambda: True)
+    monkeypatch.setattr(display_service, "_zoom_applier", applied.append)
+
+    got = client.get("/api/settings/ui-zoom").json()
+    assert got == {"supported": True, "configured_percent": None, "min_percent": 50, "max_percent": 300}
+
+    set_to = client.put("/api/settings/ui-zoom", json={"percent": 125}).json()
+    assert set_to["configured_percent"] == 125 and applied == [125]
+    assert client.get("/api/settings/ui-zoom").json()["configured_percent"] == 125
+
+    cleared = client.put("/api/settings/ui-zoom", json={"percent": None}).json()
+    assert cleared["configured_percent"] is None and applied == [125, None]
+
+
+def test_ui_zoom_setting_rejects_out_of_range_values_and_other_platforms(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.services import display_service
+
+    monkeypatch.setattr(display_service, "zoom_supported", lambda: True)
+    assert client.put("/api/settings/ui-zoom", json={"percent": 10}).status_code == 400
+    assert client.put("/api/settings/ui-zoom", json={"percent": 301}).status_code == 400
+
+    monkeypatch.setattr(display_service, "zoom_supported", lambda: False)  # e.g. Windows
+    assert client.get("/api/settings/ui-zoom").json()["supported"] is False
+    assert client.put("/api/settings/ui-zoom", json={"percent": 100}).status_code == 400
+    assert client.get("/api/settings/ui-zoom").json()["configured_percent"] is None
+
+
 def test_wordlist_tree_survives_a_symlink_loop(tmp_path: Path) -> None:
     from backend.services import wordlist_service
 
