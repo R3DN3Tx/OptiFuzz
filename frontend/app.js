@@ -1580,8 +1580,8 @@ function setupSettingsMenu() {
         panel.appendChild(h("div", {
             class: "hint",
             text: "The folder the New Fuzz wordlist picker browses. Leave it empty to use the "
-                + "wordlists folder that comes with OptiFuzz, or pick a folder you already have "
-                + "(for example SecLists): its subfolders show up as groups. OptiFuzz only reads "
+                + "wordlists folder that comes with OptiFuzz, or pick a folder you already have. "
+                + "Its subfolders show up as groups. OptiFuzz only reads "
                 + "from it and never changes it.",
         }));
 

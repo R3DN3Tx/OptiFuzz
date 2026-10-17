@@ -110,10 +110,11 @@ installer again to refresh the shortcut.
 The window uses GTK 3 and WebKit2GTK 4.1 from your distribution.
 
 ```bash
-./scripts/linux/install-linux.sh   # installs the system packages with sudo, then the virtual environment
+./scripts/linux/install-linux.sh
 ```
 
-`install-linux.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon
+Run it as your normal user, without `sudo` in front: it asks for `sudo` itself, only for the system
+packages, so the virtual environment and the menu entry stay yours. `install-linux.sh` installs everything the app needs: the window toolkit, `git`, the fonts for the icon
 glyphs, and then the Python environment. It does the system part with `sudo` using your package
 manager:
 
@@ -162,30 +163,11 @@ This removes the menu shortcut and the virtual environment, and asks whether to 
 on Linux); it keeps them by default. Pass `-RemoveData` (Windows) or `--remove-data` (Linux) to delete
 them without being asked. It does not remove the program folder, Python, Git or the Linux system packages.
 
-### Manual installation
-
-```bash
-python3 -m venv --system-site-packages .venv      # Windows: python -m venv .venv
-.venv/bin/pip install -r requirements.txt         # Windows: .venv\Scripts\pip ...
-.venv/bin/python run_desktop.py                   # Windows: .venv\Scripts\pythonw.exe run_desktop.py
-```
-
-### Prefer a browser tab to a window?
-
-The window is a thin shell around a local web app. You can also run it in your browser:
-
-```bash
-.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
-```
-
-then open <http://127.0.0.1:8000>.
-
 ## Updating
 
 Open **Settings -> Updates** and click *Check for updates*; if there is a newer version, *Update now*
 downloads it and refreshes the dependencies, and then **OptiFuzz restarts by itself** (the window
-closes and opens again a few seconds later; if you run OptiFuzz in a browser tab instead of the
-desktop window, close and reopen it yourself). Running and queued jobs
+closes and opens again a few seconds later). Running and queued jobs
 are paused when you update (resume them after it is back). You do not need to download
 the repository again, and your projects, targets, jobs and wordlists are kept (your data is stored
 outside the program folder). It works on any copy installed with `git clone`; if you changed tracked
@@ -233,16 +215,13 @@ wordlist lines that contain `%EXT%`. Any other dirsearch flag goes in *Advanced 
 options*, written exactly as on the dirsearch command line (for example
 `--max-rate 50 --timeout 10`).
 
-**Staying in control.** OptiFuzz is built for manual, step-by-step exploration: it never recurses
-on its own. When a result looks worth exploring you start that fuzz yourself, from the result or
-from the tree, so every request is a decision.
-
-dirsearch has its own recursion flags (`-r`, `-R`, ...). You can pass them in *Custom options* and
-the job runs and records everything it finds, including the nested paths. They are, however, not
-officially supported: the progress counters, and Pause and Resume, are designed around a single
-pass over the wordlist. With recursion the progress only reflects the first level, and a paused
-job cannot restore dirsearch's internal recursion queue when it is resumed. For deeper levels,
-prefer fuzzing from the tree.
+**dirsearch's recursion flags.** OptiFuzz never recurses on its own, but dirsearch has its own
+recursion flags (`-r`, `-R`, ...). You can pass them in *Custom options* and the job runs and
+records everything it finds, including the nested paths. They are, however, not officially
+supported: the progress counters, and Pause and Resume, are designed around a single pass over the
+wordlist. With recursion the progress only reflects the first level, and a paused job cannot restore
+dirsearch's internal recursion queue when it is resumed. For deeper levels, fuzz the paths you find
+from Results or from the tree.
 
 **Long runs.** Pause before closing the app, or just close it: running jobs come back as paused
 and resume from their last checkpoint. Several jobs can run at once (the limit is per target, in
