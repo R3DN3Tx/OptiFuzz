@@ -45,5 +45,21 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
 
+# Application menu entry, so OptiFuzz is found and launched like any installed app.
+entry_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$entry_dir"
+cat > "$entry_dir/optifuzz.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=OptiFuzz
+Comment=Web content discovery with dirsearch
+Exec="$PWD/scripts/linux/run-linux.sh"
+Path=$PWD
+Icon=$PWD/frontend/icon-dark.png
+Terminal=false
+Categories=Network;Security;
+EOF
+command -v update-desktop-database >/dev/null && update-desktop-database "$entry_dir" || true
+
 echo
-echo "Done. Start OptiFuzz with: ./scripts/linux/run-linux.sh"
+echo "Done. Find OptiFuzz in your application menu, or start it with: ./scripts/linux/run-linux.sh"

@@ -18,5 +18,16 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
+# Start Menu shortcut, so OptiFuzz is found and launched like any installed app (no .ps1 needed).
+$root = (Get-Location).Path
+$shortcutPath = Join-Path ([Environment]::GetFolderPath("Programs")) "OptiFuzz.lnk"
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+$shortcut.TargetPath = Join-Path $root ".venv\Scripts\pythonw.exe"
+$shortcut.Arguments = "run_desktop.py"
+$shortcut.WorkingDirectory = $root
+$shortcut.IconLocation = Join-Path $root "frontend\icon-dark.ico"
+$shortcut.Description = "OptiFuzz"
+$shortcut.Save()
+
 Write-Host ""
-Write-Host "Done. Start OptiFuzz with: .\scripts\windows\run-windows.ps1"
+Write-Host "Done. Search for 'OptiFuzz' in the Start menu to launch it (shortcut: $shortcutPath)."

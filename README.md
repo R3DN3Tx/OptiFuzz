@@ -99,8 +99,13 @@ The window uses WebView2, which ships with current Windows.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1
-.\scripts\windows\run-windows.ps1
 ```
+
+The installer also adds an **OptiFuzz** shortcut to the Start menu: search for "OptiFuzz" there to launch
+it, or pin it to the taskbar. No administrator rights are needed. If you move the program folder, run the
+installer again to refresh the shortcut. To launch from a terminal instead:
+`powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1` (the policy flag is needed
+because Windows blocks `.ps1` scripts by default).
 
 ### Linux (Debian, Ubuntu, Kali and derivatives)
 
@@ -125,6 +130,23 @@ On any other distribution, install the equivalents yourself (including the DejaV
 which provide the icon glyphs such as the gear and the pause symbol) and run `install-linux.sh` again for
 the Python part. If you would rather not use `sudo`, install those packages by hand first: the
 script only installs what is missing.
+
+The installer also adds an **OptiFuzz** entry to the application menu. If you move the program folder,
+run the installer again to refresh it.
+
+### Uninstall
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\uninstall-windows.ps1   # Windows
+```
+```bash
+./scripts/linux/uninstall-linux.sh                                                  # Linux
+```
+
+This removes the menu shortcut and the virtual environment, and asks whether to delete your data
+(projects, results and settings, stored in `%APPDATA%\OptiFuzz` on Windows and `~/.local/share/OptiFuzz`
+on Linux); it keeps them by default. Pass `-RemoveData` (Windows) or `--remove-data` (Linux) to delete
+them without being asked. It does not remove the program folder, Python, Git or the Linux system packages.
 
 ### Manual installation
 
