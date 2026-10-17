@@ -1227,14 +1227,14 @@ const SETTINGS_PAGES = [
         desc: "Naming pattern for each job's raw dirsearch output file (.txt)",
     },
     {
-        id: "port",
-        title: "Desktop app port",
-        desc: "Custom local port the app listens on, instead of the built-in default",
-    },
-    {
         id: "default-extensions",
         title: "Default extensions (Force extensions)",
         desc: "What dirsearch uses when Force extensions is on but a fuzz picks none",
+    },
+    {
+        id: "port",
+        title: "Desktop app port",
+        desc: "Custom local port the app listens on, instead of the built-in default",
     },
     {
         id: "updates",

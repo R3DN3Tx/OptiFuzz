@@ -189,9 +189,6 @@ the repository again, and your projects, targets, jobs and wordlists are kept (y
 outside the program folder). It works on any copy installed with `git clone`; if you changed tracked
 files yourself, it refuses to overwrite them.
 
-The same thing by hand: `git pull`, then `.venv/bin/pip install -r requirements.txt`
-(Windows: `.venv\Scripts\pip ...`).
-
 ## Quick start
 
 1. Start OptiFuzz.
@@ -264,9 +261,9 @@ The gear icon in the header opens:
 |---|---|
 | Browser for opening results | The browser launched when you open a result's URL (detected automatically; or a custom path) |
 | Output filenames | The naming pattern of each job's raw dirsearch output file (`.txt`) |
+| Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
 | Desktop app port | A custom local port for the app to listen on, instead of the built-in default |
 | Updates | Check for a newer version and update in place, keeping your projects |
-| Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
 
 ## How it works
 
