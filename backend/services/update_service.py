@@ -83,7 +83,7 @@ def check() -> dict[str, Any]:
 
 
 # Automatic restart after an update. Only the desktop window can offer it: run_desktop.py registers
-# how to close its own window and how to start itself again (a browser tab / bare uvicorn run has
+# how to close its own window and how to start itself again (a bare uvicorn run has
 # neither, so there the user restarts by hand, as before).
 _restart_close_window: Callable[[], None] | None = None
 _restart_command: list[str] | None = None

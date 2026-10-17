@@ -1496,8 +1496,8 @@ function setupSettingsMenu() {
         pageHeader("Desktop app port");
         panel.appendChild(h("div", {
             class: "hint",
-            text: "Only applies to the desktop app (run_desktop.py), not this browser tab. "
-                + "Takes effect the next time you restart it.",
+            text: "The local port OptiFuzz listens on. "
+                + "Takes effect the next time you restart OptiFuzz.",
         }));
 
         const input = h("input", {
