@@ -102,6 +102,11 @@ class PortSettingsRequest(BaseModel):
     port: int | None = Field(default=None, ge=1, le=65535)
 
 
+class WordlistsDirRequest(BaseModel):
+    # None or "" clears the override (back to the wordlists/ folder inside the program).
+    dir: str | None = None
+
+
 class DefaultExtensionsFallbackRequest(BaseModel):
     # None clears the override (back to dirsearch's own real
     # default-extensions behavior, untouched). "" means "use none, ever". A

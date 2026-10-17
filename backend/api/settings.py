@@ -11,9 +11,10 @@ from backend.api.schemas import (
     UiPrefRequest,
     OutputFilenameTemplateRequest,
     PortSettingsRequest,
+    WordlistsDirRequest,
 )
 from backend.persistence import app_settings
-from backend.services import browser_service, output_naming
+from backend.services import browser_service, output_naming, wordlist_service
 
 router = APIRouter(tags=["settings"])
 
@@ -110,6 +111,27 @@ def set_default_extensions_fallback_settings(body: DefaultExtensionsFallbackRequ
         "configured_value": app_settings.get_default_extensions_fallback(),
         "dirsearch_default": app_settings.DIRSEARCH_DEFAULT_EXTENSIONS,
     }
+
+
+def _wordlists_dir_payload() -> dict:
+    return {
+        "configured_dir": app_settings.get_wordlists_dir(),
+        "default_dir": str(wordlist_service.WORDLISTS_DIR),
+    }
+
+
+@router.get("/api/settings/wordlists-dir")
+def get_wordlists_dir_settings() -> dict:
+    return _wordlists_dir_payload()
+
+
+@router.put("/api/settings/wordlists-dir")
+def set_wordlists_dir_settings(body: WordlistsDirRequest) -> dict:
+    try:
+        wordlist_service.set_wordlists_dir(body.dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _wordlists_dir_payload()
 
 
 @router.get("/api/settings/ui-prefs")

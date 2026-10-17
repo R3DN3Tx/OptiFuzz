@@ -508,6 +508,56 @@ def test_default_extensions_fallback_settings_round_trip(client: TestClient) -> 
     assert cleared["configured_value"] is None
 
 
+def test_wordlists_dir_setting_round_trip_and_drives_the_picker(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.services import wordlist_service
+
+    bundled = tmp_path / "bundled"
+    bundled.mkdir()
+    (bundled / "bundled.txt").write_text("a\n")
+    monkeypatch.setattr(wordlist_service, "WORDLISTS_DIR", bundled)
+    mine = tmp_path / "my lists"
+    (mine / "sub").mkdir(parents=True)
+    (mine / "sub" / "mine.txt").write_text("b\n")
+
+    got = client.get("/api/settings/wordlists-dir").json()
+    assert got == {"configured_dir": None, "default_dir": str(bundled)}
+    assert [c["name"] for c in client.get("/api/wordlists").json()["children"]] == ["bundled.txt"]
+
+    updated = client.put("/api/settings/wordlists-dir", json={"dir": str(mine)}).json()
+    assert updated["configured_dir"] == str(mine)
+    tree = client.get("/api/wordlists").json()
+    assert [c["name"] for c in tree["children"]] == ["sub"]
+    assert tree["children"][0]["children"][0]["name"] == "mine.txt"
+
+    cleared = client.put("/api/settings/wordlists-dir", json={"dir": ""}).json()
+    assert cleared["configured_dir"] is None
+    assert [c["name"] for c in client.get("/api/wordlists").json()["children"]] == ["bundled.txt"]
+
+
+def test_wordlists_dir_setting_rejects_a_missing_folder(client: TestClient, tmp_path: Path) -> None:
+    response = client.put("/api/settings/wordlists-dir", json={"dir": str(tmp_path / "nope")})
+
+    assert response.status_code == 400
+    assert client.get("/api/settings/wordlists-dir").json()["configured_dir"] is None
+
+
+def test_wordlist_tree_survives_a_symlink_loop(tmp_path: Path) -> None:
+    from backend.services import wordlist_service
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x\n")
+    try:
+        (tmp_path / "a" / "loop").symlink_to(tmp_path, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not available here")
+
+    tree = wordlist_service._build_tree(tmp_path, set())
+
+    assert tree["children"][0]["name"] == "a"
+
+
 def _fake_exe(tmp_path: Path, name: str = "firefox.exe") -> Path:
     # A real .exe starts with the "MZ" DOS header -- browser_service now
     # validates a custom path against that before accepting it, so a fake

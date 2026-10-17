@@ -200,9 +200,12 @@ files yourself, it refuses to overwrite them.
 5. In the **TREE**, mark what looks interesting and write down why.
 6. Click **Export target (HTML)** when you want a report.
 
-The repository ships one example wordlist, `wordlists/test_wordlist.txt`. For real work, add your
-own lists: they must be inside the `wordlists` folder of OptiFuzz for the app to be able to read
-them. Then pick one in the wordlist picker and star your favourite as the default.
+The repository ships one example wordlist, `wordlists/test_wordlist.txt`. For real work, use your own
+lists. The wordlist picker browses one folder, which is the `wordlists` folder of OptiFuzz by default:
+either copy your lists into it, or point OptiFuzz at a folder you already have (for example SecLists)
+in **Settings -> Wordlists folder**, typing the path or choosing it with the folder button. Its
+subfolders show up as groups in the picker, and OptiFuzz only reads from it. Then pick a list in the
+wordlist picker and star your favourite as the default.
 
 ## Trying it safely: the demo target
 
@@ -262,6 +265,7 @@ The gear icon in the header opens:
 | Browser for opening results | The browser launched when you open a result's URL (detected automatically; or a custom path) |
 | Output filenames | The naming pattern of each job's raw dirsearch output file (`.txt`) |
 | Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
+| Wordlists folder | The folder the wordlist picker browses: the `wordlists` folder of OptiFuzz by default, or one you already have (type the path or use the folder button) |
 | Desktop app port | A custom local port for the app to listen on, instead of the built-in default |
 | Updates | Check for a newer version and update in place, keeping your projects |
 

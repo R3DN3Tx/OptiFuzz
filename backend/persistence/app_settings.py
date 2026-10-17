@@ -103,6 +103,23 @@ def set_custom_port(port: int | None) -> None:
     save_settings(settings)
 
 
+# Folder the New Fuzz wordlist picker browses. None/absent means "the
+# wordlists/ folder inside the program" (wordlist_service.WORDLISTS_DIR); the
+# Settings UI shows that default as the input's placeholder, never as a stored
+# value here, so moving the program folder never leaves a stale path behind.
+def get_wordlists_dir() -> str | None:
+    return load_settings().get("wordlists_dir")
+
+
+def set_wordlists_dir(path: str | None) -> None:
+    settings = load_settings()
+    if path:
+        settings["wordlists_dir"] = path
+    else:
+        settings.pop("wordlists_dir", None)
+    save_settings(settings)
+
+
 # dirsearch's own shipped config.ini value -- the Settings UI shows this as
 # the field's own placeholder (see get_default_extensions_fallback's own
 # docstring just below for why).

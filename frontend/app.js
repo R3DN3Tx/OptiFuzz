@@ -1232,6 +1232,11 @@ const SETTINGS_PAGES = [
         desc: "What dirsearch uses when Force extensions is on but a fuzz picks none",
     },
     {
+        id: "wordlists-dir",
+        title: "Wordlists folder",
+        desc: "Folder the New Fuzz wordlist picker browses; use your own instead of the bundled one",
+    },
+    {
         id: "port",
         title: "Desktop app port",
         desc: "Custom local port the app listens on, instead of the built-in default",
@@ -1291,6 +1296,7 @@ function setupSettingsMenu() {
             else if (pageId === "output-filename") await renderOutputFilenamePage();
             else if (pageId === "port") await renderPortPage();
             else if (pageId === "default-extensions") await renderDefaultExtensionsPage();
+            else if (pageId === "wordlists-dir") await renderWordlistsDirPage();
             else if (pageId === "updates") renderUpdatesPage();
         } catch (err) {
             panel.innerHTML = "";
@@ -1539,6 +1545,57 @@ function setupSettingsMenu() {
         });
         panel.appendChild(checkboxLabel);
         panel.appendChild(h("div", { class: "field-row" }, [input, saveBtn]));
+        panel.appendChild(fieldError);
+    }
+
+    // Same shape as the per-project Outputs mirror folder (buildOutputsMirrorSection):
+    // a path input plus the native folder button, saved on change or on pick.
+    async function renderWordlistsDirPage() {
+        const data = await api("/api/settings/wordlists-dir");
+
+        panel.innerHTML = "";
+        pageHeader("Wordlists folder");
+        panel.appendChild(h("div", {
+            class: "hint",
+            text: "The folder the New Fuzz wordlist picker browses. Leave it empty to use the "
+                + "wordlists folder that comes with OptiFuzz, or pick a folder you already have "
+                + "(for example SecLists): its subfolders show up as groups. OptiFuzz only reads "
+                + "from it and never changes it.",
+        }));
+
+        const dirInput = h("input", {
+            class: "outputs-mirror-input",
+            placeholder: data.default_dir,
+            value: data.configured_dir || "",
+        });
+        const fieldError = h("div", { class: "field-error", hidden: "hidden" });
+
+        async function save(newDir) {
+            fieldError.hidden = true;
+            try {
+                const result = await api("/api/settings/wordlists-dir", {
+                    method: "PUT", body: JSON.stringify({ dir: newDir }),
+                });
+                dirInput.value = result.configured_dir || "";
+            } catch (err) {
+                fieldError.textContent = `Could not save: ${err.message}`;
+                fieldError.hidden = false;
+            }
+        }
+        dirInput.addEventListener("change", () => save(dirInput.value.trim()));
+
+        const pickBtn = h("button", { type: "button", class: "outputs-mirror-folder-btn", title: "Choose folder…" });
+        pickBtn.innerHTML = FOLDER_ICON_SVG;
+        pickBtn.addEventListener("click", async () => {
+            if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.pick_folder) {
+                alert("The native folder picker is only available inside the OptiFuzz desktop app -- type the path directly instead.");
+                return;
+            }
+            const picked = await window.pywebview.api.pick_folder(dirInput.value.trim() || data.default_dir);
+            if (picked) await save(picked);
+        });
+
+        panel.appendChild(h("div", { class: "outputs-mirror-row" }, [dirInput, pickBtn]));
         panel.appendChild(fieldError);
     }
 
