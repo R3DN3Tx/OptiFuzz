@@ -215,13 +215,15 @@ wordlist lines that contain `%EXT%`. Any other dirsearch flag goes in *Advanced 
 options*, written exactly as on the dirsearch command line (for example
 `--max-rate 50 --timeout 10`).
 
-**dirsearch's recursion flags.** OptiFuzz never recurses on its own, but dirsearch has its own
-recursion flags (`-r`, `-R`, ...). You can pass them in *Custom options* and the job runs and
-records everything it finds, including the nested paths. They are, however, not officially
-supported: the progress counters, and Pause and Resume, are designed around a single pass over the
-wordlist. With recursion the progress only reflects the first level, and a paused job cannot restore
-dirsearch's internal recursion queue when it is resumed. For deeper levels, fuzz the paths you find
-from Results or from the tree.
+**Staying in control.** OptiFuzz is built for manual, step-by-step exploration: it never recurses
+on its own. When a result looks worth exploring you start that fuzz yourself, from the result or
+from the tree, so every request is a decision.
+
+dirsearch has its own recursion flags (`-r`, `-R`, ...). You can pass them in *Custom options* and
+the job runs and records everything it finds, including the nested paths. They are, however, not
+officially supported: the progress counters, and Pause and Resume, are designed around a single
+pass over the wordlist. With recursion the progress only reflects the first level, and a paused
+job cannot restore dirsearch's internal recursion queue when it is resumed.
 
 **Long runs.** Pause before closing the app, or just close it: running jobs come back as paused
 and resume from their last checkpoint. Several jobs can run at once (the limit is per target, in
