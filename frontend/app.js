@@ -1555,7 +1555,7 @@ function setupSettingsMenu() {
             min: String(data.min_percent),
             max: String(data.max_percent),
             step: "5",
-            placeholder: "Automatic",
+            placeholder: "100",
             value: data.configured_percent ? String(data.configured_percent) : "",
         });
         const fieldError = h("div", { class: "field-error", hidden: "hidden" });
@@ -1572,7 +1572,7 @@ function setupSettingsMenu() {
                 fieldError.hidden = false;
             }
         });
-        panel.appendChild(h("div", { class: "field-row" }, [input, h("span", { class: "hint", text: "%" }), saveBtn]));
+        panel.appendChild(h("div", { class: "zoom-row" }, [input, h("span", { class: "hint", text: "%" }), saveBtn]));
         panel.appendChild(fieldError);
     }
 

@@ -206,6 +206,10 @@ header h1 {
 .settings-panel .hint { margin-bottom: 10px; }
 .settings-panel .field-row { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; margin-bottom: 10px; }
 .settings-panel .field-row input { width: 100%; }
+/* Display zoom: a narrow number field, its "%" and the button on ONE line (field-row stacks them). */
+.settings-panel .zoom-row { display: flex; flex-direction: row; align-items: center; gap: 6px; margin-top: 10px; margin-bottom: 10px; }
+.settings-panel .zoom-row input { width: 76px; flex: 0 0 auto; }
+.settings-panel .zoom-row .hint { margin-bottom: 0; }
 .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
 .settings-panel .browser-option {
     display: flex;

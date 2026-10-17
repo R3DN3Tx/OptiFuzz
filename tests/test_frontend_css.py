@@ -23,3 +23,10 @@ def test_fuzz_history_cells_can_wrap_except_the_short_status_column() -> None:
         rule = _declarations(f".fuzz-history-table th:nth-child({column}), .fuzz-history-table td:nth-child({column})")
         assert "nowrap" not in rule, f"column {column} must be able to wrap"
     assert "overflow-wrap: anywhere" in _declarations(".fuzz-history-table th, .fuzz-history-table td")
+
+
+def test_display_zoom_field_percent_and_button_share_one_row() -> None:
+    # Settings' generic .field-row is a column; the zoom page needs input, "%" and button on one line.
+    row = _declarations(".settings-panel .zoom-row")
+    assert "flex-direction: row" in row and "align-items: center" in row
+    assert "width: 76px" in _declarations(".settings-panel .zoom-row input")
