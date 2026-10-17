@@ -228,11 +228,43 @@ _WM_SETICON = 0x0080
 _ICON_SMALL = 0
 
 
+# The small icon of the title bar (and of the taskbar's hover-preview header) always uses the
+# dark-ink variant: the title bar is forced dark, so it blends in instead of repeating the
+# light logo of the app's own header (a light one stood out next to it). The big icon, the
+# taskbar button and Alt-Tab, keeps following the shell theme (_select_icon_path).
+_TITLE_BAR_ICON = _FRONTEND_DIR / "icon-light.ico"
+_SM_CXSMICON = 49
+_IMAGE_ICON = 1
+_LR_LOADFROMFILE = 0x00000010
+
+
+def _set_small_icon(hwnd: int, icon_path: Path) -> bool:
+    """Gives the window this .ico as its small (title bar) icon. False if it cannot be loaded.
+    Raw user32 calls on the HWND only, so it is safe from any thread (see _hide_title_bar_icon)."""
+    if not icon_path.is_file():
+        return False
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.GetSystemMetrics.restype = ctypes.c_int
+    user32.LoadImageW.restype = ctypes.c_void_p
+    user32.LoadImageW.argtypes = [
+        ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
+    ]
+    user32.SendMessageW.restype = ctypes.c_void_p
+    user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+    size = user32.GetSystemMetrics(_SM_CXSMICON)
+    handle = user32.LoadImageW(None, str(icon_path), _IMAGE_ICON, size, size, _LR_LOADFROMFILE)
+    if not handle:
+        return False
+    user32.SendMessageW(hwnd, _WM_SETICON, _ICON_SMALL, handle)
+    return True
+
+
 def _hide_title_bar_icon(window: webview.Window) -> None:
-    """Removes just the small caption icon glyph from the native title bar
-    (and the taskbar's hover-preview thumbnail header, which shows the same
-    glyph) -- the app's own in-page header already shows the logo, and the
-    user didn't want it duplicated in the OS chrome above it.
+    """Makes the small caption icon of the native title bar (and of the taskbar's
+    hover-preview thumbnail header, which shows the same glyph) the dark-ink one --
+    the app's own in-page header already shows the logo, and a light icon duplicated it
+    in the OS chrome above it. (Hiding it outright was tried and cannot be done reliably
+    on this window; the dark one blends into the forced-dark title bar instead.)
 
     Deliberately only raw Win32 API calls (ctypes against the HWND directly)
     -- NOT `window.native.ShowIcon = False`, WinForms' own documented
@@ -258,7 +290,8 @@ def _hide_title_bar_icon(window: webview.Window) -> None:
                 hwnd, 0, 0, 0, 0, 0,
                 _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOZORDER | _SWP_FRAMECHANGED,
             )
-            ctypes.windll.user32.SendMessageW(hwnd, _WM_SETICON, _ICON_SMALL, 0)
+            if not _set_small_icon(hwnd, _TITLE_BAR_ICON):
+                ctypes.windll.user32.SendMessageW(hwnd, _WM_SETICON, _ICON_SMALL, 0)  # no dark icon: clear it
         except (AttributeError, OSError):
             pass
 

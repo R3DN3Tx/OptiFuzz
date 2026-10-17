@@ -1,4 +1,5 @@
 import socket
+import sys
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,37 @@ def test_select_icon_path_returns_none_when_neither_variant_exists(
     monkeypatch.setattr(run_desktop, "_system_uses_light_theme", lambda: True)
 
     assert run_desktop._select_icon_path() is None
+
+
+def test_title_bar_icon_is_the_dark_ink_variant() -> None:
+    # icon-light is the black-ink one: it blends into the forced-dark title bar instead of
+    # repeating the light logo of the app's own header.
+    assert run_desktop._TITLE_BAR_ICON.name == "icon-light.ico"
+    assert run_desktop._TITLE_BAR_ICON.is_file()
+
+
+def test_set_small_icon_reports_a_missing_icon_file(tmp_path: Path) -> None:
+    assert run_desktop._set_small_icon(0, tmp_path / "missing.ico") is False
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Win32 title bar icon")
+def test_set_small_icon_sets_the_icon_on_a_window_that_is_never_shown() -> None:
+    import ctypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.CreateWindowExW.restype = ctypes.c_void_p
+    user32.CreateWindowExW.argtypes = [
+        ctypes.c_uint, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int,
+        ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+    ]
+    user32.SendMessageW.restype = ctypes.c_void_p
+    user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+    user32.DestroyWindow.argtypes = [ctypes.c_void_p]
+    hwnd = user32.CreateWindowExW(0, "STATIC", "icon test", 0, 0, 0, 10, 10, None, None, None, None)
+    assert hwnd  # style 0: no WS_VISIBLE, so nothing appears on the desktop
+    try:
+        assert not user32.SendMessageW(hwnd, 0x007F, 0, 0)  # WM_GETICON, small: none yet
+        assert run_desktop._set_small_icon(hwnd, run_desktop._TITLE_BAR_ICON) is True
+        assert user32.SendMessageW(hwnd, 0x007F, 0, 0)  # WM_GETICON, small: now set
+    finally:
+        user32.DestroyWindow(hwnd)
