@@ -15,7 +15,7 @@ def long_path(path: Path) -> str:
     prefixed.
 
     Real, reported bug this exists for: a genuinely long fuzzed path
-    (docs/DEVELOPMENT_PLAN.md's 2026-09-22 entries) needed its saved output
+    needed its saved output
     filename to show the whole path, which can push the on-disk path well
     past MAX_PATH. Renaming to that long name (job_manager/manager.py)
     turned out to only be half the fix -- reproduced directly: a PLAIN
@@ -98,7 +98,7 @@ def workspace_root() -> Path:
 
     Override with OPTIFUZZ_WORKSPACE_ROOT (used by tests, and by any user who
     wants their workspace somewhere other than the default). Default is
-    `app_data_dir()/workspace` (docs/ARCHITECTURE.md §10 item 3).
+    `app_data_dir()/workspace`.
     """
     override = os.environ.get("OPTIFUZZ_WORKSPACE_ROOT")
     if override:

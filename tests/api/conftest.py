@@ -13,6 +13,6 @@ from backend.main import app
 def client(workspace_root: Path) -> TestClient:
     """A TestClient wired to a fresh MockDirsearchEngine-backed JobManager
     and its own EventBus, so API tests never touch the network or a shared
-    global bus (docs/OPTIFUZZ_SPEC.md §58)."""
+    global bus."""
     app.state.job_manager = JobManager(MockDirsearchEngine(every=1), event_bus=EventBus())
-    return TestClient(app)
+    return TestClient(app, base_url="http://127.0.0.1:8765")

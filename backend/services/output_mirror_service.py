@@ -96,7 +96,7 @@ def set_mirror_dir(project_id: str, new_dir: str) -> Project:
       mirrored incrementally from that point forward, which read as "my
       already-done fuzzes never show up here, only new ones do". A plain
       copy, not a move: the primary outputs/ storage is untouched either
-      way (docs/OPTIFUZZ_SPEC.md: preserve raw outputs).
+      way.
     Backfilling is naturally idempotent (shutil.copy2 just overwrites an
     identical copy) -- safe to run on every call, not just the first.
     """
@@ -137,8 +137,7 @@ def _backfill_from_primary_outputs(project: Project) -> None:
 
 def _migrate_mirror_dir(project: Project, old_dir: Path, new_dir: Path) -> None:
     # Mirrored files carry the SAME filenames as their primary outputs/
-    # counterparts, so a genuinely long fuzzed path (docs/DEVELOPMENT_PLAN.md's
-    # 2026-09-22 entries) means these moves can exceed MAX_PATH too --
+    # counterparts, so a genuinely long fuzzed path means these moves can exceed MAX_PATH too --
     # layout.move_file, not a plain shutil.move(), for that reason (see
     # persistence/paths.py::long_path's own docstring). The per-target
     # SUBFOLDER names themselves (`child`/`target` below) are always short

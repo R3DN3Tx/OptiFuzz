@@ -31,7 +31,7 @@ def test_build_command_shape() -> None:
 
 
 def test_is_target_reachable_is_always_true_even_for_a_fake_url() -> None:
-    # Mock target URLs are never real sockets (docs/OPTIFUZZ_SPEC.md §58) --
+    # Mock target URLs are never real sockets --
     # the base class's real TCP-connect check would fail every mock-engine
     # test otherwise.
     engine = MockDirsearchEngine()

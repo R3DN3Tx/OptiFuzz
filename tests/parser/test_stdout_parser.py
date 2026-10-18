@@ -3,7 +3,7 @@ from backend.parser.stdout_parser import ParsedResult, parse_result_line
 
 def test_parses_real_captured_result_line() -> None:
     # Captured verbatim from a real dirsearch 0.5.0 run against a local test
-    # server (docs/ARCHITECTURE.md §2.3).
+    # server.
     line = "[20:11:30] 200 -    15B - http://127.0.0.1:8766/index.html"
 
     result = parse_result_line(line)
@@ -44,7 +44,7 @@ def test_returns_none_for_blank_line() -> None:
 
 def test_returns_none_for_non_result_line() -> None:
     # QuietCLI mostly suppresses these, but interface.error() can still emit
-    # text on stdout (docs/ARCHITECTURE.md §2.3) -- the parser must not crash.
+    # text on stdout -- the parser must not crash.
     assert parse_result_line("Cannot connect to the target") is None
     assert parse_result_line("Task Completed") is None
 

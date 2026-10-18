@@ -6,7 +6,7 @@ from backend.persistence.atomic import read_json, write_json_atomic
 from backend.persistence.paths import workspace_root
 
 # Small app-wide UI preferences (currently just the browser override) --
-# distinct from workspace.json's job-related global config (spec §79) and
+# distinct from workspace.json's job-related global config and
 # from any per-Project/Target data. One flat JSON file is enough for this.
 
 

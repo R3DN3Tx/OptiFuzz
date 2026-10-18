@@ -4,7 +4,7 @@ from backend.main import app
 
 
 def test_health_returns_ok() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
 
     response = client.get("/health")
 

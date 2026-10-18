@@ -16,7 +16,7 @@ KEEPALIVE_SECONDS = 15
 @router.get("/api/stream")
 async def stream(request: Request) -> StreamingResponse:
     """One multiplexed SSE stream for every job/tree/note event, tagged by
-    id in each event's payload (docs/ARCHITECTURE.md §6). The frontend opens
+    id in each event's payload. The frontend opens
     a single EventSource and filters client-side rather than one connection
     per job.
     """

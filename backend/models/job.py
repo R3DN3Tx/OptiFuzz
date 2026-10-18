@@ -19,7 +19,7 @@ TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.
 
 @dataclass
 class FuzzJob:
-    """A Fuzz Job's metadata (docs/ARCHITECTURE.md §4/§5).
+    """A Fuzz Job's metadata.
 
     `config` is the DirsearchJobConfig snapshot as a plain dict (url,
     extensions, threads, headers, ...) -- kept as a dict rather than the
@@ -30,7 +30,7 @@ class FuzzJob:
     wordlist (2026-09-24 -- no more fixed-size chunk subprocesses, see
     `JobManager._run_job`/`_run_segment`). `completed_lines`/
     `completed_requests` are the pause checkpoint that makes a graceful
-    pause durable across an app restart (§2.6): how much of the original
+    pause durable across an app restart: how much of the original
     wordlist is safely known to be done, computed at pause time from
     dirsearch's own live progress index minus a thread-count safety margin
     (see `JobManager._checkpoint_pause`) -- NOT updated during a live run,
@@ -53,8 +53,7 @@ class FuzzJob:
     # by -e/-f, same rules dirsearch's own dictionary generation uses -- see
     # wordlist_resolver._estimate_requests), deduplicated across the WHOLE
     # wordlist -- lets progress reporting be extension-aware without
-    # depending on dirsearch's own console-dependent progress bar alone
-    # (see docs/ARCHITECTURE.md §2.3).
+    # depending on dirsearch's own console-dependent progress bar alone.
     total_wordlist_requests: int = 0
     # How much of the ORIGINAL wordlist is safe to skip on the next run
     # segment (see this class's own docstring, and

@@ -11,8 +11,7 @@ from backend.parser.stdout_parser import (
 
 # Strips ConPTY control sequences so the underlying text (banner, result
 # lines, progress bar numbers) can be found with plain regexes -- verified
-# against a real captured ConPTY + dirsearch byte stream (docs/ARCHITECTURE.md
-# §2.3b): CSI sequences (\x1b[...letter), lone save/restore cursor (\x1b7/\x1b8),
+# against a real captured ConPTY + dirsearch byte stream: CSI sequences (\x1b[...letter), lone save/restore cursor (\x1b7/\x1b8),
 # and the backspace runs dirsearch uses to erase the previous progress bar
 # before redrawing it in place.
 CONTROL_SEQUENCE_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b[78]|\x08")

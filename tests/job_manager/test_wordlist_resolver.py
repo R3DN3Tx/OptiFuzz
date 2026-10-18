@@ -39,7 +39,7 @@ def test_multiple_source_files_are_concatenated_in_order(tmp_path: Path) -> None
 def test_blank_lines_and_comments_are_preserved_not_filtered(tmp_path: Path) -> None:
     # dirsearch itself skips blanks/comments on expansion -- the resolver
     # must not pre-filter, or line numbers would stop lining up with the
-    # raw wordlist a resume needs to slice (docs/ARCHITECTURE.md §2.6).
+    # raw wordlist a resume needs to slice.
     source = _write(tmp_path / "words.txt", ["admin", "", "# a comment", "api"])
     out = tmp_path / "full.txt"
 

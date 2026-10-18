@@ -8,8 +8,7 @@ T = TypeVar("T")
 
 
 class ResultBatcher(Generic[T]):
-    """Coalesces rapid-fire items into periodic flushes (docs/ARCHITECTURE.md
-    §6 / spec §55) instead of one event per item -- dirsearch can report
+    """Coalesces rapid-fire items into periodic flushes instead of one event per item -- dirsearch can report
     results faster than any UI usefully renders them.
 
     A flush is scheduled at most once per `interval`: the first add() after

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 # Matches dirsearch 0.5.0's quiet-mode (`-q --no-color`) result line, verified
-# against real output in docs/ARCHITECTURE.md §2.3, e.g.:
+# against real output, e.g.:
 #   [20:11:30] 200 -    15B - http://127.0.0.1:8766/index.html
 #   [20:11:30] 301 -     0B - http://127.0.0.1:8766/old  ->  http://127.0.0.1:8766/new
 # No trailing anchor: a future `-v` addition would append "  (123ms, type)"
@@ -16,15 +16,15 @@ RESULT_LINE_RE = re.compile(
 
 # Same shape, without the start-of-string anchor: used with finditer() to pull
 # result lines out of a PTY stream where they aren't reliably isolated on
-# their own line (docs/ARCHITECTURE.md §2.3b) -- the quiet-mode reader above
+# their own line -- the quiet-mode reader above
 # still uses the anchored version against real newline-delimited lines.
 RESULT_LINE_FINDITER_RE = re.compile(
     r"\[(?P<time>\d{2}:\d{2}:\d{2})\]\s+(?P<status>\d{3})\s+-\s*(?P<size>\S+)"
     r"\s+-\s+(?P<url>\S+)(?:\s+->\s+(?P<redirect>\S+))?"
 )
 
-# dirsearch's live progress bar, verified against a real ConPTY-attached run
-# (docs/ARCHITECTURE.md §2.3b), e.g.:
+# dirsearch's live progress bar, verified against a real ConPTY-attached run,
+# e.g.:
 #   [####################]  8%       1/12         4/s       job:1/1           errors:0
 PROGRESS_RE = re.compile(
     r"(?P<percent>\d+)%\s+(?P<index>\d+)/(?P<length>\d+)\s+(?P<rate>\d+)/s"
@@ -54,7 +54,7 @@ def parse_result_line(line: str) -> ParsedResult | None:
     """Parse one line of dirsearch quiet-mode stdout into a ParsedResult.
 
     Returns None for anything that isn't a result line (blank lines, and any
-    error/warning text QuietCLI doesn't suppress, per §2.3/§2.5) rather than
+    error/warning text QuietCLI doesn't suppress) rather than
     raising, since a stdout reader thread must never crash on unexpected input.
     """
     match = RESULT_LINE_RE.match(line.strip())

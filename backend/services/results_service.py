@@ -54,7 +54,7 @@ def list_results(
     live_results: dict[str, list[Result]] | None = None,
 ) -> list[Result]:
     """Historical Results for a target, derived from each job's own raw JSON
-    report (docs/ARCHITECTURE.md §4/§2.4) -- never a separate one-file-per-
+    report -- never a separate one-file-per-
     result store. This is the "already on disk" view used on first load /
     page refresh.
 

@@ -46,7 +46,7 @@ def test_failed_write_leaves_existing_file_untouched(
         write_json_atomic(path, {"status": "CORRUPT"})
 
     # Original content survives -- no half-written replacement, no stray
-    # temp file left behind (docs/OPTIFUZZ_SPEC.md §101).
+    # temp file left behind.
     assert read_json(path) == {"status": "COMPLETED"}
     assert list(tmp_path.iterdir()) == [path]
 
@@ -78,7 +78,7 @@ def test_concurrent_reads_during_writes_never_raise(tmp_path: Path) -> None:
     # os.replace when a reader's plain open() handle was alive at the exact
     # moment a writer tried to replace the same file -- a *different* race
     # than writer-vs-writer above, caught by JobManager's own test suite
-    # first (docs/ARCHITECTURE.md §3.1, Storage row).
+    # first.
     #
     # Readers sleep briefly between iterations -- a tight, unthrottled busy
     # loop across 4 threads made every write starve for retries under

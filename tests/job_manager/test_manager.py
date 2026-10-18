@@ -173,8 +173,7 @@ def test_job_failure_is_reported_with_reason(workspace_root, tmp_path: Path) -> 
 
 class _UnreachableEngine(MockDirsearchEngine):
     """Reports every target as unreachable, without touching the network --
-    MockDirsearchEngine itself always reports reachable (docs/OPTIFUZZ_SPEC.md
-    §58), so the unreachable-host path needs its own stand-in to test."""
+    MockDirsearchEngine itself always reports reachable ), so the unreachable-host path needs its own stand-in to test."""
 
     def is_target_reachable(self, url: str) -> bool:
         del url
@@ -248,8 +247,8 @@ def test_pause_on_status_does_not_interfere_when_never_triggered(workspace_root,
 def test_resume_after_auto_pause_restarts_from_the_same_point(workspace_root, tmp_path: Path) -> None:
     # The trigger condition (429) is left in place across resume, so the job
     # should cycle RUNNING -> PAUSED again, redoing the same never-completed
-    # region each time -- the bounded-rework guarantee from
-    # docs/ARCHITECTURE.md §2.6 (MockDirsearchEngine never emits progress-bar
+    # region each time -- the bounded-rework guarantee
+    # (MockDirsearchEngine never emits progress-bar
     # text, so completed_lines has nothing to advance from here either way).
     manager = JobManager(
         MockDirsearchEngine(every=1, delay=0.03, force_status=429), max_concurrent_jobs=2
@@ -501,7 +500,7 @@ def test_stop_called_immediately_after_creation_is_not_lost(workspace_root, tmp_
     # window between a job's status becoming RUNNING and its chunk
     # subprocess actually being spawned/registered in self._processes --
     # the stop request would otherwise sit unnoticed until that chunk
-    # finished on its own (docs/DEVELOPMENT_PLAN.md, caught while adding
+    # finished on its own (caught while adding
     # the concurrent "is_fuzzing" indicator).
     manager = JobManager(MockDirsearchEngine(every=1, delay=0.05), max_concurrent_jobs=2)
     config = DirsearchJobConfig(url="https://target.local/", threads=5)
@@ -538,8 +537,8 @@ def test_job_json_persisted_to_disk(workspace_root, tmp_path: Path) -> None:
             return None
 
     # Poll the file itself, not the in-memory job -- job.status flips to a
-    # terminal value slightly before the corresponding disk write completes
-    # (docs/ARCHITECTURE.md §5), so this is the only race-free way to assert
+    # terminal value slightly before the corresponding disk write completes,
+    # so this is the only race-free way to assert
     # "eventually persisted".
     _wait_until(lambda: _on_disk_status() in ("COMPLETED", "FAILED"))
 

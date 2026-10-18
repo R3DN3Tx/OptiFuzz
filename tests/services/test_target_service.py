@@ -69,7 +69,7 @@ def test_delete_target_removes_it(workspace_root) -> None:
 
 
 def test_outputs_never_cross_contaminate_between_targets(workspace_root) -> None:
-    # Direct implementation of spec §4/§54: a result written for one target's
+    # Direct implementation of a result written for one target's
     # outputs must never be visible from another target/project's outputs dir.
     project_a = ps.create_project("Client A")
     project_b = ps.create_project("Client B")

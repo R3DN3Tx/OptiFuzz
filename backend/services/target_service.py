@@ -42,8 +42,7 @@ def create_target(project_id: str, name: str, base_url: str) -> Target:
     write_json_atomic(layout.target_file(project_id, target.id), target.to_dict())
 
     # Pre-create the isolated subtree so it exists even before any job runs
-    # (docs/ARCHITECTURE.md §4 -- one target's data never shares a directory
-    # with another's).
+    # (one target's data never shares a directory with another's).
     layout.jobs_dir(project_id, target.id).mkdir(parents=True, exist_ok=True)
     layout.outputs_dir(project_id, target.id).mkdir(parents=True, exist_ok=True)
     layout.sessions_dir(project_id, target.id).mkdir(parents=True, exist_ok=True)
@@ -97,7 +96,7 @@ def delete_target(project_id: str, target_id: str) -> None:
 
 def resolve_fuzz_url(base_url: str, path: str) -> str:
     """Join a Target's base_url with a sub-path the same way a human would
-    expect (spec §25: 'Fuzz this path' pre-fills Target: <base_url><path>)."""
+    expect."""
     if not base_url.endswith("/"):
         base_url += "/"
     return urljoin(base_url, path.lstrip("/"))

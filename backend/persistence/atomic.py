@@ -46,8 +46,7 @@ def read_json(path: Path) -> Any:
     # path transiently inaccessible.
     #
     # long_path(path), not a plain `path` -- a job's output .json can be a
-    # genuinely long, human-readable filename (docs/DEVELOPMENT_PLAN.md's
-    # 2026-09-22 entries), and a plain open() on a path that exceeds
+    # genuinely long, human-readable filename ), and a plain open() on a path that exceeds
     # MAX_PATH fails to find a file that's really there (see
     # persistence/paths.py::long_path's own docstring).
     for attempt in range(_REPLACE_RETRIES):
@@ -66,7 +65,7 @@ def write_json_atomic(path: Path, data: Any) -> None:
     Writes to a temp file in the same directory (so the final os.replace is
     same-filesystem and therefore atomic on both Windows and POSIX), then
     renames over the destination. On any failure, the temp file is removed
-    and the destination is left exactly as it was (docs/OPTIFUZZ_SPEC.md §101).
+    and the destination is left exactly as it was.
     Concurrent writers to the *same* path are serialized (see _lock_for).
 
     NOT currently used for anything whose path can exceed Windows' MAX_PATH
@@ -88,7 +87,7 @@ def write_json_atomic(path: Path, data: Any) -> None:
     showed the same ~25% transient-PermissionError rate, confirming that
     flakiness is pre-existing and unrelated, not something introduced here.
     Left as a known, not-yet-investigated flake, same category as
-    docs/DEVELOPMENT_PLAN.md's other documented ones.)
+    the other known ones.)
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

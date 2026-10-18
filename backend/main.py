@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api import engine_info, jobs, projects, results, settings, stream, targets, tree, update, wordlists
 from backend.engine.dirsearch import DirsearchEngine
 from backend.job_manager.manager import JobManager, JobNotFoundError
+from backend.security import LocalOnlyMiddleware
 from backend.services.project_service import DuplicateProjectNameError, ProjectNotFoundError
 from backend.services.target_service import DuplicateTargetNameError, TargetNotFoundError
 from backend.services.tree_service import TreeNodeNotFoundError
@@ -17,6 +18,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="OptiFuzz")
 app.state.job_manager = JobManager(DirsearchEngine())
+app.add_middleware(LocalOnlyMiddleware)  # outermost: refuses foreign Host/Origin before any route
 
 
 @app.middleware("http")

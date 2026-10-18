@@ -1197,9 +1197,7 @@ function buildPathHierarchy(items, makeSynthetic) {
 }
 
 // Shown to the left of the settings gear, muted -- purely informational,
-// no click behavior. docs/DEVELOPMENT_PLAN.md has the versioning
-// convention (v0.0.X for a small change, v0.X.0 for a larger one, bumped
-// every commit) -- this just displays whatever backend/api/settings.py's
+// no click behavior. This just displays whatever backend/api/settings.py's
 // /api/version endpoint reads from the repo-root VERSION file.
 async function loadAppVersion() {
     try {
@@ -2131,7 +2129,7 @@ async function renderWorkspace(projectId, targetId, tab) {
     breadcrumb.append(` / ${target.name} / ${TAB_LABELS[tab]}`);
 
     const workspaceBase = `#/projects/${projectId}/targets/${targetId}`;
-    // Spec §61: a single self-contained HTML snapshot of this Target,
+    // A single self-contained HTML snapshot of this Target,
     // openable later with no backend running. A plain navigation (not
     // api(), which always expects JSON) -- the endpoint's own
     // Content-Disposition: attachment header makes even the desktop app's
@@ -3551,9 +3549,9 @@ async function renderWorkspace(projectId, targetId, tab) {
 
 // ---- FUZZ TREE ------------------------------------------------------------
 //
-// Distinct from Results (spec §74): never auto-populated from a fuzz -- only
-// "Add path" here or "Add to tree" from a Results row create a node (spec
-// §27). Hierarchy is derived purely from path segments (the same
+// Distinct from Results: never auto-populated from a fuzz -- only
+// "Add path" here or "Add to tree" from a Results row create a node.
+// Hierarchy is derived purely from path segments (the same
 // normalizeKey/parentKeyOf helpers Results uses for its own grouping), not
 // stored explicitly, since a node's path IS its position in the tree.
 

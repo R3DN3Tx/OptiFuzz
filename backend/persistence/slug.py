@@ -19,7 +19,7 @@ def make_id(name: str) -> str:
     user-supplied name -- e.g. "Client A" -> "client-a-3f9c2a1b".
 
     The random suffix means renaming a Project/Target never has to move its
-    directory or rewrite anything that references its id (spec §3 "renombrar
+    directory or rewrite anything that references its id ("renombrar
     proyecto"); two entities with the same name never collide.
     """
     return f"{slugify(name)}-{uuid.uuid4().hex[:8]}"
@@ -28,8 +28,7 @@ def make_id(name: str) -> str:
 def validate_safe_id(value: str, *, label: str = "id") -> str:
     """Defense in depth for any id that reaches path construction from a
     request (e.g. a URL path parameter), even though make_id()'s own output
-    is already restricted to [a-z0-9-] and can't contain traversal sequences
-    (docs/ARCHITECTURE.md §4 isolation guarantee).
+    is already restricted to [a-z0-9-] and can't contain traversal sequences.
     """
     if not _SAFE_ID_RE.match(value):
         raise ValueError(f"invalid {label}: {value!r}")

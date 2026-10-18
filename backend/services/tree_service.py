@@ -119,7 +119,7 @@ def add_path(
 ) -> TreeNode:
     """Add a path to the tree, or -- if it's already there -- record this as
     another Discovery on the existing node rather than duplicating it
-    (spec §22/§27/§44)."""
+   ."""
     normalized = normalize_path(path)
     nodes = _load_nodes(project_id, target_id)
     node = _find_by_path(nodes, normalized)
@@ -292,7 +292,7 @@ def latest_status(node: TreeNode) -> dict[str, Any] | None:
 def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
     """Every Fuzz Job launched directly against this node's own path -- a
     node can be fuzzed multiple times, each an independent history entry,
-    never overwriting the last (spec §30)."""
+    never overwriting the last."""
     return fuzz_history_for_path(node.path, jobs)
 
 

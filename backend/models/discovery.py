@@ -7,11 +7,11 @@ from typing import Any
 @dataclass(frozen=True)
 class Discovery:
     """One record of how/when a Tree Node's path became known, and -- when it
-    came from a fuzz result -- what status it had at that moment
-    (docs/OPTIFUZZ_SPEC.md §42/§46). A node accumulates one of these per
+    came from a fuzz result -- what status it had at that moment.
+    A node accumulates one of these per
     "Add to tree"/"Add path" action rather than being overwritten, so the
     full status history survives even if a later fuzz sees a different
-    status for the same path (spec §46).
+    status for the same path.
     """
 
     source: str  # "manual" | "result" | "fuzz" (fuzz: auto-synced onto an

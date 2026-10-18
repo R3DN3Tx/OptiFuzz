@@ -63,7 +63,7 @@ def test_full_project_target_job_flow(client: TestClient, tmp_path: Path) -> Non
         f"/api/projects/{project['id']}/targets/{target['id']}/results"
     ).json()
     # Mock engine doesn't write report files, so the historical-results
-    # endpoint (backed by outputs/job_<id>.json, docs/ARCHITECTURE.md \u00a72.4)
+    # endpoint (backed by outputs/job_<id>.json)
     # is legitimately empty here -- live results arrive over SSE instead.
     assert results == []
 

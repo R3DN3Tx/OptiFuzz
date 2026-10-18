@@ -6,13 +6,13 @@ native window via pywebview. On Windows this is backed by the system's own
 WebView2 runtime (already present with any current Edge/Windows install, via
 the pythonnet/WinForms integration pywebview uses) -- not a bundled Chromium
 like Electron, so this adds one small pure-Python dependency rather than a
-whole separate toolchain (docs/ARCHITECTURE.md §13).
+whole separate toolchain.
 
 Run via `pythonw.exe` -- no console window is created at all, not even
 briefly. This used to require `python.exe` plus code to hide that console
 again at startup (a real console, kept alive but hidden, was believed
 necessary for ConPTY, the pseudo-console dirsearch's subprocess is spawned
-through -- see docs/ARCHITECTURE.md §13 for the retired approach). That
+through; that approach is retired). That
 belief was wrong: reproduced directly, a fuzz job COMPLETES normally with
 zero console ever created for *this* process, as long as the dirsearch
 CHILD subprocess itself is never spawned via `pythonw.exe` --
@@ -22,8 +22,7 @@ that regardless of what interpreter this app itself is running under.
 Usage: .venv/Scripts/OptiFuzz.exe run_desktop.py
 (`OptiFuzz.exe` is a renamed copy of `pythonw.exe`, same folder -- purely so
 Task Manager shows "OptiFuzz" instead of the generic "Python"; plain
-`pythonw.exe` still works identically otherwise. See docs/ARCHITECTURE.md
-§13 for how/why -- rebuilding the venv from scratch loses this copy, it
+`pythonw.exe` still works identically otherwise. Rebuilding the venv from scratch loses this copy, it
 needs recreating by hand.)
 """
 from __future__ import annotations

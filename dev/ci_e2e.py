@@ -68,7 +68,7 @@ def main() -> None:
         fail(f"timed out waiting for {wanted}; last status {job.get('status')}")
         return job
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         project = client.post("/api/projects", json={"name": "E2E"}).json()
         target = client.post(
             f"/api/projects/{project['id']}/targets",

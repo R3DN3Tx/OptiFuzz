@@ -2,7 +2,7 @@
 
 Run as `python -m backend.engine.mock_runner --url ... --wordlist ...`. Prints
 canned result lines in dirsearch's real quiet-mode stdout format
-(docs/ARCHITECTURE.md §2.3) at a small delay, then exits 0 -- lets
+at a small delay, then exits 0 -- lets
 JobManager/parser tests exercise a real subprocess and a real stdout stream
 without ever touching the network or spawning real dirsearch.
 """

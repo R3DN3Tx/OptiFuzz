@@ -14,18 +14,16 @@ from backend.persistence import app_settings
 from backend.persistence.slug import slugify
 from backend.services import project_service, results_service, target_service, tree_service
 
-# Phase 4 / spec §61-65: a single, self-contained HTML snapshot of one
-# Target -- Tree (interactive expand/collapse, spec §62), Results, fuzz
-# history, statuses, notes, interesting markers, job information (spec
-# §63), openable from file:/// with no backend running and no external
-# requests (spec §61/§64). Project-level export is deliberately out of
-# scope for V1 (spec §65 explicitly says to prioritize Target if both is
-# too much for V1).
+# A single, self-contained HTML snapshot of one
+# Target -- Tree (interactive expand/collapse), Results, fuzz
+# history, statuses, notes, interesting markers, job information,
+# openable from file:/// with no backend running and no external
+# requests. Project-level export is deliberately out of
+# scope for V1 (the Target export is the priority).
 #
-# Secret-redaction default (docs/ARCHITECTURE.md §8/§10, confirmed with the
-# user 2026-09-22): headers/cookies are embedded exactly as stored, no
+# Secret-redaction default (a deliberate choice): headers/cookies are embedded exactly as stored, no
 # redaction -- the export is the same trust boundary as the local
-# workspace, not a separate one (spec §47 already allows this locally).
+# workspace, not a separate one.
 #
 # Pixel-parity pass (2026-09-23/24, two rounds of explicit follow-up: "no
 # me gusta nada... quiero que sea exactamente igual en todos los sentidos a
@@ -40,7 +38,7 @@ from backend.services import project_service, results_service, target_service, t
 # `.workspace-tabs` override block was silently fighting the embedded real
 # CSS's own rules for the same selectors). The logo is embedded as a base64
 # data: URI (frontend/logo.png, ~80KB) -- still zero external requests
-# (spec §61/§64), but the actual real icon instead of leaving it out.
+# -- but the actual real icon instead of leaving it out.
 _STYLES_CSS_PATH = Path(__file__).resolve().parents[2] / "frontend" / "styles.css"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "frontend" / "logo.png"
 
@@ -637,7 +635,7 @@ document.addEventListener("click", function (e) {
 // ---- Fuzz Tree / Results: same normalize/hierarchy/connector logic as
 // the live app (frontend/app.js's normalizeKey/computeDisplaySegment/
 // treeConnectorFor), operating on the embedded JSON instead of a live
-// API -- spec §62: must stay a real interactive tree here too, not
+// API -- must stay a real interactive tree here too, not
 // flattened into a list.
 function normalizeKey(path) {
     var k = path === "/" ? "/" : path.replace(/\/+$/, "");
@@ -1893,7 +1891,7 @@ document.addEventListener("click", function (e) {
 // ---- Fuzz Tree / Results: same normalize/hierarchy/connector logic as
 // the live app (frontend/app.js's normalizeKey/computeDisplaySegment/
 // treeConnectorFor), operating on the embedded JSON instead of a live
-// API -- spec §62: must stay a real interactive tree here too, not
+// API -- must stay a real interactive tree here too, not
 // flattened into a list.
 function normalizeKey(path) {
     var k = path === "/" ? "/" : path.replace(/\/+$/, "");

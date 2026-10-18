@@ -100,7 +100,7 @@ def export_target(
     hide_rules: str | None = None,
     job_manager: JobManager = Depends(get_job_manager),
 ) -> Response:
-    """Spec §61-65: a single self-contained HTML snapshot of this Target,
+    """A single self-contained HTML snapshot of this Target,
     downloadable and openable from `file:///` with no backend running.
     `Content-Disposition: attachment` (not just returning text/html inline)
     so the desktop app's WebView2 view -- a real Chromium browser control --

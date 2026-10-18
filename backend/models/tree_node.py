@@ -8,18 +8,18 @@ from backend.models.discovery import Discovery
 
 @dataclass
 class TreeNode:
-    """A path the pentester has chosen to keep in the FUZZ TREE
-    (docs/OPTIFUZZ_SPEC.md §17/§42) -- distinct from Results, which is
-    whatever dirsearch happened to find (spec §74). Never created
+    """A path the pentester has chosen to keep in the FUZZ TREE.
+    Distinct from Results, which is
+    whatever dirsearch happened to find. Never created
     automatically from a Result; only via an explicit "Add path"/"Add to
-    tree" action (spec §27) -- except the root ("/"), which
+    tree" action -- except the root ("/"), which
     `tree_service.list_nodes` auto-creates so it's always present and
     undeletable, per explicit user request.
 
     `note` and `interesting` are properties of the node itself, independent
-    of how many times it's been fuzzed or discovered (spec §21/§28/§76).
+    of how many times it's been fuzzed or discovered.
     `discoveries` is the append-only history of every "add" action, which
-    doubles as the status history (spec §46) -- the most recent entry with a
+    doubles as the status history -- the most recent entry with a
     non-null status is the status shown in the compact row.
     """
 

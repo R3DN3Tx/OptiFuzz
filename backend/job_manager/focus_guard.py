@@ -8,7 +8,7 @@ import threading
 # away from an unrelated app (losing keystrokes, and even triggering an
 # unintended Ctrl+C-style clipboard copy), sometimes with a visible brief
 # white window flash. Root cause, confirmed by a system-wide window-event
-# capture (docs/ARCHITECTURE.md) taken while a real job ran on a real
+# capture taken while a real job ran on a real
 # instance: every dirsearch chunk's ConPTY session creates a real, sized,
 # eventually-visible `ConsoleWindowClass` window titled "OptiFuzz.DesktopApp"
 # (conhost.exe renders it, but GetWindowThreadProcessId attributes it to the

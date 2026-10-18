@@ -30,7 +30,7 @@ def test_default_python_executable_is_sys_executable_off_windows(
 def test_default_python_executable_rewrites_pythonw_to_python(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The real, previously-shipped bug (docs/ARCHITECTURE.md §13/§2.3b): the
+    # The real, previously-shipped bug: the
     # desktop app can run entirely under pythonw.exe with zero console ever
     # created, but the dirsearch CHILD process must never be pythonw.exe --
     # ConPTY silently breaks with a GUI-subsystem child, confirmed by direct
@@ -66,8 +66,7 @@ def test_default_python_executable_rewrites_a_renamed_pythonw_copy_too(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # run_desktop.py launches via a renamed copy of pythonw.exe (OptiFuzz.exe
-    # -- so Task Manager shows "OptiFuzz" instead of the generic "Python",
-    # docs/ARCHITECTURE.md §13) -- still a GUI-subsystem binary internally
+    # -- so Task Manager shows "OptiFuzz" instead of the generic "Python") -- still a GUI-subsystem binary internally
     # (renaming a file doesn't touch its PE subsystem field), so it needs
     # the exact same rewrite pythonw.exe itself needed, even though its name
     # doesn't literally contain "pythonw".
@@ -107,13 +106,13 @@ def test_build_command_minimal_config(workspace_root) -> None:
     # unconfigured (None) in this test, which deliberately leaves dirsearch's
     # own real default-extensions behavior untouched -- see the next tests.
     # Argv paths are always forward-slash, regardless of host OS -- makes the
-    # Command Preview (spec §48) identical on Windows and a future Linux
+    # Command Preview identical on Windows and a future Linux
     # build, and Windows accepts forward slashes natively anyway.
 
 
 def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> None:
     # Golden-file test: this list was hand-verified against every `dest=` in
-    # dirsearch 0.5.0's lib/parse/cmdline.py (docs/ARCHITECTURE.md §2.8). If
+    # dirsearch 0.5.0's lib/parse/cmdline.py. If
     # this breaks, either the flag names drifted or a real regression crept in.
     engine = DirsearchEngine(python_executable="python.exe")
     config = DirsearchJobConfig(
@@ -166,8 +165,7 @@ def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> No
         "--recursive", "--exclude-subdirs", "/api/",
     ]
     # A malicious/careless header value stays one argv element -- subprocess
-    # never goes through a shell, so this can't become command injection
-    # (docs/ARCHITECTURE.md §8).
+    # never goes through a shell, so this can't become command injection.
     assert argv[argv.index("-H") + 1] == "Authorization: Bearer secret; rm -rf /"
 
 
@@ -241,7 +239,7 @@ def test_parse_line_returns_none_for_non_result_text() -> None:
 def test_detect_version_against_real_installed_dirsearch() -> None:
     # Not mocked: catches drift if the pinned dirsearch commit
     # (requirements.txt) is ever bumped and its --version output changes
-    # shape (docs/DEVELOPMENT_PLAN.md, Testing strategy).
+    # shape.
     engine = DirsearchEngine()
 
     version = engine.detect_version()

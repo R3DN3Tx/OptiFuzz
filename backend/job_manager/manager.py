@@ -88,7 +88,7 @@ if TYPE_CHECKING:
 # appeared. Reopening that path would mean reintroducing some form of
 # console (real or ConPTY) purely to make a signal deliverable -- exactly
 # the door this project already closed after three rounds of focus-stealing
-# investigation (see docs/ARCHITECTURE.md §13) -- so the line-level
+# investigation -- so the line-level
 # checkpoint approach here was chosen specifically because it never needs a
 # signal delivered at all: pausing is still just killing the process, the
 # same primitive already used everywhere else in this file.
@@ -98,7 +98,7 @@ if TYPE_CHECKING:
 # not periodically during a live run. A genuine crash (app killed, power
 # loss -- as opposed to a deliberate Pause) still leaves an orphaned
 # RUNNING/QUEUED job `PAUSED` on the next start (`_load_persisted_jobs`,
-# spec §85), and it's still genuinely resumable -- but now redoes the whole
+# ), and it's still genuinely resumable -- but now redoes the whole
 # CURRENT RUN SEGMENT from wherever completed_lines last was, not just "one
 # chunk" as before, since nothing incrementally persists progress mid-run.
 DEFAULT_MAX_CONCURRENT_JOBS = 2
@@ -106,7 +106,7 @@ STOP_GRACE_SECONDS = 5.0
 RESULT_BATCH_INTERVAL_SECONDS = 0.25
 STDERR_TAIL_LINES = 20
 RAW_TAIL_CHARS_FOR_ERRORS = 4000  # PTY mode has no separate stderr (see below)
-PROGRESS_PUBLISH_MIN_INTERVAL_SECONDS = 0.2  # spec §55: don't flood the SSE stream
+PROGRESS_PUBLISH_MIN_INTERVAL_SECONDS = 0.2  # don't flood the SSE stream
 STDOUT_READ_CHUNK_SIZE = 4096
 # How often a live run persists its own checkpoint to disk (2026-09-24),
 # independent of a deliberate Pause -- bounds how much a genuine crash (app
@@ -151,14 +151,14 @@ class JobNotFoundError(Exception):
 class JobManager:
     """Owns the whole Fuzz Job lifecycle: queueing, per-target concurrency
     limits, continuous-subprocess execution with pause/resume checkpointing,
-    and live event publishing (docs/ARCHITECTURE.md §5/§6). One instance is
+    and live event publishing. One instance is
     shared by every
     Project/Target -- each target queues/dispatches against its own
     concurrency limit (get_target_concurrency/set_target_concurrency),
     independent of every other target's.
 
     Process orchestration runs entirely in plain threads (never asyncio
-    subprocess), per the Windows-safety rationale in §3.1.
+    subprocess), for Windows safety.
     """
 
     def __init__(
@@ -399,8 +399,7 @@ class JobManager:
         return len(active)
 
     def resume_job(self, job_id: str) -> FuzzJob:
-        """Resume a PAUSED job from `job.completed_lines` (docs/ARCHITECTURE.md
-        §2.6) -- a freshly-sliced remainder wordlist, not a pre-existing
+        """Resume a PAUSED job from `job.completed_lines` -- a freshly-sliced remainder wordlist, not a pre-existing
         chunk file (see `_run_job`). Only the small, thread-bounded window of
         requests that were in flight when the run was cut short gets redone,
         the same "never lose a word" guarantee as before, just far more
@@ -1156,8 +1155,7 @@ class JobManager:
         # e.g. the target started answering 429 (rate limited / down): cut
         # the current chunk short now rather than burning through the rest
         # of it against a dead target. A human resumes manually once the
-        # target is back (docs/OPTIFUZZ_SPEC.md request: "cuando se detecte
-        # un 429 se pare... reanudarlo por donde iba").
+        # target is back.
         with self._lock:
             job.pause_requested = True
             job.auto_paused = True

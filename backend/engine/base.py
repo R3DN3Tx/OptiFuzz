@@ -15,14 +15,13 @@ class FuzzingEngine(ABC):
     """Interface a fuzzing engine backend must implement.
 
     dirsearch is the only V1 engine, but this exists so a future engine
-    (e.g. FFUF) can be added without touching JobManager/API/frontend
-    (docs/ARCHITECTURE.md §9).
+    (e.g. FFUF) can be added without touching JobManager/API/frontend.
     """
 
     #: Whether JobManager should run this engine's subprocess attached to a
     #: pseudo-console instead of a plain pipe, so its live per-request
-    #: progress signal is actually emitted rather than silently suppressed
-    #: (docs/ARCHITECTURE.md §2.3b). False keeps the simpler, dependency-free
+    #: progress signal is actually emitted rather than silently suppressed.
+    #: False keeps the simpler, dependency-free
     #: plain-pipe path -- what MockDirsearchEngine uses for fast tests, and
     #: what DirsearchEngine uses too now (2026-09-24): live progress no
     #: longer needs a pseudo-console at all, see its own comment.
@@ -38,7 +37,7 @@ class FuzzingEngine(ABC):
     ) -> list[str]:
         """Return the argv for one run segment of this job (the full
         wordlist on a fresh run, a remainder on a resume). Never a shell
-        string (docs/ARCHITECTURE.md §8)."""
+        string."""
 
     @abstractmethod
     def parse_line(self, line: str) -> ParsedResult | None:
@@ -54,8 +53,7 @@ class FuzzingEngine(ABC):
         port ran the ENTIRE wordlist against a dead socket and still ended
         as COMPLETED -- dirsearch itself treats every per-request connection
         failure as an ordinary "no match" outcome and exits 0 (verified
-        directly, see docs/ARCHITECTURE.md's own "Verified against real
-        dirsearch" note), so there is no signal in its own exit code or
+        directly against real dirsearch), so there is no signal in its own exit code or
         output to catch this instead. A single short TCP connect to the
         target's own host:port is enough to tell "nothing is listening
         here" apart from "something is listening, dirsearch just found
@@ -67,8 +65,8 @@ class FuzzingEngine(ABC):
         Default (real) implementation, shared by every engine that actually
         talks to a real HTTP(S) target -- `MockDirsearchEngine` overrides
         this to always return True, since its own target URLs are never
-        real sockets to begin with (docs/OPTIFUZZ_SPEC.md §58: mock engine
-        tests must never touch the network)."""
+        real sockets to begin with (mock engine tests must never touch
+        the network)."""
         parsed = urlsplit(url)
         host = parsed.hostname
         if not host:

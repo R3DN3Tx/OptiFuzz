@@ -18,9 +18,9 @@ from backend.persistence.slug import validate_safe_id
 if TYPE_CHECKING:
     from backend.models.job import FuzzJob
 
-# Mirrors docs/ARCHITECTURE.md §4's on-disk layout exactly. Every id argument
+# The on-disk layout. Every id argument
 # is validated before touching a path, so a project/target/job id can never
-# escape its own directory (spec §54/§101 isolation guarantee) -- this is
+# escape its own directory (isolation guarantee) -- this is
 # the single place that guarantee is enforced structurally.
 
 
@@ -64,7 +64,7 @@ def hide_rules_file(project_id: str, target_id: str) -> Path:
 
 
 def results_seen_file(project_id: str, target_id: str) -> Path:
-    """Per-target watermark for the Results `NEW` marker (spec §16): how many
+    """Per-target watermark for the Results `NEW` marker: how many
     of each job's results the pentester has already had a chance to see."""
     return target_dir(project_id, target_id) / "results_seen.json"
 
@@ -148,7 +148,7 @@ def job_output_base_working(project_id: str, target_id: str, job_id: str) -> Pat
     status and nothing will ever write to it again. Real, reported bug this
     solves: a long discovered/fuzzed path embedded directly in the output
     filename could push the full on-disk path past MAX_PATH and fail the
-    job outright -- see docs/DEVELOPMENT_PLAN.md's 2026-09-22 entries.
+    job outright.
     """
     validate_safe_id(job_id, label="job_id")
     return outputs_dir(project_id, target_id) / f"_working_{job_id}"

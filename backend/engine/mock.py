@@ -13,7 +13,7 @@ MOCK_ENGINE_VERSION = "mock-dirsearch v0.0.0-test"
 class MockDirsearchEngine(FuzzingEngine):
     """Stands in for DirsearchEngine in tests: spawns backend.engine.mock_runner
     instead of real dirsearch, so JobManager/parser tests are fast, deterministic
-    and never touch the network (docs/OPTIFUZZ_SPEC.md §58).
+    and never touch the network.
     """
 
     def __init__(
@@ -65,8 +65,7 @@ class MockDirsearchEngine(FuzzingEngine):
         return MOCK_ENGINE_VERSION
 
     def is_target_reachable(self, url: str) -> bool:
-        # Mock target URLs are never real sockets (docs/OPTIFUZZ_SPEC.md
-        # §58) -- the base class's real TCP-connect check would fail every
+        # Mock target URLs are never real sockets -- the base class's real TCP-connect check would fail every
         # single mock-engine test otherwise.
         del url
         return True

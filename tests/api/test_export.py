@@ -52,7 +52,7 @@ def test_export_target_returns_downloadable_html(client: TestClient, tmp_path: P
     assert "client-export_export-example-com_OptiFuzz_Report.html" in response.headers["content-disposition"]
 
     body = response.text
-    # No external requests/assets -- spec §61/§64 (must open from file:///
+    # No external requests/assets -- (must open from file:///
     # with no backend running).
     assert "http://" not in body.replace("https://export.example.com", "")
     assert "cdn." not in body

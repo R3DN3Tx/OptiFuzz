@@ -10,7 +10,7 @@ from backend.job_manager import focus_guard
 
 # (rows, cols) -- wide enough that dirsearch's progress bar text (~90 chars)
 # never exceeds the terminal width dirsearch queries, which is what makes it
-# silently stop drawing the bar at all (docs/ARCHITECTURE.md §2.3b).
+# silently stop drawing the bar at all.
 DIMENSIONS = (50, 250)
 
 # pywinpty's ConPTY backend spawns its own console-host process(es)
@@ -19,8 +19,8 @@ DIMENSIONS = (50, 250)
 # never terminates them itself: PtyProcess.close()/terminate()/__del__ (see
 # .venv/Lib/site-packages/winpty/ptyprocess.py) only ever signal the *child*
 # PID, never call ClosePseudoConsole or otherwise touch the pty host. Left
-# alone, one of each leaks per chunk -- confirmed directly on a real session
-# (docs/ARCHITECTURE.md §2.3b): ~450 orphaned conhost.exe accumulated as
+# alone, one of each leaks per chunk -- confirmed directly on a real session:
+# ~450 orphaned conhost.exe accumulated as
 # children of the app process after ~1.5h of fuzzing. A genuine resource
 # leak in its own right (fixed below, _reap_leaked_pty_hosts), but NOT what
 # actually causes the reported focus-stealing bug -- see focus_guard.py:
@@ -50,7 +50,7 @@ def _own_child_pids() -> set[int]:
 class PtyChunkProcess:
     """Thin wrapper around winpty.PtyProcess exposing only what JobManager
     needs, so the rest of the code doesn't depend on the winpty API shape
-    directly (Windows-only; docs/ARCHITECTURE.md §2.3b)."""
+    directly (Windows-only)."""
 
     def __init__(self, argv: list[str]) -> None:
         focus_guard.ensure_started()

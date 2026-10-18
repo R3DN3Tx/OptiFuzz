@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class Result:
-    """A single fuzz result row (docs/ARCHITECTURE.md §4).
+    """A single fuzz result row.
 
     Derived from a job's raw output / live stream, never stored one-file-per-
     result -- this is just the shape the API and frontend work with.

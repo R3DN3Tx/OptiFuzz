@@ -14,7 +14,7 @@ class Event:
 
 class EventBus:
     """Thread-safe pub/sub bridging JobManager's worker threads to the async
-    SSE endpoint (docs/ARCHITECTURE.md §6). publish() is called from plain
+    SSE endpoint. publish() is called from plain
     threads; subscribers live on the FastAPI event loop, so delivery goes
     through call_soon_threadsafe rather than touching the asyncio.Queue
     directly from another thread.
@@ -48,6 +48,5 @@ class EventBus:
                 pass
 
 
-# Single process-wide bus. JobManager and the SSE endpoint share this instance
-# (docs/ARCHITECTURE.md §3: "tiny in-process pub/sub bus").
+# Single process-wide bus. JobManager and the SSE endpoint share this instance.
 event_bus = EventBus()

@@ -21,9 +21,7 @@ router = APIRouter(tags=["settings"])
 
 # Single source of truth for the version shown next to the settings gear
 # (frontend/app.js) -- a plain text file at the repo root, not a Python
-# constant, so bumping it (docs/DEVELOPMENT_PLAN.md's own versioning
-# convention: v0.0.X per small change, v0.X.0 for a larger one, every
-# commit) never needs touching any actual code. Read fresh on every
+# constant, so bumping it (v0.0.X per small change, v0.X.0 for a larger one) never needs touching any actual code. Read fresh on every
 # request (a local file, effectively free) rather than cached, so an
 # edit takes effect without restarting the app.
 _VERSION_FILE = Path(__file__).resolve().parent.parent.parent / "VERSION"

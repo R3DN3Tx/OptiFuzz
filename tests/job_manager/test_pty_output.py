@@ -4,7 +4,7 @@ from backend.parser.stdout_parser import ParsedProgress, ParsedResult
 
 def _redraw(progress_text: str) -> str:
     """Shapes a progress-bar redraw exactly like a real captured ConPTY +
-    dirsearch byte stream (docs/ARCHITECTURE.md §2.3b): save cursor, jump to
+    dirsearch byte stream: save cursor, jump to
     a fixed row, blank it, restore cursor, backspace, then the new text --
     with stray `\\x1b[0m` resets colorama emits even under --no-color."""
     return "\x1b7\x1b[10;1H\x1b[0m" + " " * 40 + "\x1b8" + "\x08" * 40 + progress_text

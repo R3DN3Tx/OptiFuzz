@@ -8,8 +8,8 @@ from typing import Any
 class DirsearchJobConfig:
     """One dirsearch invocation's worth of options.
 
-    Covers the Basic + common Advanced fields from the New Fuzz form
-    (docs/ARCHITECTURE.md §2.8). Extended as later phases add more of the
+    Covers the Basic + common Advanced fields from the New Fuzz form.
+    Extended as later phases add more of the
     filter/matcher/connection option families.
     """
 

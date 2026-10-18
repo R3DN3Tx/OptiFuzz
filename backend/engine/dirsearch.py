@@ -42,7 +42,7 @@ def _default_python_executable() -> str:
     *this* process (the FastAPI app itself) is running under one -- e.g. the
     desktop app, launched via `OptiFuzz.exe run_desktop.py` (a renamed copy
     of `pythonw.exe`, so Task Manager shows "OptiFuzz" instead of the
-    generic "Python" -- docs/ARCHITECTURE.md §13) for a genuinely
+    generic "Python") for a genuinely
     console-free start. Originally needed because `uses_pty = True` meant
     every chunk was spawned through a Windows pseudo-console (ConPTY), and a
     *child* process that's itself GUI-subsystem breaks under ConPTY --
@@ -50,8 +50,8 @@ def _default_python_executable() -> str:
     `pythonw.exe`-launched parent process and zero console ever created,
     COMPLETED with real results when the child was forced onto `python.exe`,
     FAILED (exit code 1, zero output captured) when left as `sys.executable`
-    (`pythonw.exe`). `uses_pty` is `False` now (a different, later bug --
-    see §13's standing rule box), but this rewrite is kept regardless: it's
+    (`pythonw.exe`). `uses_pty` is `False` now (a different, later bug),
+    but this rewrite is kept regardless: it's
     still the more conservative, unambiguously-correct choice for a
     console-subsystem tool's own subprocess, and costs nothing extra.
 
@@ -77,17 +77,16 @@ class DirsearchEngine(FuzzingEngine):
 
     Never used through dirsearch's lightweight in-process API
     (`lib.core.api.DirsearchFuzzer`) -- that surface has no threading,
-    filters, or report formats (docs/ARCHITECTURE.md §2.2).
+    filters, or report formats.
     """
 
-    # Was True (ConPTY, for dirsearch's live per-request progress bar --
-    # §2.3b) until a confirmed, unfixable-from-here bug: every chunk's
+    # Was True (ConPTY, for dirsearch's live per-request progress bar)
+    # until a confirmed, unfixable-from-here bug: every chunk's
     # ConPTY session creates a real Windows console window that steals real
     # OS foreground focus for the chunk's whole duration (verified directly
     # against a live instance -- LockSetForegroundWindow, a reactive
     # SetForegroundWindow restore, and a reactive ShowWindow(SW_HIDE) were
-    # all tried and none reliably won against it; see
-    # docs/ARCHITECTURE.md/DEVELOPMENT_PLAN.md). User's explicit call, given
+    # all tried and none reliably won against it). Chosen given
     # the tradeoff: no more ConPTY at all -- guarantees the focus theft is
     # gone.
     #
