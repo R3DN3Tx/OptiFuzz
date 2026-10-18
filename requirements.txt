@@ -1,25 +1,28 @@
-# Fuzzing engine (V1). Pinned to a specific commit before implementation begins
-# so the integration is reproducible; update deliberately, not via `pip install -U`.
+# Every version is pinned to the exact release the test suite passes on (Windows and Linux),
+# so an install today and an install next year run the same code. Update deliberately, not via
+# `pip install -U`, and run the tests after changing one.
+
+# Fuzzing engine (V1). Pinned to a specific commit so the integration is reproducible.
 dirsearch @ git+https://github.com/maurosoria/dirsearch.git@b1e08a1acd58de256b1a71e042e470c29b0c6538
 
-# Testing (required by project spec: parser, models, persistence, engine tests)
-pytest>=9.0
-pytest-asyncio>=0.24
+# Testing (parser, models, persistence, engine tests)
+pytest==9.1.1
+pytest-asyncio==1.4.0
 
 # Backend
-fastapi>=0.115
-uvicorn[standard]>=0.32
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
 
 # Cross-platform process pause/resume and PID liveness
-psutil>=6.1
+psutil==7.2.2
 
 # Windows pseudo-console (ConPTY) support, so dirsearch believes it's attached to a
 # real terminal and emits its live per-request progress bar instead of silently
 # suppressing it. POSIX has this built into the stdlib
 # `pty` module; this dependency is Windows-only.
-pywinpty>=3.0; sys_platform == "win32"
+pywinpty==3.0.5; sys_platform == "win32"
 
 # Desktop window (run_desktop.py): opens the app in its own native window
 # instead of a browser tab -- on Windows, backed by the system's WebView2
 # runtime via pythonnet, not a bundled Chromium.
-pywebview>=6.0
+pywebview==6.2.1
