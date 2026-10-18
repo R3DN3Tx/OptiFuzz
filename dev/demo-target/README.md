@@ -18,7 +18,12 @@ From the repository root, with any Python 3.9 or newer (on some Linux distributi
 python dev/demo-target/demo_server.py
 ```
 
-Stop it with `Ctrl+C`. Check it: <http://127.0.0.1:8910/>.
+The server keeps running in that terminal (leave it open). To check that it is up, open
+<http://127.0.0.1:8910/> in a browser.
+
+## Stop it
+
+When you are done, press `Ctrl+C` in the terminal where it is running.
 
 ## What is on it
 
