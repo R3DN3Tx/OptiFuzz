@@ -256,7 +256,7 @@ def test_fuzz_history_ignores_the_query_string_of_a_job_path(workspace_root) -> 
     node = trs.add_path(project_id, target_id, "/gs/htc/")
 
     with_query = _job("job1", target_id, project_id, "/gs/htc/?a=a")
-    other_dir = _job("job2", target_id, project_id, "/gs/htc?a=a")  # "htc" without slash is a different node
+    other_dir = _job("job2", target_id, project_id, "/gs/other?a=a")
 
     history = trs.fuzz_history(node, [with_query, other_dir])
 
@@ -339,3 +339,12 @@ def test_result_status_is_matched_by_exact_path_only(workspace_root) -> None:
     views = {v["path"]: v for v in trs.tree_views(project_id, target_id, [], results)}
 
     assert views["/x/"]["status"] is None
+
+
+def test_fuzz_history_ignores_a_trailing_slash_on_either_side(workspace_root) -> None:
+    # A job on "/es-eu/" (stored with the slash) must tag the node "/es-eu" found as a redirect stub.
+    project_id, target_id = _setup(workspace_root)
+    node = trs.add_path(project_id, target_id, "/es-eu")
+    job = _job("job1", target_id, project_id, "/es-eu/")
+
+    assert [h["job_id"] for h in trs.fuzz_history(node, [job])] == ["job1"]

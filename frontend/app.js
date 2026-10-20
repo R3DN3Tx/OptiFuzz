@@ -2358,12 +2358,12 @@ async function renderWorkspace(projectId, targetId, tab) {
     // the "Fuzzed" tag and the "Fuzzed only" filter), an O(results × jobs)
     // cost paid on every render that got noticeably slow with many results
     // and many jobs on the same target. O(1) per row now.
-    // Exact path, NOT normalized: "path/" and "path" are different things to fuzz
-    // (TREE's own fuzz_history matches exactly too) -- a fuzz of "path/" must not
-    // tag the "path" row as fuzzed.
-    let jobsByPathKey = new Map(); // exact job path -> [job, ...], newest first
+    // Trailing slash ignored: dirsearch always fuzzes a path as a directory, and jobs
+    // are stored "/es-eu/" while a result found as a redirect stub is "/es-eu"
+    // (TREE's fuzz_history matches the same way).
+    let jobsByPathKey = new Map(); // normalizeKey(job path) -> [job, ...], newest first
     function fuzzHistoryForPath(path) {
-        return jobsByPathKey.get(path) || [];
+        return jobsByPathKey.get(normalizeKey(path)) || [];
     }
 
     async function refreshJobs() {
@@ -2371,7 +2371,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         allJobs = jobs;
         jobsByPathKey = new Map();
         for (const j of jobs) {
-            const key = pathWithoutQuery(j.path);
+            const key = normalizeKey(pathWithoutQuery(j.path));
             if (!jobsByPathKey.has(key)) jobsByPathKey.set(key, []);
             jobsByPathKey.get(key).push(j);
         }

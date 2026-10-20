@@ -298,8 +298,17 @@ def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
 
 def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
     # A job's path may carry a query string ("/gs/htc/?a=a"); the node it
-    # fuzzed is the path before it.
-    matching = [j for j in jobs if normalize_path(re.split(r"[?#]", j.path, maxsplit=1)[0]) == path]
+    # fuzzed is the path before it. A trailing slash makes no difference: dirsearch
+    # always fuzzes a path as a directory, and jobs are stored with the slash
+    # while a node found as a redirect stub is "/es-eu" without one.
+    def directory(value: str) -> str:
+        return value.rstrip("/") or "/"
+
+    wanted = directory(path)
+    matching = [
+        j for j in jobs
+        if directory(normalize_path(re.split(r"[?#]", j.path, maxsplit=1)[0])) == wanted
+    ]
     matching.sort(key=lambda j: j.created_at, reverse=True)
     return [
         {
