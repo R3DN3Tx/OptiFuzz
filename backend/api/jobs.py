@@ -49,7 +49,8 @@ def create_job(
             status_code=400, detail=f"Not a dirsearch default header: {', '.join(unknown)}"
         )
 
-    url = target_service.resolve_fuzz_url(target.base_url, body.path)
+    path = target_service.normalize_fuzz_path(body.path)
+    url = target_service.resolve_fuzz_url(target.base_url, path)
     config = DirsearchJobConfig(
         url=url,
         extensions=tuple(body.extensions),
@@ -74,7 +75,7 @@ def create_job(
         app_settings.get_output_filename_template(),
         target_name=target.name,
         url=url,
-        path=body.path,
+        path=path,
     )
     if body.authenticated:
         # Double underscore, deliberately -- explicit request, to stay
@@ -85,7 +86,7 @@ def create_job(
     job = job_manager.create_job(
         project_id=project_id,
         target_id=target_id,
-        path=body.path,
+        path=path,
         config=config,
         wordlist_files=wordlist_paths,
         pause_on_status=body.pause_on_status,

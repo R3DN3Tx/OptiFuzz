@@ -94,6 +94,24 @@ def delete_target(project_id: str, target_id: str) -> None:
     shutil.rmtree(target_dir)
 
 
+def normalize_fuzz_path(path: str) -> str:
+    """The path a job is stored under: leading and trailing "/" on the path part.
+
+    dirsearch always fuzzes a URL's path as a directory (its requester appends
+    the "/"), so a job started on "/app" really fuzzes "/app/". Storing it as
+    typed made Results and the tree tag "/app" instead of "/app/". A query
+    string ("?a=a") is kept as typed, after the slash.
+    """
+    path = path.strip()
+    cut = min((i for i in (path.find("?"), path.find("#")) if i != -1), default=len(path))
+    head, tail = path[:cut], path[cut:]
+    if not head.startswith("/"):
+        head = "/" + head
+    if not head.endswith("/"):
+        head += "/"
+    return head + tail
+
+
 def resolve_fuzz_url(base_url: str, path: str) -> str:
     """Join a Target's base_url with a sub-path the same way a human would
     expect."""

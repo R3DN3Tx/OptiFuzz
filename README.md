@@ -213,7 +213,7 @@ resume, a failed job, the tree, the export), in
 `word.<ext>` for every extension you list; without it, extensions are only appended to
 wordlist lines that contain `%EXT%`. Any other dirsearch flag goes in *Advanced options -> Custom
 options*, written exactly as on the dirsearch command line (for example
-`--max-rate 50 --timeout 10`).
+`--max-rate 50 --timeout 10` or `--proxy 127.0.0.1:8080`).
 
 dirsearch also adds a few headers of its own to every request (`User-Agent`, `Accept`,
 `Accept-Encoding`, `Keep-Alive`, `Cache-Control`), and `-H` can only override them. Some servers

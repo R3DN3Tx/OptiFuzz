@@ -85,3 +85,15 @@ def test_outputs_never_cross_contaminate_between_targets(workspace_root) -> None
     assert [p.name for p in layout.outputs_dir(project_a.id, www.id).iterdir()] == ["job_1.txt"]
     assert [p.name for p in layout.outputs_dir(project_a.id, api.id).iterdir()] == ["job_2.txt"]
     assert [p.name for p in layout.outputs_dir(project_b.id, api_es.id).iterdir()] == ["job_3.txt"]
+
+
+def test_normalize_fuzz_path_stores_the_directory_dirsearch_really_fuzzes() -> None:
+    from backend.services.target_service import normalize_fuzz_path
+
+    assert normalize_fuzz_path("/get-sdk/cookies_sdk/app") == "/get-sdk/cookies_sdk/app/"
+    assert normalize_fuzz_path("app") == "/app/"
+    assert normalize_fuzz_path("/app/") == "/app/"
+    assert normalize_fuzz_path("/") == "/"
+    assert normalize_fuzz_path("") == "/"
+    assert normalize_fuzz_path("/gs/htc?a=a") == "/gs/htc/?a=a"
+    assert normalize_fuzz_path("/gs/htc/?a=a") == "/gs/htc/?a=a"

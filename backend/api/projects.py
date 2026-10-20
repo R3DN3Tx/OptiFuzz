@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from backend.api.deps import get_job_manager
 from backend.api.schemas import CreateProjectRequest, RenameRequest, SetOutputsMirrorDirRequest
 from backend.job_manager.manager import JobManager
-from backend.models.job import TERMINAL_STATUSES
+from backend.models.job import TERMINAL_STATUSES, JobStatus
 from backend.persistence.slug import slugify
 from backend.services import export_service, output_mirror_service, project_service, target_service
 
@@ -18,8 +18,27 @@ def create_project(body: CreateProjectRequest) -> dict:
 
 
 @router.get("")
-def list_projects() -> list[dict]:
-    return [p.to_dict() for p in project_service.list_projects()]
+def list_projects(job_manager: JobManager = Depends(get_job_manager)) -> list[dict]:
+    projects = []
+    for p in project_service.list_projects():
+        data = p.to_dict()
+        # Same "currently fuzzing" dot the Targets grid shows, one level up: every
+        # running job of every target in this project, with its target's name.
+        running = [
+            {
+                "target": t.name,
+                "path": job.path,
+                "percent": round(job.completed_lines / job.total_wordlist_lines * 100)
+                if job.total_wordlist_lines else 0,
+            }
+            for t in target_service.list_targets(p.id)
+            for job in job_manager.list_jobs(t.id)
+            if job.status == JobStatus.RUNNING
+        ]
+        data["is_fuzzing"] = bool(running)
+        data["running_jobs"] = running
+        projects.append(data)
+    return projects
 
 
 @router.get("/{project_id}")

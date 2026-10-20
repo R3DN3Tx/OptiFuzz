@@ -185,6 +185,9 @@ class JobManager:
         # before a segment starts, appended as results arrive, dropped once
         # the process has exited (the file is safe to read again then).
         self._live_results: dict[str, list[Result]] = {}
+        # Findings already counted in each running job's result_count, so the
+        # Jobs count matches what Results shows (see _finding_key).
+        self._counted_findings: dict[str, set[tuple]] = {}
 
         self._load_persisted_jobs()
 
@@ -599,6 +602,9 @@ class JobManager:
                         self._live_results[job_id] = results_service.read_job_results(
                             job.project_id, job.target_id, job
                         )
+                        self._counted_findings[job_id] = {
+                            _finding_key(r) for r in self._live_results[job_id]
+                        }
                     if self._engine.uses_pty:
                         exit_code, error_reason = self._run_chunk_pty(
                             job, segment_wordlist, output_base, config, batcher, lines
@@ -623,6 +629,7 @@ class JobManager:
             batcher.flush_now()
             with self._lock:
                 self._live_results.pop(job_id, None)
+                self._counted_findings.pop(job_id, None)
 
         self._set_status_and_save(job, final_status)
         if final_status != JobStatus.PAUSED and using_working_name:
@@ -1252,13 +1259,22 @@ class JobManager:
         )
 
     def _flush_results(self, job_id: str, items: list[ParsedResult]) -> None:
+        results = [_parsed_to_result(job_id, item) for item in items]
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return
-            job.result_count += len(items)
+            # dirsearch can report the exact same finding more than once (a
+            # wordlist with repeated words, say) and Results shows each finding
+            # once, so count them once too: "5 results" on Jobs with 4 rows in
+            # Results was a real, reported mismatch.
+            counted = self._counted_findings.setdefault(job_id, set())
+            for result in results:
+                key = _finding_key(result)
+                if key not in counted:
+                    counted.add(key)
+                    job.result_count += 1
         self._save(job)
-        results = [_parsed_to_result(job_id, item) for item in items]
         with self._lock:
             live = self._live_results.get(job_id)
             if live is not None:
@@ -1302,6 +1318,12 @@ class JobManager:
 
     def _publish(self, name: str, job: FuzzJob) -> None:
         self._event_bus.publish(name, {"job": job.to_dict()})
+
+
+def _finding_key(result: Result) -> tuple:
+    # No size: a live line reports it humanised ("21KB") and the report on disk in
+    # bytes ("21997B"), so a finding read back after a resume would never match.
+    return (result.url, result.status, result.redirect or "")
 
 
 def _parsed_to_result(job_id: str, parsed: ParsedResult) -> Result:

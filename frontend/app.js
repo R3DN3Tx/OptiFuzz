@@ -477,7 +477,7 @@ function attachTooltip(el, text, maxWidth) {
 function attachRunningJobsTooltip(el, runningJobs) {
     const box = h("div", { class: "app-tooltip running-jobs-tooltip" }, runningJobs.map((j) =>
         h("div", { class: "running-jobs-tooltip-row" }, [
-            h("span", { class: "running-jobs-tooltip-path", text: pathWithoutQuery(j.path) }),
+            h("span", { class: "running-jobs-tooltip-path", text: (j.target ? `${j.target} ` : "") + pathWithoutQuery(j.path) }),
             h("span", { class: "running-jobs-tooltip-percent", text: `${j.percent}%` }),
         ])
     ));
@@ -1687,7 +1687,7 @@ function setupSettingsMenu() {
 
 async function renderProjects() {
     breadcrumb.textContent = "";
-    const projects = await api("/api/projects");
+    let projects = await api("/api/projects");
 
     // novalidate: the submit handler already does its own manual empty
     // check below -- without this, the browser's own constraint-validation
@@ -1723,7 +1723,7 @@ async function renderProjects() {
         }
         gridBox.appendChild(h("div", { class: "card-grid" },
             visible.map((p) => {
-                const { element: nameEl, startEdit } = buildEditableName("h3", p.name, async (newName) => {
+                const { element: nameEl, startEdit } = buildEditableName("span", p.name, async (newName) => {
                     await api(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
                     p.name = newName;
                 });
@@ -1738,11 +1738,16 @@ async function renderProjects() {
                     },
                     async () => startEdit()
                 );
+                let fuzzingDot = null;
+                if (p.is_fuzzing) {
+                    fuzzingDot = h("span", { class: "fuzzing-dot" });
+                    attachRunningJobsTooltip(fuzzingDot, p.running_jobs || []);
+                }
                 return h("div", {
                     class: "card",
                     onclick: () => { location.hash = `#/projects/${p.id}`; },
                 }, [
-                    nameEl,
+                    h("h3", {}, [fuzzingDot, nameEl]),
                     h("p", { text: p.id }),
                     menuBtn,
                     menu,
@@ -1758,6 +1763,18 @@ async function renderProjects() {
         h("div", { class: "toolbar" }, [form, searchInputEl]),
         gridBox,
     ]));
+
+    // Live-update the "currently fuzzing" dots without needing to leave/reenter the page.
+    currentStream = new EventSource("/api/stream");
+    currentStream.onmessage = () => {};
+    for (const name of ["job.queued", "job.started", "job.completed", "job.failed", "job.stopped", "job.paused"]) {
+        currentStream.addEventListener(name, async () => {
+            try {
+                projects = await api("/api/projects");
+                renderGrid();
+            } catch (e) { /* the next job event retries */ }
+        });
+    }
 }
 
 // ---- Targets ----------------------------------------------------------
@@ -4131,7 +4148,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // pentester adds more flags, instead of scrolling off to the right
     // (same auto-grow-height technique as .tree-path-input / .header-value-input).
     const customOptionsInput = h("textarea", {
-        rows: "1", class: "custom-options-input", placeholder: "--max-rate 50 --timeout 10",
+        rows: "1", class: "custom-options-input", placeholder: "--max-rate 50 --timeout 10 --proxy 127.0.0.1:8080",
     });
     // .value set as a property, not via h()'s attrs -- a <textarea> has no
     // real `value` ATTRIBUTE (its rendered content comes from a child text

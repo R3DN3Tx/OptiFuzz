@@ -708,7 +708,7 @@ def test_targets_list_reports_is_fuzzing(client: TestClient, tmp_path: Path) -> 
     assert busy[0]["is_fuzzing"] is True
     # Targets grid's "currently fuzzing" dot hover: path + % per running job.
     assert len(busy[0]["running_jobs"]) == 1
-    assert busy[0]["running_jobs"][0]["path"] == "/admin"
+    assert busy[0]["running_jobs"][0]["path"] == "/admin/"
     assert 0 <= busy[0]["running_jobs"][0]["percent"] <= 100
 
     client.post(f"/api/jobs/{job['id']}/stop")
@@ -977,3 +977,49 @@ def test_dirsearch_default_headers_are_listed_and_remembered_as_target_defaults(
     client.put(url, json={"disabled_default_headers": ["keep-alive"]})
 
     assert client.get(url).json()["disabled_default_headers"] == ["keep-alive"]
+
+
+def test_create_job_on_a_path_without_trailing_slash_is_stored_as_the_directory(
+    client: TestClient, tmp_path: Path
+) -> None:
+    # dirsearch always fuzzes a path as a directory, so Results/TREE must see "/app/".
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets",
+        json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+
+    job = client.post(
+        f"/api/projects/{project['id']}/targets/{target['id']}/jobs",
+        json={"path": "/get-sdk/cookies_sdk/app", "wordlist_files": [_wordlist(tmp_path)]},
+    ).json()
+
+    assert job["path"] == "/get-sdk/cookies_sdk/app/"
+    assert job["config"]["url"] == "https://t1.local/get-sdk/cookies_sdk/app/"
+
+
+def test_projects_list_reports_is_fuzzing_with_the_running_targets(
+    client: TestClient, tmp_path: Path
+) -> None:
+    app.state.job_manager = JobManager(
+        MockDirsearchEngine(every=1, delay=0.05), event_bus=EventBus()
+    )
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets",
+        json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+
+    assert client.get("/api/projects").json()[0]["is_fuzzing"] is False
+
+    job = client.post(
+        f"/api/projects/{project['id']}/targets/{target['id']}/jobs",
+        json={"path": "/admin", "wordlist_files": [_wordlist(tmp_path, count=200)]},
+    ).json()
+
+    busy = client.get("/api/projects").json()[0]
+    assert busy["is_fuzzing"] is True
+    assert [(j["target"], j["path"]) for j in busy["running_jobs"]] == [("t1", "/admin/")]
+
+    client.post(f"/api/jobs/{job['id']}/stop")
+    _wait_for_terminal(client, job["id"])

@@ -1201,3 +1201,25 @@ def test_fuzzing_a_very_long_path_completes_without_crashing_end_to_end(
     final = manager.get_job(job.id)
     assert final.status == JobStatus.COMPLETED
     assert final.result_count > 0
+
+
+def test_result_count_counts_each_finding_once(workspace_root, tmp_path: Path) -> None:
+    # dirsearch can report the exact same finding twice; Results shows it once, so the
+    # Jobs count must too ("5" on Jobs against 4 rows in Results was a reported mismatch).
+    from backend.parser.stdout_parser import ParsedResult
+
+    manager = JobManager(MockDirsearchEngine(every=1000), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/"),
+        wordlist_files=[_wordlist(tmp_path, 1)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.COMPLETED)
+    before = manager.get_job(job.id).result_count
+
+    up = ParsedResult(time="", status=200, size="21KB", url="https://target.local/up")
+    other = ParsedResult(time="", status=301, size="0B", url="https://target.local/x", redirect="/x/")
+    manager._flush_results(job.id, [up, other, up])
+    manager._flush_results(job.id, [up])
+
+    assert manager.get_job(job.id).result_count == before + 2
