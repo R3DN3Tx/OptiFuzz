@@ -2845,7 +2845,6 @@ async function renderWorkspace(projectId, targetId, tab) {
             const counts = h("span", {
                 class: "hint", text: ` (${childCount > 0 ? childCount : ""}${hiddenNote})`,
             });
-            if (hiddenCount > 0) counts.title = "Found by dirsearch (and counted in Jobs) but hidden by your Hide rules. Open Hide rules to change them.";
             pathContent.appendChild(counts);
         }
         const history = fuzzHistoryForPath(result.path);
