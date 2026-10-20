@@ -348,3 +348,17 @@ def test_fuzz_history_ignores_a_trailing_slash_on_either_side(workspace_root) ->
     job = _job("job1", target_id, project_id, "/es-eu/")
 
     assert [h["job_id"] for h in trs.fuzz_history(node, [job])] == ["job1"]
+
+
+def test_fuzz_history_goes_to_the_slash_form_when_both_nodes_exist(workspace_root) -> None:
+    # dirsearch fuzzes the directory, so with "/es-eu" and "/es-eu/" both present only the
+    # latter carries the Fuzzed tag.
+    project_id, target_id = _setup(workspace_root)
+    plain = trs.add_path(project_id, target_id, "/es-eu")
+    slash = trs.add_path(project_id, target_id, "/es-eu/")
+    job = _job("job1", target_id, project_id, "/es-eu/")
+    views = {v["path"]: v for v in trs.tree_views(project_id, target_id, [job], [])}
+
+    assert views[slash.path]["fuzz_history"][0]["job_id"] == "job1"
+    assert views[plain.path]["fuzz_history"] == []
+

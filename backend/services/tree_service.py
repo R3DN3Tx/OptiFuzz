@@ -289,18 +289,26 @@ def latest_status(node: TreeNode) -> dict[str, Any] | None:
     return None
 
 
-def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
+def fuzz_history(
+    node: TreeNode, jobs: list[FuzzJob], known_paths: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Every Fuzz Job launched directly against this node's own path -- a
     node can be fuzzed multiple times, each an independent history entry,
     never overwriting the last."""
-    return fuzz_history_for_path(node.path, jobs)
+    return fuzz_history_for_path(node.path, jobs, known_paths)
 
 
-def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
+def fuzz_history_for_path(
+    path: str, jobs: list[FuzzJob], known_paths: set[str] | None = None
+) -> list[dict[str, Any]]:
     # A job's path may carry a query string ("/gs/htc/?a=a"); the node it
     # fuzzed is the path before it. A trailing slash makes no difference: dirsearch
     # always fuzzes a path as a directory, and jobs are stored with the slash
-    # while a node found as a redirect stub is "/es-eu" without one.
+    # while a node found as a redirect stub is "/es-eu" without one. When the slash
+    # form is also known ("/es-eu/"), the fuzz belongs to that one alone.
+    if known_paths and path != "/" and not path.endswith("/") and path + "/" in known_paths:
+        return []
+
     def directory(value: str) -> str:
         return value.rstrip("/") or "/"
 
@@ -331,10 +339,12 @@ def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]
     ]
 
 
-def node_to_view(node: TreeNode, jobs: list[FuzzJob]) -> dict[str, Any]:
+def node_to_view(
+    node: TreeNode, jobs: list[FuzzJob], known_paths: set[str] | None = None
+) -> dict[str, Any]:
     data = node.to_dict()
     data["status"] = latest_status(node)
-    data["fuzz_history"] = fuzz_history(node, jobs)
+    data["fuzz_history"] = fuzz_history(node, jobs, known_paths)
     return data
 
 
@@ -346,8 +356,10 @@ def tree_views(project_id: str, target_id: str, jobs: list[FuzzJob], results: li
     for result in results:
         latest[result.path] = {"status": result.status, "size": result.size, "at": None}
     views = []
-    for node in list_nodes(project_id, target_id):
-        view = node_to_view(node, jobs)
+    nodes = list_nodes(project_id, target_id)
+    known_paths = {node.path for node in nodes} | set(latest)
+    for node in nodes:
+        view = node_to_view(node, jobs, known_paths)
         if view["status"] is None:
             view["status"] = latest.get(node.path)
         views.append(view)

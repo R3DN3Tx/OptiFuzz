@@ -2362,7 +2362,16 @@ async function renderWorkspace(projectId, targetId, tab) {
     // are stored "/es-eu/" while a result found as a redirect stub is "/es-eu"
     // (TREE's fuzz_history matches the same way).
     let jobsByPathKey = new Map(); // normalizeKey(job path) -> [job, ...], newest first
+    // When both "/es-eu" and "/es-eu/" were found, the fuzz belongs to the one with
+    // the slash alone (it is the directory dirsearch fuzzed).
+    let resultPathSet = new Set();
+    let resultPathSetSize = -1;
     function fuzzHistoryForPath(path) {
+        if (resultPathSetSize !== allResults.length) {
+            resultPathSet = new Set(allResults.map((r) => r.path));
+            resultPathSetSize = allResults.length;
+        }
+        if (path !== "/" && !path.endsWith("/") && resultPathSet.has(`${path}/`)) return [];
         return jobsByPathKey.get(normalizeKey(path)) || [];
     }
 
