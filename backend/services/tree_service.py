@@ -148,21 +148,6 @@ def add_path(
     return node
 
 
-def ensure_fuzzed_directory_node(project_id: str, target_id: str, path: str) -> None:
-    """A fuzz of "/es-eu/" where the tree only has the stub "/es-eu": add the
-    "/es-eu/" row too, since that is the directory dirsearch fuzzes and the one
-    that carries the Fuzzed tag. Does nothing when the tree does not track the
-    place at all (it stays a curated list) or already has the slash form."""
-    path = re.split(r"[?#]", path, maxsplit=1)[0]
-    if path == "/" or not path.endswith("/"):
-        return
-    nodes = _load_nodes(project_id, target_id)
-    if _find_by_path(nodes, path) is not None:
-        return
-    if _find_by_path(nodes, _key_for_comparison(path)) is not None:
-        add_path(project_id, target_id, path, source="fuzz")
-
-
 def record_fuzz_discoveries(
     project_id: str,
     target_id: str,
@@ -313,12 +298,8 @@ def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
 
 def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
     # A job's path may carry a query string ("/gs/htc/?a=a"); the node it
-    # fuzzed is the path before it. dirsearch always fuzzes a path as a directory,
-    # so the fuzz belongs to the slash form ("/es-eu/") only, never to a stub
-    # "/es-eu"; jobs stored before that was enforced (no slash) count as the slash form.
-    if path != "/" and not path.endswith("/"):
-        return []
-
+    # fuzzed is the path before it. "/x" and "/x/" are the same place for
+    # matching; tree_views then shows the tag on one of the two rows only.
     def directory(value: str) -> str:
         return value.rstrip("/") or "/"
 
@@ -349,6 +330,27 @@ def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]
     ]
 
 
+REDIRECT_STATUSES = (301, 302, 303, 307, 308)
+
+
+def primary_paths(entries: list[tuple[str, int | None]]) -> dict[str, str]:
+    """For each place (path without its trailing slash), which of its rows carries the
+    Fuzzed tag when "/x" and "/x/" both exist: a row that is not a redirect, then the
+    one with the slash (what dirsearch requests as the directory), then the first.
+    Servers differ -- "/x" -> 301 -> "/x/" on one, "/x/" -> 308 -> "/x" on another --
+    so the rule looks at the answers, never assumes which spelling is the real one.
+    Mirrors pickPrimaryItem in the frontend."""
+    groups: dict[str, list[tuple[str, int | None]]] = {}
+    for path, status in entries:
+        groups.setdefault(_key_for_comparison(path), []).append((path, status))
+    chosen: dict[str, str] = {}
+    for key, rows in groups.items():
+        pool = [r for r in rows if r[1] not in REDIRECT_STATUSES] or rows
+        pool = sorted(pool, key=lambda r: (not r[0].endswith("/") and r[0] != "/", r[0]))
+        chosen[key] = pool[0][0]
+    return chosen
+
+
 def node_to_view(node: TreeNode, jobs: list[FuzzJob]) -> dict[str, Any]:
     data = node.to_dict()
     data["status"] = latest_status(node)
@@ -369,4 +371,10 @@ def tree_views(project_id: str, target_id: str, jobs: list[FuzzJob], results: li
         if view["status"] is None:
             view["status"] = latest.get(node.path)
         views.append(view)
+    primary = primary_paths(
+        [(v["path"], v["status"]["status"] if v["status"] else None) for v in views]
+    )
+    for view in views:
+        if primary[_key_for_comparison(view["path"])] != view["path"]:
+            view["fuzz_history"] = []
     return views

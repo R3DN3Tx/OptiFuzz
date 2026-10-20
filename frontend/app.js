@@ -1003,6 +1003,23 @@ function normalizeKey(path) {
     return path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
+// Which of the rows sharing one place ("/x" and "/x/" are two separate rows, each with
+// its own answer) is THE one that carries the Fuzzed tag and the children. The rule
+// looks at the answers, never assumes which spelling is the real one -- servers differ
+// ("/x" -> 301 -> "/x/" on one, "/x/" -> 308 -> "/x" on another): a row that is not a
+// redirect first, then the one with the slash (what dirsearch requests as the
+// directory), then the first. Mirrors tree_service.primary_paths.
+function itemIsRedirect(item) {
+    if (item.redirect) return true;
+    const status = item.status && typeof item.status === "object" ? item.status.status : item.status;
+    return [301, 302, 303, 307, 308].includes(status);
+}
+function pickPrimaryItem(items) {
+    const real = items.filter((it) => !itemIsRedirect(it));
+    const pool = real.length ? real : items;
+    return pool.find((it) => it.path === "/" || it.path.endsWith("/")) || pool[0];
+}
+
 // A job's path may carry a query string ("/gs/htc/?a=a": dirsearch appends it
 // to every word). The query is part of what gets requested, but the place
 // being fuzzed -- what TREE, Results grouping and the "Fuzzed" tags match on --
@@ -1165,7 +1182,7 @@ function buildPathHierarchy(items, makeSynthetic) {
     for (const key of allKeys) {
         const real = itemsByKey.get(key);
         if (real) {
-            const primary = real.find((it) => !it.redirect) || real[0];
+            const primary = pickPrimaryItem(real);
             // A TREE item the server marked synthetic (an implied ancestor that
             // still has its own derived status/fuzz history) stays synthetic --
             // it has no id until an explicit edit promotes it.
@@ -2358,15 +2375,27 @@ async function renderWorkspace(projectId, targetId, tab) {
     // the "Fuzzed" tag and the "Fuzzed only" filter), an O(results × jobs)
     // cost paid on every render that got noticeably slow with many results
     // and many jobs on the same target. O(1) per row now.
-    // dirsearch always fuzzes a path as a directory, so a fuzz belongs to the slash
-    // form ("/es-eu/") only, never to a stub row "/es-eu" (TREE's fuzz_history does
-    // the same). Jobs stored without a slash count as the slash form. When Results
-    // has the stub or children but no "/es-eu/" row, renderResultsTree() adds one
-    // (virtualFuzzedRows) so the tag has somewhere to go.
+    // "/es-eu" and "/es-eu/" are two rows but one place: the fuzz is shown on the
+    // place's primary row only (pickPrimaryItem -- the one the children hang from).
+    // A place with children but no row of its own is shown as a synthetic row at the
+    // slash-less key, which is then the one tagged.
     let jobsByPathKey = new Map(); // normalizeKey(job path) -> [job, ...], newest first
+    let primaryPathByKey = new Map();
+    let primaryPathByKeySize = -1;
     function fuzzHistoryForPath(path) {
-        if (path !== "/" && !path.endsWith("/")) return [];
-        return jobsByPathKey.get(normalizeKey(path)) || [];
+        if (primaryPathByKeySize !== allResults.length) {
+            const byKey = new Map();
+            for (const r of allResults) {
+                const key = normalizeKey(r.path);
+                if (!byKey.has(key)) byKey.set(key, []);
+                byKey.get(key).push(r);
+            }
+            primaryPathByKey = new Map([...byKey].map(([key, items]) => [key, pickPrimaryItem(items).path]));
+            primaryPathByKeySize = allResults.length;
+        }
+        const key = normalizeKey(path);
+        if (primaryPathByKey.has(key) && primaryPathByKey.get(key) !== path) return [];
+        return jobsByPathKey.get(key) || [];
     }
 
     async function refreshJobs() {
@@ -2953,20 +2982,6 @@ async function renderWorkspace(projectId, targetId, tab) {
     // straight at /a/b/c never independently discovers /a or /a/b) but
     // never itself discovered by dirsearch -- no real status/size/redirect,
     // but still a real, addressable URL: Fuzz/Add-to-tree stay available.
-    // A fuzz of "/es-eu/" where Results only has the stub "/es-eu" (or just its
-    // children) gets its own "/es-eu/" row, since that directory is what was fuzzed.
-    function virtualFuzzedRows() {
-        const rows = [];
-        for (const key of jobsByPathKey.keys()) {
-            if (key === "/") continue;
-            const path = `${key}/`;
-            if (allResults.some((r) => r.path === path)) continue;
-            if (!allResults.some((r) => normalizeKey(r.path) === key || r.path.startsWith(path))) continue;
-            rows.push(makeSyntheticResult(path));
-        }
-        return rows;
-    }
-
     function makeSyntheticResult(path) {
         let url;
         try { url = new URL(path, target.base_url).href; } catch (e) { url = target.base_url; }
@@ -3019,7 +3034,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // Filtering happens on the flat list, before grouping: if a filter
         // hides an ancestor, its still-visible descendants just render as
         // their own top-level entries instead of disappearing too.
-        const visibleResults = [...allResults, ...virtualFuzzedRows()].filter(passesResultFilters);
+        const visibleResults = allResults.filter(passesResultFilters);
         const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult);
         lastResultsHierarchy = hierarchy;
 

@@ -102,3 +102,14 @@ def test_list_results_never_reads_a_job_whose_live_copy_is_present(workspace_roo
     results = rs.list_results("p1", "t1", [job], live_results=live)
 
     assert [r.path for r in results] == ["/live"]
+
+
+def test_format_size_matches_dirsearchs_own_readable_sizes() -> None:
+    # The live output says "579KB", so the report's byte count must read the same.
+    from backend.services.results_service import _format_size
+
+    assert _format_size(None) == ""
+    assert _format_size(15) == "15B"
+    assert _format_size(1023) == "1023B"
+    assert _format_size(593287) == "579KB"
+    assert _format_size(5 * 1024 * 1024) == "5MB"

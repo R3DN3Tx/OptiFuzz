@@ -77,9 +77,16 @@ def list_results(
 
 
 def _format_size(length: Any) -> str:
+    """Bytes in dirsearch's own readable form ("593287" -> "579KB"), the one its live
+    output uses, so a finding reads the same live, from the report and in TREE."""
     if length is None:
         return ""
-    return f"{length}B"
+    num = int(length)
+    for unit in ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"):
+        if -1024 < num < 1024:
+            return f"{num}{unit}"
+        num = round(num / 1024)
+    return f"{num}TB"
 
 
 def get_seen_keys(project_id: str, target_id: str) -> set[str]:

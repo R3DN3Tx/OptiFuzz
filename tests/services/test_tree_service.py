@@ -317,7 +317,6 @@ def test_tree_views_gives_an_ancestor_its_own_status_and_fuzz_history(workspace_
 
     project_id, target_id = _setup(workspace_root)
     trs.add_path(project_id, target_id, "/a/b/c", source="manual")
-    trs.ensure_fuzzed_directory_node(project_id, target_id, "/a/b/")  # what a fuzz of /a/b/ does
     jobs = [_job("job1", target_id, project_id, "/a/b/")]
     results = [Result(job_id="job1", time="", status=301, size="0B", url="https://api.example.com/a/b", path="/a/b")]
 
@@ -325,8 +324,7 @@ def test_tree_views_gives_an_ancestor_its_own_status_and_fuzz_history(workspace_
 
     assert views["/a/b"]["id"] is not None
     assert views["/a/b"]["status"]["status"] == 301
-    assert views["/a/b"]["fuzz_history"] == []  # the stub is not the directory that was fuzzed
-    assert views["/a/b/"]["fuzz_history"][0]["job_id"] == "job1"
+    assert views["/a/b"]["fuzz_history"][0]["job_id"] == "job1"
     assert views["/a"]["status"] is None
     assert views["/a"]["fuzz_history"] == []
 
@@ -343,43 +341,43 @@ def test_result_status_is_matched_by_exact_path_only(workspace_root) -> None:
     assert views["/x/"]["status"] is None
 
 
-def test_fuzz_history_never_goes_to_a_slashless_stub_and_old_jobs_count_as_the_slash_form(
+def _views_for(workspace_root, node_statuses: dict[str, int], job_path: str):
+    from backend.models.result import Result
+
+    project_id, target_id = _setup(workspace_root)
+    results = []
+    for path, status in node_statuses.items():
+        trs.add_path(project_id, target_id, path)
+        results.append(Result(job_id="x", time="", status=status, size="0B", url="https://t" + path, path=path))
+    job = _job("job1", target_id, project_id, job_path)
+    return {v["path"]: v for v in trs.tree_views(project_id, target_id, [job], results)}
+
+
+def test_fuzzed_tag_goes_to_the_row_that_is_not_a_redirect_whichever_spelling_it_has(workspace_root) -> None:
+    # "/x/" -> 308 -> "/x" (the server from the bug report): the real page is the slash-less row.
+    views = _views_for(workspace_root, {"/es-eu": 200, "/es-eu/": 308}, "/es-eu/")
+    assert views["/es-eu"]["fuzz_history"][0]["job_id"] == "job1"
+    assert views["/es-eu/"]["fuzz_history"] == []
+
+
+def test_fuzzed_tag_with_the_usual_slash_redirect_goes_to_the_slash_row(workspace_root) -> None:
+    # "/x" -> 301 -> "/x/": the real page is the slash row.
+    views = _views_for(workspace_root, {"/admin": 301, "/admin/": 200}, "/admin/")
+    assert views["/admin/"]["fuzz_history"][0]["job_id"] == "job1"
+    assert views["/admin"]["fuzz_history"] == []
+
+
+def test_fuzzed_tag_prefers_the_slash_row_when_both_answer_200_and_the_only_row_when_alone(
     workspace_root,
 ) -> None:
-    project_id, target_id = _setup(workspace_root)
-    stub = trs.add_path(project_id, target_id, "/es-eu")
-    directory = trs.add_path(project_id, target_id, "/es-eu/")
-    old_job = _job("old", target_id, project_id, "/es-eu")  # stored before the slash was enforced
-
-    assert trs.fuzz_history(stub, [old_job]) == []
-    assert [h["job_id"] for h in trs.fuzz_history(directory, [old_job])] == ["old"]
+    both = _views_for(workspace_root, {"/a": 200, "/a/": 200}, "/a/")
+    assert both["/a/"]["fuzz_history"][0]["job_id"] == "job1" and both["/a"]["fuzz_history"] == []
 
 
-def test_fuzz_history_goes_to_the_slash_form_when_both_nodes_exist(workspace_root) -> None:
-    # dirsearch fuzzes the directory, so with "/es-eu" and "/es-eu/" both present only the
-    # latter carries the Fuzzed tag.
-    project_id, target_id = _setup(workspace_root)
-    plain = trs.add_path(project_id, target_id, "/es-eu")
-    slash = trs.add_path(project_id, target_id, "/es-eu/")
-    job = _job("job1", target_id, project_id, "/es-eu/")
-    views = {v["path"]: v for v in trs.tree_views(project_id, target_id, [job], [])}
-
-    assert views[slash.path]["fuzz_history"][0]["job_id"] == "job1"
-    assert views[plain.path]["fuzz_history"] == []
-
-
-
-def test_ensure_fuzzed_directory_node_adds_the_slash_row_next_to_a_tracked_stub(workspace_root) -> None:
-    project_id, target_id = _setup(workspace_root)
-    trs.add_path(project_id, target_id, "/es-eu")
-
-    trs.ensure_fuzzed_directory_node(project_id, target_id, "/es-eu/")
-    trs.ensure_fuzzed_directory_node(project_id, target_id, "/es-eu/")  # idempotent
-    trs.ensure_fuzzed_directory_node(project_id, target_id, "/other/")  # not tracked: stays curated
-
-    paths = [n.path for n in trs.list_nodes(project_id, target_id)]
-    assert paths.count("/es-eu/") == 1 and "/es-eu" in paths
-    assert "/other/" not in paths
+def test_fuzzed_tag_goes_to_a_lone_redirect_row(workspace_root, tmp_path) -> None:
+    # Only the redirect was found: it is the only row of the place, so it carries the tag.
+    views = _views_for(workspace_root, {"/solo": 301}, "/solo/")
+    assert views["/solo"]["fuzz_history"][0]["job_id"] == "job1"
 
 
 def test_adding_one_of_x_and_x_slash_to_the_tree_does_not_create_the_other(workspace_root) -> None:
