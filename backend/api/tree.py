@@ -56,8 +56,7 @@ def update_node(
     if body.note is not None:
         tree_service.set_note(project_id, target_id, node_id, body.note)
     node = tree_service.get_node(project_id, target_id, node_id)
-    known_paths = {n.path for n in tree_service.list_nodes(project_id, target_id)}
-    return tree_service.node_to_view(node, job_manager.list_jobs(target_id), known_paths)
+    return tree_service.node_to_view(node, job_manager.list_jobs(target_id))
 
 
 @router.delete("/{node_id}", status_code=204)

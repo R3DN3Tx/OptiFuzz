@@ -148,6 +148,21 @@ def add_path(
     return node
 
 
+def ensure_fuzzed_directory_node(project_id: str, target_id: str, path: str) -> None:
+    """A fuzz of "/es-eu/" where the tree only has the stub "/es-eu": add the
+    "/es-eu/" row too, since that is the directory dirsearch fuzzes and the one
+    that carries the Fuzzed tag. Does nothing when the tree does not track the
+    place at all (it stays a curated list) or already has the slash form."""
+    path = re.split(r"[?#]", path, maxsplit=1)[0]
+    if path == "/" or not path.endswith("/"):
+        return
+    nodes = _load_nodes(project_id, target_id)
+    if _find_by_path(nodes, path) is not None:
+        return
+    if _find_by_path(nodes, _key_for_comparison(path)) is not None:
+        add_path(project_id, target_id, path, source="fuzz")
+
+
 def record_fuzz_discoveries(
     project_id: str,
     target_id: str,
@@ -289,24 +304,19 @@ def latest_status(node: TreeNode) -> dict[str, Any] | None:
     return None
 
 
-def fuzz_history(
-    node: TreeNode, jobs: list[FuzzJob], known_paths: set[str] | None = None
-) -> list[dict[str, Any]]:
+def fuzz_history(node: TreeNode, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
     """Every Fuzz Job launched directly against this node's own path -- a
     node can be fuzzed multiple times, each an independent history entry,
     never overwriting the last."""
-    return fuzz_history_for_path(node.path, jobs, known_paths)
+    return fuzz_history_for_path(node.path, jobs)
 
 
-def fuzz_history_for_path(
-    path: str, jobs: list[FuzzJob], known_paths: set[str] | None = None
-) -> list[dict[str, Any]]:
+def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]]:
     # A job's path may carry a query string ("/gs/htc/?a=a"); the node it
-    # fuzzed is the path before it. A trailing slash makes no difference: dirsearch
-    # always fuzzes a path as a directory, and jobs are stored with the slash
-    # while a node found as a redirect stub is "/es-eu" without one. When the slash
-    # form is also known ("/es-eu/"), the fuzz belongs to that one alone.
-    if known_paths and path != "/" and not path.endswith("/") and path + "/" in known_paths:
+    # fuzzed is the path before it. dirsearch always fuzzes a path as a directory,
+    # so the fuzz belongs to the slash form ("/es-eu/") only, never to a stub
+    # "/es-eu"; jobs stored before that was enforced (no slash) count as the slash form.
+    if path != "/" and not path.endswith("/"):
         return []
 
     def directory(value: str) -> str:
@@ -339,12 +349,10 @@ def fuzz_history_for_path(
     ]
 
 
-def node_to_view(
-    node: TreeNode, jobs: list[FuzzJob], known_paths: set[str] | None = None
-) -> dict[str, Any]:
+def node_to_view(node: TreeNode, jobs: list[FuzzJob]) -> dict[str, Any]:
     data = node.to_dict()
     data["status"] = latest_status(node)
-    data["fuzz_history"] = fuzz_history(node, jobs, known_paths)
+    data["fuzz_history"] = fuzz_history(node, jobs)
     return data
 
 
@@ -356,10 +364,8 @@ def tree_views(project_id: str, target_id: str, jobs: list[FuzzJob], results: li
     for result in results:
         latest[result.path] = {"status": result.status, "size": result.size, "at": None}
     views = []
-    nodes = list_nodes(project_id, target_id)
-    known_paths = {node.path for node in nodes} | set(latest)
-    for node in nodes:
-        view = node_to_view(node, jobs, known_paths)
+    for node in list_nodes(project_id, target_id):
+        view = node_to_view(node, jobs)
         if view["status"] is None:
             view["status"] = latest.get(node.path)
         views.append(view)

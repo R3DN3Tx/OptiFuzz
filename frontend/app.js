@@ -2358,20 +2358,14 @@ async function renderWorkspace(projectId, targetId, tab) {
     // the "Fuzzed" tag and the "Fuzzed only" filter), an O(results × jobs)
     // cost paid on every render that got noticeably slow with many results
     // and many jobs on the same target. O(1) per row now.
-    // Trailing slash ignored: dirsearch always fuzzes a path as a directory, and jobs
-    // are stored "/es-eu/" while a result found as a redirect stub is "/es-eu"
-    // (TREE's fuzz_history matches the same way).
+    // dirsearch always fuzzes a path as a directory, so a fuzz belongs to the slash
+    // form ("/es-eu/") only, never to a stub row "/es-eu" (TREE's fuzz_history does
+    // the same). Jobs stored without a slash count as the slash form. When Results
+    // has the stub or children but no "/es-eu/" row, renderResultsTree() adds one
+    // (virtualFuzzedRows) so the tag has somewhere to go.
     let jobsByPathKey = new Map(); // normalizeKey(job path) -> [job, ...], newest first
-    // When both "/es-eu" and "/es-eu/" were found, the fuzz belongs to the one with
-    // the slash alone (it is the directory dirsearch fuzzed).
-    let resultPathSet = new Set();
-    let resultPathSetSize = -1;
     function fuzzHistoryForPath(path) {
-        if (resultPathSetSize !== allResults.length) {
-            resultPathSet = new Set(allResults.map((r) => r.path));
-            resultPathSetSize = allResults.length;
-        }
-        if (path !== "/" && !path.endsWith("/") && resultPathSet.has(`${path}/`)) return [];
+        if (path !== "/" && !path.endsWith("/")) return [];
         return jobsByPathKey.get(normalizeKey(path)) || [];
     }
 
@@ -2959,6 +2953,20 @@ async function renderWorkspace(projectId, targetId, tab) {
     // straight at /a/b/c never independently discovers /a or /a/b) but
     // never itself discovered by dirsearch -- no real status/size/redirect,
     // but still a real, addressable URL: Fuzz/Add-to-tree stay available.
+    // A fuzz of "/es-eu/" where Results only has the stub "/es-eu" (or just its
+    // children) gets its own "/es-eu/" row, since that directory is what was fuzzed.
+    function virtualFuzzedRows() {
+        const rows = [];
+        for (const key of jobsByPathKey.keys()) {
+            if (key === "/") continue;
+            const path = `${key}/`;
+            if (allResults.some((r) => r.path === path)) continue;
+            if (!allResults.some((r) => normalizeKey(r.path) === key || r.path.startsWith(path))) continue;
+            rows.push(makeSyntheticResult(path));
+        }
+        return rows;
+    }
+
     function makeSyntheticResult(path) {
         let url;
         try { url = new URL(path, target.base_url).href; } catch (e) { url = target.base_url; }
@@ -3011,7 +3019,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // Filtering happens on the flat list, before grouping: if a filter
         // hides an ancestor, its still-visible descendants just render as
         // their own top-level entries instead of disappearing too.
-        const visibleResults = allResults.filter(passesResultFilters);
+        const visibleResults = [...allResults, ...virtualFuzzedRows()].filter(passesResultFilters);
         const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult);
         lastResultsHierarchy = hierarchy;
 

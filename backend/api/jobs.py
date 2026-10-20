@@ -10,7 +10,7 @@ from backend.api.schemas import CreateJobRequest
 from backend.job_manager.manager import JobManager
 from backend.models.job_config import DIRSEARCH_DEFAULT_HEADERS, DirsearchJobConfig
 from backend.persistence import app_settings
-from backend.services import output_naming, target_service
+from backend.services import output_naming, target_service, tree_service
 
 router = APIRouter(tags=["jobs"])
 
@@ -93,6 +93,7 @@ def create_job(
         output_stem=output_stem,
         output_flat=True,  # current naming scheme -- see layout.job_output_base_flat
     )
+    tree_service.ensure_fuzzed_directory_node(project_id, target_id, path)
     return job.to_dict()
 
 
