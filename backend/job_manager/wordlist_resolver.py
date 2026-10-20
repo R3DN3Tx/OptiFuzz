@@ -51,6 +51,11 @@ def resolve_wordlist(
     return ResolvedWordlist(total_lines=len(lines), total_requests=total_requests)
 
 
+def estimate_requests(lines: list[str], extensions: list[str], force_extensions: bool) -> int:
+    """Real request count dirsearch makes for `lines` run on their own (fresh dedup)."""
+    return _estimate_requests(lines, list(extensions or []), force_extensions)
+
+
 def load_wordlist_lines(path: Path) -> list[str]:
     return list(_iter_source_lines([path]))
 

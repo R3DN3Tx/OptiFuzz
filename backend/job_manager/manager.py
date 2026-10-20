@@ -21,6 +21,7 @@ from backend.job_manager.dirsearch_log import RequestErrorSummary, summarize_req
 from backend.job_manager.pty_output import LiveOutputParser
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
+    estimate_requests,
     find_resume_point,
     load_wordlist_lines,
     resolve_wordlist,
@@ -875,6 +876,16 @@ class JobManager:
         # completed_lines), so repeated calls stay consistent instead of
         # drifting/double-counting.
         base_lines, base_requests = job.completed_lines, job.completed_requests
+        if base_lines:
+            # A resumed segment is deduplicated on its own by dirsearch, so paths already requested
+            # before the pause are requested again: the true total is what is done + this remainder.
+            # Fixing it here keeps the total identical in the live bar and in every REST refresh.
+            total = base_requests + estimate_requests(
+                lines[base_lines:], list(config.extensions), config.force_extensions,
+            )
+            if total != job.total_wordlist_requests:
+                job.total_wordlist_requests = total
+                self._save(job)
 
         # dirsearch's own log: the only place the reason of a failed request is ever written
         # (fresh for every segment, so a stop is explained by THIS run's errors).

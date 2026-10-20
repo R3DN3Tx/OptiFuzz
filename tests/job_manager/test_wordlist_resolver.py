@@ -169,3 +169,17 @@ def test_find_resume_point_zero_target_resumes_from_the_start(tmp_path: Path) ->
 
     assert line_count == 0
     assert request_count == 0
+
+
+def test_estimate_requests_of_a_remainder_counts_paths_already_requested_before_the_pause() -> None:
+    # dirsearch dedups a resumed segment on its own, so "admin/" (already requested through the
+    # first line) is requested again: the job's total after a resume is done + this estimate,
+    # which is larger than the whole-list estimate minus what was done.
+    from backend.job_manager.wordlist_resolver import estimate_requests, find_resume_point
+
+    lines = ["admin", "login", "admin/", "login/"]
+    whole = estimate_requests(lines, [], True)
+    assert whole == 4  # admin, admin/, login, login/
+    done_lines, done_requests = find_resume_point(lines, 3, [], True)
+    assert (done_lines, done_requests) == (1, 2)
+    assert done_requests + estimate_requests(lines[done_lines:], [], True) == 5  # not 4
