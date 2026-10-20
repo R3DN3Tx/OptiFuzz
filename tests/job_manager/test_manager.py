@@ -225,6 +225,7 @@ def test_auto_pause_on_detected_status(workspace_root, tmp_path: Path) -> None:
     # auto-pause-on-status path sets this, so the frontend's "⚠ auto" tag
     # can tell the two apart. See test_manual_pause_does_not_set_auto_paused.
     assert paused.auto_paused is True
+    assert paused.auto_pause_status == 429  # the code that fired, not the whole armed list
     assert paused.completed_lines == 0  # cut short almost immediately, nothing safely checkpointed yet
     assert paused.result_count >= 1  # at least the triggering 429 was recorded live
 

@@ -387,7 +387,8 @@ class JobManager:
                 return job
 
             job.pause_requested = True
-            job.auto_paused = False  # a manual pause is never the auto-pause-on-status feature
+            job.auto_paused = False
+            job.auto_pause_status = None  # a manual pause is never the auto-pause-on-status feature
             proc = self._processes.get(job_id)
             pty_proc = self._pty_processes.get(job_id)
             was_pending = job_id in self._pending
@@ -437,6 +438,7 @@ class JobManager:
             job.status = JobStatus.QUEUED
             job.pause_requested = False
             job.auto_paused = False
+            job.auto_pause_status = None
             job.error_reason = None
             job.stop_requested = False
             job.pid = None
@@ -1256,6 +1258,7 @@ class JobManager:
         with self._lock:
             job.pause_requested = True
             job.auto_paused = True
+            job.auto_pause_status = status
         if isinstance(proc, subprocess.Popen):
             self._terminate_with_escalation(proc)
         else:

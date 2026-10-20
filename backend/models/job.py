@@ -76,6 +76,8 @@ class FuzzJob:
     # two apart. Real, reported bug this fixes: pause_requested alone made
     # every manual pause show the auto-pause tag too.
     auto_paused: bool = False
+    # The one status code that triggered the auto-pause (pause_on_status is the whole armed list).
+    auto_pause_status: int | None = None
     error_reason: str | None = None
     result_count: int = 0
     wordlist_sources: list[str] = field(default_factory=list)
@@ -103,6 +105,7 @@ class FuzzJob:
             "stop_requested": self.stop_requested,
             "pause_requested": self.pause_requested,
             "auto_paused": self.auto_paused,
+            "auto_pause_status": self.auto_pause_status,
             "error_reason": self.error_reason,
             "result_count": self.result_count,
             "wordlist_sources": self.wordlist_sources,
@@ -132,6 +135,7 @@ class FuzzJob:
             stop_requested=data.get("stop_requested", False),
             pause_requested=data.get("pause_requested", False),
             auto_paused=data.get("auto_paused", False),
+            auto_pause_status=data.get("auto_pause_status"),
             error_reason=data.get("error_reason"),
             result_count=data.get("result_count", 0),
             wordlist_sources=data.get("wordlist_sources", []),

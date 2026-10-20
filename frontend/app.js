@@ -2495,8 +2495,10 @@ async function renderWorkspace(projectId, targetId, tab) {
                 // from that trigger firing -- an empty list here can only
                 // mean the former, since the trigger itself requires a
                 // non-empty list to ever fire at all).
-                const title = job.pause_on_status.length
-                    ? `Auto-paused: status ${job.pause_on_status.join(",")} detected`
+                const title = job.auto_pause_status
+                    ? `Auto-paused: status ${job.auto_pause_status} detected`
+                    : job.pause_on_status.length
+                    ? `Auto-paused: status ${job.pause_on_status.join(", ")} detected`
                     : "Auto-paused: the app was closed or crashed while this job was running";
                 statusCell.appendChild(h("span", { class: "hint", title, text: " ⚠ auto" }));
             }
