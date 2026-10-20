@@ -37,8 +37,9 @@ class MockDirsearchEngine(FuzzingEngine):
         *,
         wordlist_file: Path,
         output_base: Path,
+        log_file: Path | None = None,
     ) -> list[str]:
-        del output_base  # the mock runner doesn't write report files (yet)
+        del output_base, log_file  # the mock runner doesn't write report or log files (yet)
         argv = [
             self._python_executable,
             "-m",

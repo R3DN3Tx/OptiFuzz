@@ -2614,6 +2614,18 @@ async function renderWorkspace(projectId, targetId, tab) {
     // Hide rules live on the backend, per target (see results_service.set_hide_rules).
     // Filled in by loadHideRules() before the Results tab is shown.
     const resultsHideFilters = []; // [{status, size, parentPath, depth}]
+    // "N hidden by rules" next to the Hide rules button, so the gap between the Jobs count
+    // (everything dirsearch found) and the rows shown here is never a mystery.
+    const hiddenByRulesEl = h("span", { class: "hint results-hidden-count" });
+    function updateHiddenByRules() {
+        const hidden = resultsHideFilters.length
+            ? allResults.filter((r) => resultsHideFilters.some((f) => matchesHideFilter(r, f))).length
+            : 0;
+        hiddenByRulesEl.textContent = hidden ? `${hidden} hidden by rules` : "";
+        hiddenByRulesEl.title = hidden
+            ? "Found by dirsearch (and counted in Jobs) but hidden by your Hide rules. Open Hide rules to change them."
+            : "";
+    }
     const hideRulesUrl = `/api/projects/${projectId}/targets/${targetId}/results/hide-rules`;
     async function loadHideRules() {
         try {
@@ -3047,6 +3059,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // hides an ancestor, its still-visible descendants just render as
         // their own top-level entries instead of disappearing too.
         const visibleResults = allResults.filter(passesResultFilters);
+        updateHiddenByRules();
         const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult);
         lastResultsHierarchy = hierarchy;
 
@@ -3446,6 +3459,8 @@ async function renderWorkspace(projectId, targetId, tab) {
             renderResultsFilterUI();
         });
         bar.appendChild(h("div", { class: "filters-dropdown" }, [hideToggleBtn, hidePopup]));
+        updateHiddenByRules();
+        bar.appendChild(hiddenByRulesEl);
 
         filterBarContainer.appendChild(bar);
     }

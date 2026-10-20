@@ -17,6 +17,7 @@ from backend import platform_compat
 from backend.engine.base import FuzzingEngine
 from backend.events.bus import EventBus
 from backend.events.bus import event_bus as default_event_bus
+from backend.job_manager.dirsearch_log import RequestErrorSummary, summarize_request_errors
 from backend.job_manager.pty_output import LiveOutputParser
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
@@ -875,7 +876,16 @@ class JobManager:
         # drifting/double-counting.
         base_lines, base_requests = job.completed_lines, job.completed_requests
 
-        argv = self._engine.build_command(config, wordlist_file=wordlist_file, output_base=output_base)
+        # dirsearch's own log: the only place the reason of a failed request is ever written
+        # (fresh for every segment, so a stop is explained by THIS run's errors).
+        log_file = layout.job_wordlist_dir(job.project_id, job.target_id, job.id) / "dirsearch.log"
+        try:
+            log_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        argv = self._engine.build_command(
+            config, wordlist_file=wordlist_file, output_base=output_base, log_file=log_file
+        )
 
         # COLUMNS/LINES: the one thing dirsearch's own progress bar actually
         # needs to not silently no-op on a plain pipe -- see this module's
@@ -944,8 +954,12 @@ class JobManager:
         if job.pause_requested and not job.stop_requested:
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
         elif exit_code == 0 and not job.stop_requested:
-            reason = self._early_end_reason(config, progress_state["last"], progress_state["tail"])
+            failures = summarize_request_errors(log_file)
+            reason = self._early_end_reason(config, progress_state["last"], progress_state["tail"], failures)
             if reason:
+                if failures:
+                    # The progress bar only redraws when a response arrives, so it never showed these.
+                    job.errors = max(job.errors, failures.count)
                 # Keep the true position (not 100%) so Resume continues from there.
                 self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
                 done = job.completed_requests
@@ -963,7 +977,10 @@ class JobManager:
 
     @staticmethod
     def _early_end_reason(
-        config: DirsearchJobConfig, last_progress: ParsedProgress | None, stdout_tail: str
+        config: DirsearchJobConfig,
+        last_progress: ParsedProgress | None,
+        stdout_tail: str,
+        failures: RequestErrorSummary | None = None,
     ) -> str | None:
         """Why a dirsearch that exited 0 did not reach the end of its wordlist, or None.
 
@@ -980,7 +997,9 @@ class JobManager:
                 parts.append(f"it ended at {last_progress.index} of {last_progress.length} without saying why")
         if not parts:
             return None
-        if last_progress is not None and last_progress.errors:
+        if failures:
+            parts.append(failures.text)
+        elif last_progress is not None and last_progress.errors:
             parts.append(f"{last_progress.errors} request errors")
         return "; ".join(parts)
 

@@ -1232,7 +1232,7 @@ class _GivesUpEarlyEngine(MockDirsearchEngine):
         super().__init__()
         self._message = message
 
-    def build_command(self, config, *, wordlist_file, output_base):
+    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
         script = (
             "print('[#---------]  3%  9/300  5/s  job:1/1  errors:80')\n"
             f"print({self._message!r})\n"
@@ -1291,3 +1291,35 @@ def test_early_end_reason_needs_a_message_or_a_clearly_short_progress() -> None:
     assert "Skipped the target due to 429 status code" in JobManager._early_end_reason(
         config, done, "x\nSkipped the target due to 429 status code\n"
     )
+
+
+def test_request_error_summary_reads_what_dirsearch_logged(tmp_path: Path) -> None:
+    # Format taken from a real dirsearch --log run.
+    from backend.job_manager.dirsearch_log import summarize_request_errors
+
+    def failure(second: int, message: str, exception: str) -> str:
+        return (
+            f"2026-10-20 14:00:{second:02d},100 [ERROR] {message}\n"
+            "Traceback (most recent call last):\n"
+            '  File "x.py", line 1, in request\n'
+            "    await thing()\n"
+            f"{exception}\n\n"
+        )
+
+    log = tmp_path / "dirsearch.log"
+    log.write_text(
+        '2026-10-20 14:00:00,000 [INFO] "GET https://t/x" 200 - 10B\n'
+        + "".join(failure(i, "Read timed out", "httpx.ReadTimeout: Read timed out") for i in range(7))
+        + failure(9, "All connection attempts failed", "httpx.ConnectError: All connection attempts failed"),
+        encoding="utf-8",
+    )
+
+    summary = summarize_request_errors(log)
+
+    assert summary.count == 8
+    assert "7x ReadTimeout: Read timed out" in summary.text
+    assert "1x ConnectError: All connection attempts failed" in summary.text
+    assert summarize_request_errors(tmp_path / "missing.log") is None
+    clean = tmp_path / "clean.log"
+    clean.write_text('2026-10-20 14:00:00,000 [INFO] "GET https://t/x" 200 - 10B\n', encoding="utf-8")
+    assert summarize_request_errors(clean) is None

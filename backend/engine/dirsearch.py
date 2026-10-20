@@ -138,6 +138,7 @@ class DirsearchEngine(FuzzingEngine):
         *,
         wordlist_file: Path,
         output_base: Path,
+        log_file: Path | None = None,
     ) -> list[str]:
         wordlist_file = Path(wordlist_file)
         output_base = Path(output_base)
@@ -184,6 +185,10 @@ class DirsearchEngine(FuzzingEngine):
             argv += ["--config", str(_NO_DEFAULT_EXTENSIONS_CONFIG_PATH)]
         else:
             argv += ["--config", str(_DEFAULT_EXTENSIONS_CONFIG_PATH)]
+        if log_file is not None:
+            # dirsearch writes the reason of every failed request here (timeout, proxy error,
+            # connection reset, ...) and nowhere else; JobManager reads it back when a job stops early.
+            argv += ["--log", Path(log_file).as_posix()]
         if config.force_extensions:
             argv.append("-f")
         if config.http_method != "GET":

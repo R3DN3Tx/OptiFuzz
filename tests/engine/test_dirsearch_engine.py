@@ -329,8 +329,22 @@ def test_both_optifuzz_configs_match_the_vendored_one_except_skip_on_status_and_
         ours = settings(path)
         assert ours.pop("[general]skip-on-status") == ""
         assert ours.pop("[dictionary]default-extensions") == default_extensions
+        assert ours.pop("[output]log-file-size") == "20000000"  # dirsearch never rotates its --log by default
         expected = dict(base)
         expected.pop("[general]skip-on-status")
         expected.pop("[dictionary]default-extensions")
         assert ours == expected
 
+
+
+def test_build_command_passes_the_job_log_file_to_dirsearch() -> None:
+    engine = DirsearchEngine(python_executable="python.exe")
+    config = DirsearchJobConfig(url="https://target.local/")
+
+    argv = engine.build_command(
+        config, wordlist_file=Path("w.txt"), output_base=Path("outputs/j"), log_file=Path("jobs/j/dirsearch.log")
+    )
+    without = engine.build_command(config, wordlist_file=Path("w.txt"), output_base=Path("outputs/j"))
+
+    assert argv[argv.index("--log") + 1] == "jobs/j/dirsearch.log"
+    assert "--log" not in without

@@ -34,6 +34,7 @@ class FuzzingEngine(ABC):
         *,
         wordlist_file: Path,
         output_base: Path,
+        log_file: Path | None = None,
     ) -> list[str]:
         """Return the argv for one run segment of this job (the full
         wordlist on a fresh run, a remainder on a resume). Never a shell
