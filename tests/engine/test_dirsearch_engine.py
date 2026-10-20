@@ -5,6 +5,7 @@ import pytest
 
 from backend.engine import dirsearch as dirsearch_module
 from backend.engine.dirsearch import (
+    _DEFAULT_EXTENSIONS_CONFIG_PATH,
     _NO_DEFAULT_EXTENSIONS_CONFIG_PATH,
     DirsearchEngine,
     _default_python_executable,
@@ -101,10 +102,11 @@ def test_build_command_minimal_config(workspace_root) -> None:
         "--full-url",
         "-O", "plain,json",
         "-o", "outputs/job_001.{extension}",
+        # Always OptiFuzz's config (no 429 skip-on-status); the default_extensions_fallback
+        # app setting is unconfigured (None) here, so it is the one that keeps dirsearch's own
+        # default-extensions behavior untouched -- see the next tests.
+        "--config", str(_DEFAULT_EXTENSIONS_CONFIG_PATH),
     ]
-    # No --config either: the default_extensions_fallback app setting is
-    # unconfigured (None) in this test, which deliberately leaves dirsearch's
-    # own real default-extensions behavior untouched -- see the next tests.
     # Argv paths are always forward-slash, regardless of host OS -- makes the
     # Command Preview identical on Windows and a future Linux
     # build, and Windows accepts forward slashes natively anyway.
@@ -150,6 +152,7 @@ def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> No
         "-O", "plain,json",
         "-o", "outputs/job_002.{extension}",
         "-e", "php,html",
+        "--config", str(_DEFAULT_EXTENSIONS_CONFIG_PATH),
         "-f",
         "-X", "POST",
         "-H", "Authorization: Bearer secret; rm -rf /",
@@ -200,7 +203,7 @@ def test_build_command_default_extensions_fallback_custom_list_uses_a_plain_e_fl
         config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_004")
     )
 
-    assert "--config" not in argv
+    assert argv[argv.index("--config") + 1] == str(_DEFAULT_EXTENSIONS_CONFIG_PATH)
     assert argv[argv.index("-e") + 1] == "bak,old"
 
 
@@ -217,7 +220,7 @@ def test_build_command_default_extensions_fallback_never_overrides_a_jobs_own_ex
         config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_005")
     )
 
-    assert "--config" not in argv
+    assert argv[argv.index("--config") + 1] == str(_DEFAULT_EXTENSIONS_CONFIG_PATH)
     assert argv[argv.index("-e") + 1] == "php"
 
 
@@ -295,3 +298,39 @@ def test_job_config_rejects_an_unknown_default_header_and_round_trips_the_known_
 
     config = DirsearchJobConfig(url="https://t/", disabled_default_headers=("keep-alive",))
     assert config_from_dict(config_to_dict(config)) == config
+
+
+def test_both_optifuzz_configs_match_the_vendored_one_except_skip_on_status_and_default_extensions() -> None:
+    # dirsearch ships `skip-on-status = 429`: at the first 429 it ends the whole scan and exits 0 (a
+    # reported job "completed" at ~4%), before OptiFuzz's auto-pause could ever see the 429.
+    import dirsearch as dirsearch_package
+
+    vendored = Path(dirsearch_package.__file__).parent / "config.ini"
+
+    def settings(path: Path) -> dict[str, str]:
+        out, section = {}, ""
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("["):
+                section = line
+            elif "=" in line:
+                key, _, value = line.partition("=")
+                out[f"{section}{key.strip()}"] = value.strip()
+        return out
+
+    base = settings(vendored)
+    assert base["[general]skip-on-status"] == "429"  # the reason these files exist; re-check on upgrades
+    for path, default_extensions in (
+        (_NO_DEFAULT_EXTENSIONS_CONFIG_PATH, ""),
+        (_DEFAULT_EXTENSIONS_CONFIG_PATH, base["[dictionary]default-extensions"]),
+    ):
+        ours = settings(path)
+        assert ours.pop("[general]skip-on-status") == ""
+        assert ours.pop("[dictionary]default-extensions") == default_extensions
+        expected = dict(base)
+        expected.pop("[general]skip-on-status")
+        expected.pop("[dictionary]default-extensions")
+        assert ours == expected
+

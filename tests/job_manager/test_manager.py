@@ -1223,3 +1223,71 @@ def test_result_count_counts_each_finding_once(workspace_root, tmp_path: Path) -
     manager._flush_results(job.id, [up])
 
     assert manager.get_job(job.id).result_count == before + 2
+
+
+class _GivesUpEarlyEngine(MockDirsearchEngine):
+    """Prints a progress bar stopped at 3% and dirsearch's own give-up message, then exits 0."""
+
+    def __init__(self, message: str = "Too many request errors") -> None:
+        super().__init__()
+        self._message = message
+
+    def build_command(self, config, *, wordlist_file, output_base):
+        script = (
+            "print('[#---------]  3%  9/300  5/s  job:1/1  errors:80')\n"
+            f"print({self._message!r})\n"
+        )
+        return [sys.executable, "-c", script]
+
+
+def test_a_dirsearch_that_gives_up_with_exit_0_is_paused_at_its_real_position_not_completed(
+    workspace_root, tmp_path: Path
+) -> None:
+    # Reported: "41672/41672 completed" while only ~4% of the wordlist had been requested (dirsearch
+    # skips the target after 75 consecutive request errors and still exits 0).
+    manager = JobManager(_GivesUpEarlyEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/"), wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+
+    _wait_until(lambda: manager.get_job(job.id).status in (JobStatus.PAUSED, JobStatus.COMPLETED, JobStatus.FAILED))
+
+    final = manager.get_job(job.id)
+    assert final.status == JobStatus.PAUSED
+    assert final.completed_lines < 300
+    assert "Too many request errors" in final.error_reason
+    assert "NOT requested" in final.error_reason
+    assert "80 request errors" in final.error_reason
+
+
+def test_a_resumed_job_clears_the_stopped_early_reason(workspace_root, tmp_path: Path) -> None:
+    manager = JobManager(_GivesUpEarlyEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/"), wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED)
+    first_reason = manager.get_job(job.id).error_reason
+
+    manager.resume_job(job.id)
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED and manager.get_job(job.id).error_reason)
+
+    assert manager.get_job(job.id).error_reason is not None and first_reason is not None
+
+
+def test_early_end_reason_needs_a_message_or_a_clearly_short_progress() -> None:
+    from backend.parser.stdout_parser import ParsedProgress
+
+    config = DirsearchJobConfig(url="https://t/", threads=5)
+    done = ParsedProgress(percent=100, index=41672, length=41672, rate=100, errors=0)
+    almost = ParsedProgress(percent=99, index=41600, length=41672, rate=100, errors=0)  # within the 2% margin
+    short = ParsedProgress(percent=3, index=889, length=41672, rate=100, errors=0)
+
+    assert JobManager._early_end_reason(config, done, "") is None
+    assert JobManager._early_end_reason(config, almost, "") is None
+    assert JobManager._early_end_reason(config, None, "") is None
+    assert "889 of 41672" in JobManager._early_end_reason(config, short, "")
+    assert "Skipped the target due to 429 status code" in JobManager._early_end_reason(
+        config, done, "x\nSkipped the target due to 429 status code\n"
+    )

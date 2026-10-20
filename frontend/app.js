@@ -2500,6 +2500,18 @@ async function renderWorkspace(projectId, targetId, tab) {
                     : "Auto-paused: the app was closed or crashed while this job was running";
                 statusCell.appendChild(h("span", { class: "hint", title, text: " ⚠ auto" }));
             }
+            if (job.status === "PAUSED" && !job.auto_paused && job.error_reason) {
+                // dirsearch gave up on its own and exited normally (e.g. too many request
+                // errors in a row): the job is paused at its real position, not completed.
+                statusCell.appendChild(h("span", { class: "hint", title: "dirsearch stopped early", text: " ⚠ stopped early" }));
+                statusCell.appendChild(h("button", {
+                    type: "button",
+                    class: "icon-btn job-error-info",
+                    title: "Why did it stop?",
+                    text: "ⓘ",
+                    onclick: () => showModal("Job stopped early", job.error_reason),
+                }));
+            }
             if (job.status === "FAILED" && job.error_reason) {
                 statusCell.appendChild(h("button", {
                     type: "button",

@@ -33,6 +33,10 @@ from backend.persistence import app_settings
 # `default-extensions` blanked out -- never editing the vendored package's
 # own file (which a dirsearch upgrade could overwrite/reset).
 _NO_DEFAULT_EXTENSIONS_CONFIG_PATH = Path(__file__).resolve().parent / "optifuzz_dirsearch_config.ini"
+# The same file with dirsearch's own default-extensions kept. Both blank `skip-on-status`
+# (dirsearch ships 429): at the first 429 dirsearch silently ends the whole scan, before it
+# prints that response and with exit code 0, so OptiFuzz's auto-pause on 429/503 never saw it.
+_DEFAULT_EXTENSIONS_CONFIG_PATH = Path(__file__).resolve().parent / "optifuzz_dirsearch_config_default_ext.ini"
 
 
 def _default_python_executable() -> str:
@@ -173,10 +177,13 @@ class DirsearchEngine(FuzzingEngine):
             fallback = app_settings.get_default_extensions_fallback()
             if fallback:
                 argv += ["-e", fallback]
-            elif fallback == "":
-                argv += ["--config", str(_NO_DEFAULT_EXTENSIONS_CONFIG_PATH)]
-            # fallback is None: leave dirsearch's own default-extensions
-            # fallback untouched.
+        # Always an OptiFuzz config (see _DEFAULT_EXTENSIONS_CONFIG_PATH): the one with no default
+        # extensions when "use none" is chosen, otherwise the one that keeps dirsearch's own
+        # default-extensions fallback untouched (fallback None) or is overridden by -e above.
+        if not config.extensions and app_settings.get_default_extensions_fallback() == "":
+            argv += ["--config", str(_NO_DEFAULT_EXTENSIONS_CONFIG_PATH)]
+        else:
+            argv += ["--config", str(_DEFAULT_EXTENSIONS_CONFIG_PATH)]
         if config.force_extensions:
             argv.append("-f")
         if config.http_method != "GET":

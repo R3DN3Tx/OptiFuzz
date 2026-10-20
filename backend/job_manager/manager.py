@@ -10,7 +10,7 @@ import time
 import uuid
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from backend import platform_compat
@@ -105,6 +105,21 @@ DEFAULT_MAX_CONCURRENT_JOBS = 2
 STOP_GRACE_SECONDS = 5.0
 RESULT_BATCH_INTERVAL_SECONDS = 0.25
 STDERR_TAIL_LINES = 20
+
+# dirsearch can end a scan on its own and still exit with code 0: after
+# MAX_CONSECUTIVE_REQUEST_ERRORS (75) request errors in a row, a skip-on-status
+# hit, or the target time limit, it prints one of these messages and moves on
+# (with a single target, that is the end). Exit code 0 alone therefore does not
+# mean the wordlist was finished.
+EARLY_END_MESSAGE_RE = re.compile(
+    r"(Too many request errors|Skipped the target due to \d+ status code"
+    r"|Runtime for target exceeded[^\r\n]*|Canceled due to an error)"
+)
+STDOUT_TAIL_CHARS = 4096
+# The last progress dirsearch printed may trail the true end a little; only an end
+# further from the total than this (a fraction of it, or a few threads' worth) is
+# treated as "stopped early".
+EARLY_END_TOLERANCE_FRACTION = 0.02
 RAW_TAIL_CHARS_FOR_ERRORS = 4000  # PTY mode has no separate stderr (see below)
 PROGRESS_PUBLISH_MIN_INTERVAL_SECONDS = 0.2  # don't flood the SSE stream
 STDOUT_READ_CHUNK_SIZE = 4096
@@ -188,6 +203,9 @@ class JobManager:
         # Findings already counted in each running job's result_count, so the
         # Jobs count matches what Results shows (see _finding_key).
         self._counted_findings: dict[str, set[tuple]] = {}
+        # Why a job whose dirsearch exited 0 did not actually reach the end of its
+        # wordlist (see _early_end_reason); read once by _run_job.
+        self._early_ends: dict[str, str] = {}
 
         self._load_persisted_jobs()
 
@@ -417,6 +435,7 @@ class JobManager:
             job.status = JobStatus.QUEUED
             job.pause_requested = False
             job.auto_paused = False
+            job.error_reason = None
             job.stop_requested = False
             job.pid = None
             self._pending.append(job_id)
@@ -621,6 +640,11 @@ class JobManager:
                     elif exit_code != 0:
                         job.error_reason = error_reason or f"dirsearch exited with code {exit_code}"
                         final_status = JobStatus.FAILED
+                    elif job.id in self._early_ends:
+                        # dirsearch gave up on its own: PAUSED at the real position,
+                        # with the reason, so Resume can finish it (100% is not claimed).
+                        job.error_reason = self._early_ends.pop(job.id)
+                        final_status = JobStatus.PAUSED
                     else:
                         job.completed_lines = job.total_wordlist_lines
                         job.completed_requests = job.total_wordlist_requests
@@ -897,7 +921,7 @@ class JobManager:
             self._terminate_with_escalation(proc)
 
         stderr_lines: list[str] = []
-        progress_state: dict[str, ParsedProgress | None] = {"last": None}
+        progress_state: dict[str, Any] = {"last": None, "tail": ""}
         stdout_thread = threading.Thread(
             target=self._read_stdout,
             args=(job, proc, batcher, progress_state, lines, config, base_lines, base_requests),
@@ -919,11 +943,46 @@ class JobManager:
 
         if job.pause_requested and not job.stop_requested:
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+        elif exit_code == 0 and not job.stop_requested:
+            reason = self._early_end_reason(config, progress_state["last"], progress_state["tail"])
+            if reason:
+                # Keep the true position (not 100%) so Resume continues from there.
+                self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+                done = job.completed_requests
+                total = job.total_wordlist_requests
+                percent = f" ({round(done / total * 100)}%)" if total else ""
+                self._early_ends[job.id] = (
+                    f"dirsearch stopped early at about {done} of {total} requests{percent}: {reason}. "
+                    "The rest of the wordlist was NOT requested. Resume continues from where it stopped."
+                )
 
         error_reason = None
         if exit_code != 0:
             error_reason = "\n".join(stderr_lines[-STDERR_TAIL_LINES:]) or None
         return exit_code, error_reason
+
+    @staticmethod
+    def _early_end_reason(
+        config: DirsearchJobConfig, last_progress: ParsedProgress | None, stdout_tail: str
+    ) -> str | None:
+        """Why a dirsearch that exited 0 did not reach the end of its wordlist, or None.
+
+        Two independent signals: the message dirsearch prints when it gives up on a
+        target, and its own last progress being clearly short of its own total.
+        """
+        parts = []
+        found = EARLY_END_MESSAGE_RE.findall(stdout_tail)
+        if found:
+            parts.append(found[-1].strip())
+        if last_progress is not None and last_progress.length > 0:
+            tolerance = max(config.threads * 2, int(last_progress.length * EARLY_END_TOLERANCE_FRACTION))
+            if last_progress.index < last_progress.length - tolerance and not parts:
+                parts.append(f"it ended at {last_progress.index} of {last_progress.length} without saying why")
+        if not parts:
+            return None
+        if last_progress is not None and last_progress.errors:
+            parts.append(f"{last_progress.errors} request errors")
+        return "; ".join(parts)
 
     def _emit_parsed_results(
         self,
@@ -950,7 +1009,7 @@ class JobManager:
         job: FuzzJob,
         proc: subprocess.Popen,
         batcher: ResultBatcher[ParsedResult],
-        progress_state: dict[str, ParsedProgress | None],
+        progress_state: dict[str, Any],
         lines: list[str],
         config: DirsearchJobConfig,
         base_lines: int,
@@ -997,6 +1056,7 @@ class JobManager:
             if not data:
                 break
 
+            progress_state["tail"] = (progress_state["tail"] + data)[-STDOUT_TAIL_CHARS:]
             results, progress = parser.feed(data)
             self._emit_parsed_results(job, results, batcher, pause_statuses, proc)
 
