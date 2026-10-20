@@ -2614,17 +2614,18 @@ async function renderWorkspace(projectId, targetId, tab) {
     // Hide rules live on the backend, per target (see results_service.set_hide_rules).
     // Filled in by loadHideRules() before the Results tab is shown.
     const resultsHideFilters = []; // [{status, size, parentPath, depth}]
-    // "N hidden by rules" next to the Hide rules button, so the gap between the Jobs count
-    // (everything dirsearch found) and the rows shown here is never a mystery.
-    const hiddenByRulesEl = h("span", { class: "hint results-hidden-count" });
+    // Per parent folder: how many of its direct children the Hide rules hide, shown as
+    // "(10 · 3 hidden)" so the gap between the Jobs count (everything dirsearch found) and
+    // the rows shown here is never a mystery. Rebuilt on every render.
+    let hiddenChildCounts = new Map();
     function updateHiddenByRules() {
-        const hidden = resultsHideFilters.length
-            ? allResults.filter((r) => resultsHideFilters.some((f) => matchesHideFilter(r, f))).length
-            : 0;
-        hiddenByRulesEl.textContent = hidden ? `${hidden} hidden by rules` : "";
-        hiddenByRulesEl.title = hidden
-            ? "Found by dirsearch (and counted in Jobs) but hidden by your Hide rules. Open Hide rules to change them."
-            : "";
+        hiddenChildCounts = new Map();
+        if (!resultsHideFilters.length) return;
+        for (const r of allResults) {
+            if (!resultsHideFilters.some((f) => matchesHideFilter(r, f))) continue;
+            const parentKey = parentKeyOf(r.path);
+            if (parentKey !== null) hiddenChildCounts.set(parentKey, (hiddenChildCounts.get(parentKey) || 0) + 1);
+        }
     }
     const hideRulesUrl = `/api/projects/${projectId}/targets/${targetId}/results/hide-rules`;
     async function loadHideRules() {
@@ -2783,7 +2784,7 @@ async function renderWorkspace(projectId, targetId, tab) {
     // `parentPath` is this row's own immediate parent's path (null at
     // depth 0) -- used only to compute displayPath (the segment shown),
     // never for indentation itself (that's --depth, set on the cell below).
-    function buildResultRow(result, depth, childCount, parentPath, connector) {
+    function buildResultRow(result, depth, childCount, parentPath, connector, hiddenCount = 0) {
         // computeDisplaySegment -- no leading "/" ever (this is a relative
         // segment shown next to its own indentation/connector, the leading
         // slash was never actually needed to read it correctly), a
@@ -2837,8 +2838,13 @@ async function renderWorkspace(projectId, targetId, tab) {
         });
         attachCopyPathContextMenu(link, () => result.path);
         pathContent.appendChild(link);
-        if (childCount > 0) {
-            pathContent.appendChild(h("span", { class: "hint", text: ` (${childCount})` }));
+        if (childCount > 0 || hiddenCount > 0) {
+            const hiddenNote = hiddenCount > 0 ? `${childCount > 0 ? " · " : ""}${hiddenCount} hidden` : "";
+            const counts = h("span", {
+                class: "hint", text: ` (${childCount > 0 ? childCount : ""}${hiddenNote})`,
+            });
+            if (hiddenCount > 0) counts.title = "Found by dirsearch (and counted in Jobs) but hidden by your Hide rules. Open Hide rules to change them.";
+            pathContent.appendChild(counts);
         }
         const history = fuzzHistoryForPath(result.path);
         if (history.length) {
@@ -3037,7 +3043,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             // the ones above it continue it (├) -- otherwise "x" and "x/" both
             // drew └ and the line looked broken.
             const connector = treeConnectorFor(depth, prefix, isLastItem ? isLast : false);
-            resultsPlan.push(() => buildResultRow(item, depth, isLastItem ? childResultCount : 0, parentPath, connector));
+            resultsPlan.push(() => buildResultRow(item, depth, isLastItem ? childResultCount : 0, parentPath, connector, isLastItem ? (hiddenChildCounts.get(node.key) || 0) : 0));
             resultsPlanKeys.push(node.key);
             resultsPlanPaths.push(item.path);
             resultsPlanSeenKeys.push(item.seen_key);
@@ -3459,8 +3465,6 @@ async function renderWorkspace(projectId, targetId, tab) {
             renderResultsFilterUI();
         });
         bar.appendChild(h("div", { class: "filters-dropdown" }, [hideToggleBtn, hidePopup]));
-        updateHiddenByRules();
-        bar.appendChild(hiddenByRulesEl);
 
         filterBarContainer.appendChild(bar);
     }
