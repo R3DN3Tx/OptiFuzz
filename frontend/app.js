@@ -588,6 +588,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
         if (entry.pause_on_status && entry.pause_on_status.length) other.push(`auto pause ${entry.pause_on_status.join(",")}`);
         if (cfg.http_method && cfg.http_method !== "GET") other.push(cfg.http_method);
         if (cfg.proxy) other.push(`proxy ${cfg.proxy}`);
+        if (cfg.disabled_default_headers && cfg.disabled_default_headers.length) other.push(`no ${cfg.disabled_default_headers.join(", ")}`);
         if (cfg.extra_args && cfg.extra_args.length) other.push(String(cfg.extra_args));
 
         const cells = [];
@@ -3986,6 +3987,13 @@ async function fetchConcurrencyForNewFuzz(projectId, targetId) {
         return 2; // fall back to the default shown below
     }
 }
+async function fetchDefaultHeadersForNewFuzz() {
+    try {
+        return (await api("/api/dirsearch-default-headers")).headers;
+    } catch (e) {
+        return []; // the row just lists nothing
+    }
+}
 async function fetchFuzzDefaultsForNewFuzz(projectId, targetId) {
     try {
         return await api(`/api/projects/${projectId}/targets/${targetId}/fuzz-defaults`);
@@ -4008,10 +4016,11 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // fuzz) should still be remembered, and both the main New Fuzz section
     // AND every inline "Fuzz this path" launcher from Results/TREE share
     // this same function, so fixing it here covers both for free.
-    const [wordlistTree, currentConcurrency, fuzzDefaults] = await Promise.all([
+    const [wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders] = await Promise.all([
         fetchWordlistTreeForNewFuzz(),
         fetchConcurrencyForNewFuzz(projectId, targetId),
         fetchFuzzDefaultsForNewFuzz(projectId, targetId),
+        fetchDefaultHeadersForNewFuzz(),
     ]);
     const hasSavedDefaults = Object.keys(fuzzDefaults).length > 0;
 
@@ -4136,6 +4145,34 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     }
     customOptionsInput.addEventListener("input", autoGrowCustomOptions);
 
+    // dirsearch adds a few headers of its own to every request, and `-H` can
+    // only override them, never remove them -- a server answering over HTTP/2
+    // rejects its connection-specific "Keep-Alive", for one. Ticked = sent
+    // (dirsearch's own behavior); unticked ones are listed in
+    // disabled_default_headers and dropped when the job's dirsearch starts.
+    const savedDisabledHeaders = hasSavedDefaults ? fuzzDefaults.disabled_default_headers || [] : [];
+    const defaultHeaderBoxes = dirsearchDefaultHeaders.map((header) => {
+        const box = h("input", { type: "checkbox" });
+        box.checked = !savedDisabledHeaders.includes(header.name);
+        return { name: header.name, value: header.value, box };
+    });
+    function collectDisabledDefaultHeaders() {
+        return defaultHeaderBoxes.filter((entry) => !entry.box.checked).map((entry) => entry.name);
+    }
+    const defaultHeadersSummary = h("summary", { text: "Default headers" });
+    function refreshDefaultHeadersSummary() {
+        const off = collectDisabledDefaultHeaders().length;
+        defaultHeadersSummary.textContent = off ? `Default headers (${off} off)` : "Default headers";
+    }
+    refreshDefaultHeadersSummary();
+    const defaultHeadersGroup = h("details", { class: "default-headers-group" }, [
+        defaultHeadersSummary,
+        h("div", { class: "hint", text: "Headers dirsearch adds to every request on its own. Untick one to stop sending it (e.g. Keep-Alive, which a server answering over HTTP/2 rejects)." }),
+        ...defaultHeaderBoxes.map((entry) => h("label", { class: "checkbox-row" }, [
+            entry.box, document.createTextNode(` ${entry.name}: ${entry.value}`),
+        ])),
+    ]);
+
     const advanced = h("details", { class: "advanced" }, [
         h("summary", { text: "Advanced options" }),
         h("div", { class: "advanced-body" }, [
@@ -4183,6 +4220,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                         + "Appended after everything else.",
                 }),
             ]),
+            defaultHeadersGroup,
         ]),
     ]);
 
@@ -4232,6 +4270,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                     pause_on_status: collectPauseOnStatus(),
                     headers: collectHeaders(),
                     extra_args: customOptionsInput.value.trim(),
+                    disabled_default_headers: collectDisabledDefaultHeaders(),
                 }),
             });
         } catch (e) { /* best-effort -- just won't be remembered this time */ }
@@ -4243,6 +4282,10 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     customOptionsInput.addEventListener("input", saveFuzzDefaultsDebounced);
     forceExtCheckbox.addEventListener("change", saveFuzzDefaultsNow);
     authenticatedCheckbox.addEventListener("change", saveFuzzDefaultsNow);
+    defaultHeaderBoxes.forEach((entry) => entry.box.addEventListener("change", () => {
+        refreshDefaultHeadersSummary();
+        saveFuzzDefaultsNow();
+    }));
     wordlistPicker.onSelect(saveFuzzDefaultsNow);
     // Header rows come and go dynamically (+ Add header / the row's own ×)
     // -- a delegated listener on the whole group catches typing in any of
@@ -4289,6 +4332,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                     pause_on_status: pauseOnStatus,
                     headers,
                     extra_args: customOptionsInput.value.trim(),
+                    disabled_default_headers: collectDisabledDefaultHeaders(),
                 }),
             });
             await onSubmitted();

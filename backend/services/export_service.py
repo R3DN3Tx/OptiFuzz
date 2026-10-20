@@ -806,6 +806,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (entry.pause_on_status && entry.pause_on_status.length) other.push("auto pause " + entry.pause_on_status.join(","));
         if (cfg.http_method && cfg.http_method !== "GET") other.push(cfg.http_method);
         if (cfg.proxy) other.push("proxy " + cfg.proxy);
+        if (cfg.disabled_default_headers && cfg.disabled_default_headers.length) other.push("no " + cfg.disabled_default_headers.join(", "));
         if (cfg.extra_args && cfg.extra_args.length) other.push(String(cfg.extra_args));
         var cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
@@ -2062,6 +2063,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (entry.pause_on_status && entry.pause_on_status.length) other.push("auto pause " + entry.pause_on_status.join(","));
         if (cfg.http_method && cfg.http_method !== "GET") other.push(cfg.http_method);
         if (cfg.proxy) other.push("proxy " + cfg.proxy);
+        if (cfg.disabled_default_headers && cfg.disabled_default_headers.length) other.push("no " + cfg.disabled_default_headers.join(", "));
         if (cfg.extra_args && cfg.extra_args.length) other.push(String(cfg.extra_args));
         var cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));

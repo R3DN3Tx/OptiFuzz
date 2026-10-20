@@ -44,6 +44,8 @@ class CreateJobRequest(BaseModel):
     # Raw text, shell-style quoting (e.g. --header-file "my file.txt"),
     # split server-side with shlex.split() -- see api/jobs.py.
     extra_args: str = ""
+    # dirsearch's own default headers this job must not send (e.g. "keep-alive").
+    disabled_default_headers: list[str] = Field(default_factory=list)
     # Purely a saved-output-filename tag ("__AUTH" appended after the
     # built stem) -- never touches the actual dirsearch invocation/config,
     # just makes an authenticated fuzz's report visually distinguishable
@@ -80,6 +82,7 @@ class TargetFuzzDefaultsRequest(BaseModel):
     delay: float | None = None
     pause_on_status: list[int] = Field(default_factory=list)
     extra_args: str = ""
+    disabled_default_headers: list[str] = Field(default_factory=list)
     authenticated: bool = False
 
 

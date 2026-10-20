@@ -8,11 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend.api.deps import get_job_manager
 from backend.api.schemas import CreateJobRequest
 from backend.job_manager.manager import JobManager
-from backend.models.job_config import DirsearchJobConfig
+from backend.models.job_config import DIRSEARCH_DEFAULT_HEADERS, DirsearchJobConfig
 from backend.persistence import app_settings
 from backend.services import output_naming, target_service
 
 router = APIRouter(tags=["jobs"])
+
+
+@router.get("/api/dirsearch-default-headers")
+def dirsearch_default_headers() -> dict:
+    """The headers dirsearch adds on its own -- what New Fuzz lets you switch off per job."""
+    return {"headers": [{"name": n, "value": v} for n, v in DIRSEARCH_DEFAULT_HEADERS.items()]}
 
 
 @router.post("/api/projects/{project_id}/targets/{target_id}/jobs")
@@ -36,6 +42,13 @@ def create_job(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid custom options: {exc}") from exc
 
+    disabled_headers = tuple(dict.fromkeys(n.strip().lower() for n in body.disabled_default_headers))
+    unknown = [n for n in disabled_headers if n not in DIRSEARCH_DEFAULT_HEADERS]
+    if unknown:
+        raise HTTPException(
+            status_code=400, detail=f"Not a dirsearch default header: {', '.join(unknown)}"
+        )
+
     url = target_service.resolve_fuzz_url(target.base_url, body.path)
     config = DirsearchJobConfig(
         url=url,
@@ -54,6 +67,7 @@ def create_job(
         max_rate=body.max_rate,
         delay=body.delay,
         extra_args=extra_args,
+        disabled_default_headers=disabled_headers,
     )
 
     output_stem = output_naming.build_output_stem(

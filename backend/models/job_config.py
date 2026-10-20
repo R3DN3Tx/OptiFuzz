@@ -3,6 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# The headers dirsearch itself adds to every request (its lib/core/settings.py
+# DEFAULT_HEADERS), in its own order -- the New Fuzz form lists these.
+DIRSEARCH_DEFAULT_HEADERS = {
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36",
+    "accept": "*/*",
+    "accept-encoding": "*",
+    "keep-alive": "timeout=15, max=1000",
+    "cache-control": "max-age=0",
+}
+
 
 @dataclass(frozen=True)
 class DirsearchJobConfig:
@@ -34,10 +44,18 @@ class DirsearchJobConfig:
     # never shell-interpreted (subprocess.Popen always gets a list), so this
     # is exactly as safe as any other argv element, just user-controlled.
     extra_args: tuple[str, ...] = ()
+    # Names (lower-case, from DIRSEARCH_DEFAULT_HEADERS) of the headers
+    # dirsearch adds on its own that this job must NOT send. dirsearch merges
+    # its defaults under `-H`, so `-H` can only override one, never remove it;
+    # DirsearchEngine drops them in the spawned process instead.
+    disabled_default_headers: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.url:
             raise ValueError("DirsearchJobConfig.url is required")
+        unknown = set(self.disabled_default_headers) - DIRSEARCH_DEFAULT_HEADERS.keys()
+        if unknown:
+            raise ValueError(f"Not a dirsearch default header: {', '.join(sorted(unknown))}")
         if self.threads < 1:
             raise ValueError("DirsearchJobConfig.threads must be >= 1")
 
@@ -60,6 +78,7 @@ def config_to_dict(config: DirsearchJobConfig) -> dict[str, Any]:
         "max_rate": config.max_rate,
         "delay": config.delay,
         "extra_args": list(config.extra_args),
+        "disabled_default_headers": list(config.disabled_default_headers),
     }
 
 
@@ -81,4 +100,5 @@ def config_from_dict(data: dict[str, Any]) -> DirsearchJobConfig:
         max_rate=data.get("max_rate"),
         delay=data.get("delay"),
         extra_args=tuple(data.get("extra_args", ())),
+        disabled_default_headers=tuple(data.get("disabled_default_headers", ())),
     )

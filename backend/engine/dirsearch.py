@@ -110,6 +110,24 @@ class DirsearchEngine(FuzzingEngine):
         self._python_executable = python_executable or _default_python_executable()
         self._module = module
 
+    def _launch_args(self, config: DirsearchJobConfig) -> list[str]:
+        """`-m dirsearch`, or a tiny `-c` launcher when default headers are switched off.
+
+        dirsearch merges its DEFAULT_HEADERS under the user's, so the only way
+        to stop it sending one is to pop it from that dict before main() runs.
+        """
+        disabled = list(config.disabled_default_headers)
+        if not disabled:
+            return ["-m", self._module]
+        code = (
+            f"import {self._module}\n"
+            "from lib.core.settings import DEFAULT_HEADERS\n"
+            f"for name in {disabled!r}: DEFAULT_HEADERS.pop(name, None)\n"
+            f"from {self._module}.dirsearch import main\n"
+            "main()"
+        )
+        return ["-c", code]
+
     def build_command(
         self,
         config: DirsearchJobConfig,
@@ -121,8 +139,7 @@ class DirsearchEngine(FuzzingEngine):
         output_base = Path(output_base)
         argv = [
             self._python_executable,
-            "-m",
-            self._module,
+            *self._launch_args(config),
             "-u",
             config.url,
             "-w",

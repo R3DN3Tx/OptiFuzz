@@ -215,6 +215,12 @@ wordlist lines that contain `%EXT%`. Any other dirsearch flag goes in *Advanced 
 options*, written exactly as on the dirsearch command line (for example
 `--max-rate 50 --timeout 10`).
 
+dirsearch also adds a few headers of its own to every request (`User-Agent`, `Accept`,
+`Accept-Encoding`, `Keep-Alive`, `Cache-Control`), and `-H` can only override them. Some servers
+answering over HTTP/2 reject the connection-specific `Keep-Alive`. *Advanced options -> Default
+headers* lists them with a checkbox each: untick the ones this job must not send. Like the other
+options it is remembered per target as the default for new jobs.
+
 **Staying in control.** OptiFuzz is built for manual, step-by-step exploration: it never recurses
 on its own. When a result looks worth exploring you start that fuzz yourself, from the result or
 from the tree, so every request is a decision.

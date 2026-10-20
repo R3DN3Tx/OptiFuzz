@@ -247,3 +247,51 @@ def test_detect_version_against_real_installed_dirsearch() -> None:
     assert version is not None
     assert "dirsearch" in version.lower()
     assert "0.5.0" in version
+
+
+def test_build_command_without_disabled_headers_launches_the_plain_module() -> None:
+    engine = DirsearchEngine(python_executable="python.exe")
+    config = DirsearchJobConfig(url="https://target.local/")
+
+    argv = engine.build_command(
+        config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_006")
+    )
+
+    assert argv[1:3] == ["-m", "dirsearch"]
+
+
+def test_build_command_with_disabled_headers_pops_them_before_dirsearch_runs() -> None:
+    engine = DirsearchEngine(python_executable=sys.executable)
+    config = DirsearchJobConfig(url="https://target.local/", disabled_default_headers=("keep-alive",))
+
+    argv = engine.build_command(
+        config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_007")
+    )
+
+    assert argv[1] == "-c"
+    assert "['keep-alive']" in argv[2]
+    assert argv[3:5] == ["-u", "https://target.local/"]
+
+
+def test_disabled_headers_launcher_really_starts_dirsearch_and_drops_the_header() -> None:
+    import subprocess
+
+    config = DirsearchJobConfig(url="https://target.local/", disabled_default_headers=("keep-alive",))
+    args = DirsearchEngine(python_executable=sys.executable)._launch_args(config)
+    code = args[1].replace("main()", "import sys; print(sorted(DEFAULT_HEADERS)); sys.exit(0)")
+
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+
+    assert result.returncode == 0, result.stderr
+    assert "keep-alive" not in result.stdout
+    assert "cache-control" in result.stdout
+
+
+def test_job_config_rejects_an_unknown_default_header_and_round_trips_the_known_ones() -> None:
+    from backend.models.job_config import config_from_dict, config_to_dict
+
+    with pytest.raises(ValueError):
+        DirsearchJobConfig(url="https://t/", disabled_default_headers=("x-nope",))
+
+    config = DirsearchJobConfig(url="https://t/", disabled_default_headers=("keep-alive",))
+    assert config_from_dict(config_to_dict(config)) == config

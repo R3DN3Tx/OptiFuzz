@@ -939,3 +939,41 @@ def test_ui_prefs_round_trip_and_null_clears(client: TestClient) -> None:
     }
     client.put("/api/settings/ui-prefs", json={"key": "defaultWordlist", "value": None})
     assert "defaultWordlist" not in client.get("/api/settings/ui-prefs").json()
+
+
+def test_create_job_with_disabled_default_headers_stores_them_in_the_config(
+    client: TestClient, tmp_path: Path
+) -> None:
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets",
+        json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+    jobs_url = f"/api/projects/{project['id']}/targets/{target['id']}/jobs"
+    body = {"path": "/", "wordlist_files": [_wordlist(tmp_path)]}
+
+    job = client.post(jobs_url, json={**body, "disabled_default_headers": ["Keep-Alive"]}).json()
+    assert job["config"]["disabled_default_headers"] == ["keep-alive"]
+
+    plain = client.post(jobs_url, json=body).json()
+    assert plain["config"]["disabled_default_headers"] == []
+
+    bad = client.post(jobs_url, json={**body, "disabled_default_headers": ["x-nope"]})
+    assert bad.status_code == 400
+
+
+def test_dirsearch_default_headers_are_listed_and_remembered_as_target_defaults(
+    client: TestClient,
+) -> None:
+    listed = client.get("/api/dirsearch-default-headers").json()["headers"]
+    assert [h["name"] for h in listed][3] == "keep-alive"
+
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets",
+        json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+    url = f"/api/projects/{project['id']}/targets/{target['id']}/fuzz-defaults"
+    client.put(url, json={"disabled_default_headers": ["keep-alive"]})
+
+    assert client.get(url).json()["disabled_default_headers"] == ["keep-alive"]
