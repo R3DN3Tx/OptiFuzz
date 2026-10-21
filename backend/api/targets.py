@@ -128,6 +128,19 @@ def export_target(
     )
 
 
+@router.get("/{target_id}/tree-urls")
+def export_tree_urls(project_id: str, target_id: str) -> Response:
+    """A .txt with the absolute URL of every path in this target's TREE (one per line)."""
+    project = project_service.get_project(project_id)
+    target = target_service.get_target(project_id, target_id)
+    filename = export_service.tree_urls_filename(project.name, target.name)
+    return Response(
+        content=export_service.tree_urls_text(project_id, target_id),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.delete("/{target_id}", status_code=204)
 def delete_target(
     project_id: str,

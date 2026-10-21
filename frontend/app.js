@@ -2188,10 +2188,19 @@ async function renderWorkspace(projectId, targetId, tab) {
             : "";
         window.location.href = `/api/projects/${projectId}/targets/${targetId}/export${hideRulesParam}`;
     });
+    // TREE only: the absolute URL of every tree path as a .txt, to hand to other tools (scanners, crawlers).
+    const treeUrlsBtn = h("button", {
+        type: "button", class: "export-target-btn tree-urls-btn", text: "Export URLs (TXT)",
+        title: "Download a .txt with the absolute URL of every path in the tree, one per line.",
+    });
+    treeUrlsBtn.addEventListener("click", () => {
+        window.location.href = `/api/projects/${projectId}/targets/${targetId}/tree-urls`;
+    });
     const tabs = h("div", { class: "workspace-tabs" }, [
         h("a", { class: `workspace-tab${tab === "jobs" ? " active" : ""}`, href: workspaceBase, text: "JOBS" }),
         h("a", { class: `workspace-tab${tab === "results" ? " active" : ""}`, href: `${workspaceBase}/results`, text: "RESULTS" }),
         h("a", { class: `workspace-tab${tab === "tree" ? " active" : ""}`, href: `${workspaceBase}/tree`, text: "TREE" }),
+        ...(tab === "tree" ? [treeUrlsBtn] : []),
         exportBtn,
     ]);
     app.appendChild(tabs);

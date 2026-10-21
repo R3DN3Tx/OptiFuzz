@@ -190,3 +190,24 @@ def test_exports_embed_the_saved_hide_rules_and_results_filters(client: TestClie
         assert '"search": "needle-q"' in body
         assert '"statuses": "200,301"' in body
         assert '"status": "404"' in body
+
+
+def test_tree_urls_export_lists_every_tree_path_as_an_absolute_url(client: TestClient) -> None:
+    project, target = _make_project_and_target(client)
+    base = f"/api/projects/{project['id']}/targets/{target['id']}"
+    for path in ("/api/auth/", "/admin", "/login.php"):
+        client.post(f"{base}/tree", json={"path": path})
+
+    response = client.get(f"{base}/tree-urls")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.headers["content-disposition"].endswith('_OptiFuzz_Tree_URLs.txt"')
+    assert response.text.splitlines() == [
+        "https://export.example.com/",
+        "https://export.example.com/admin",
+        "https://export.example.com/api",
+        "https://export.example.com/api/auth/",
+        "https://export.example.com/login.php",
+    ]

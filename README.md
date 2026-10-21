@@ -246,7 +246,9 @@ and resume from their last checkpoint. Several jobs can run at once (the limit i
 
 **Sharing findings.** *Export target (HTML)*, at the top right of a target, saves a single HTML
 file with that target's jobs, results and tree. It has no dependencies, so you can open it anywhere,
-offline, and it stays interactive: you can still search and use the filters and hide rules. On a
+offline, and it stays interactive: you can still search and use the filters and hide rules. On the
+TREE tab, *Export URLs (TXT)* next to it downloads a plain `.txt` with the absolute URL of every tree
+path, one per line, ready to import into other tools (scanners, crawlers). On a
 project's targets page, *Export all targets* has a small arrow to choose between two
 formats. Choosing one only changes the button's label; the file is downloaded when you click the
 button itself, and your choice is remembered:

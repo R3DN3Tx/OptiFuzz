@@ -7,6 +7,7 @@ import json
 import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 from backend.job_manager.manager import JobManager
 from backend.models.timestamps import now_iso
@@ -48,6 +49,17 @@ def export_filename(project_name: str, target_name: str) -> str:
     # supersedes an earlier same-day {hostname}_OptiFuzz_report.html attempt).
     # Capital "Report" is deliberate, matching the exact format asked for.
     return f"{slugify(project_name)}_{slugify(target_name)}_OptiFuzz_Report.html"
+
+
+def tree_urls_filename(project_name: str, target_name: str) -> str:
+    return f"{slugify(project_name)}_{slugify(target_name)}_OptiFuzz_Tree_URLs.txt"
+
+
+def tree_urls_text(project_id: str, target_id: str) -> str:
+    """Every TREE path as an absolute URL, one per line, to feed other tools (scanners, crawlers)."""
+    base_url = target_service.get_target(project_id, target_id).base_url
+    urls = sorted({urljoin(base_url, node.path) for node in tree_service.list_nodes(project_id, target_id)})
+    return "".join(f"{url}\n" for url in urls)
 
 
 def build_target_export_data(project_id: str, target_id: str, job_manager: JobManager) -> dict[str, Any]:

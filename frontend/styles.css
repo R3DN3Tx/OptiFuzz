@@ -847,6 +847,7 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
     z-index: 15;
     background: var(--bg);
 }
+.tree-urls-btn + .export-target-btn { margin-left: 8px; }
 .export-target-btn {
     margin-left: auto;
     margin-bottom: 6px;
