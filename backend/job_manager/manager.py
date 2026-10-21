@@ -423,7 +423,7 @@ class JobManager:
         return len(active)
 
     def resume_job(self, job_id: str) -> FuzzJob:
-        """Resume a PAUSED job from `job.completed_lines` -- a freshly-sliced remainder wordlist, not a pre-existing
+        """Resume a PAUSED (or FAILED) job from `job.completed_lines` -- a freshly-sliced remainder wordlist, not a pre-existing
         chunk file (see `_run_job`). Only the small, thread-bounded window of
         requests that were in flight when the run was cut short gets redone,
         the same "never lose a word" guarantee as before, just far more
@@ -432,7 +432,7 @@ class JobManager:
             job = self._jobs.get(job_id)
             if job is None:
                 raise JobNotFoundError(job_id)
-            if job.status != JobStatus.PAUSED:
+            if job.status not in (JobStatus.PAUSED, JobStatus.FAILED):
                 return job
 
             job.status = JobStatus.QUEUED
@@ -965,6 +965,10 @@ class JobManager:
             job.pid = None
 
         if job.pause_requested and not job.stop_requested:
+            self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+        elif exit_code != 0 and not job.stop_requested:
+            # A crash or an error exit: keep the real position so a FAILED job can be resumed
+            # from where it got to instead of from the last periodic checkpoint.
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
         elif exit_code == 0 and not job.stop_requested:
             failures = summarize_request_errors(log_file)

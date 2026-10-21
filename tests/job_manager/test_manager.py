@@ -1324,3 +1324,23 @@ def test_request_error_summary_reads_what_dirsearch_logged(tmp_path: Path) -> No
     clean = tmp_path / "clean.log"
     clean.write_text('2026-10-20 14:00:00,000 [INFO] "GET https://t/x" 200 - 10B\n', encoding="utf-8")
     assert summarize_request_errors(clean) is None
+
+
+def test_a_failed_job_can_be_resumed_and_then_completes(workspace_root, tmp_path: Path) -> None:
+    engine = MockDirsearchEngine(fail=True)
+    manager = JobManager(engine, max_concurrent_jobs=2)
+    config = DirsearchJobConfig(url="https://target.local/", threads=5)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=config, wordlist_files=[_wordlist(tmp_path, 6)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.FAILED)
+    assert manager.get_job(job.id).error_reason
+
+    engine._fail = False  # the cause is gone (target back up, proxy restarted, ...)
+    manager.resume_job(job.id)
+
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.COMPLETED)
+    final = manager.get_job(job.id)
+    assert final.error_reason is None
+    assert final.completed_lines == 6

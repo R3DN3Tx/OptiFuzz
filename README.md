@@ -46,6 +46,7 @@ updates (see [Updating](#updating)).
 - **Pause, Resume and Stop** at any time. A paused job resumes from where it stopped, not from the
   start, and progress is checkpointed regularly, so an app crash does not lose a long run: jobs
   that were running come back as paused.
+  A failed job can be resumed too, from the position it had reached, once the cause is gone.
 - **Auto-pause on status codes** (for example `429` when a target is rate limiting you). OptiFuzz turns
   off dirsearch's own `skip-on-status = 429` default, which silently ends the whole scan at the first
   `429`; the job pauses instead, and you can resume it.

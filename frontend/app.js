@@ -2446,7 +2446,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             infoBtn.innerHTML = INFO_ICON_SVG;
 
             const actions = h("div", { style: "display:flex;gap:4px;align-items:center;" });
-            if (job.status === "PAUSED") {
+            if (job.status === "PAUSED" || job.status === "FAILED") {
                 actions.appendChild(h("button", {
                     class: "primary",
                     text: "▶ Resume",
