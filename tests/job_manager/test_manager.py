@@ -1388,3 +1388,29 @@ def test_early_end_reason_reads_any_error_dirsearch_prints_before_task_completed
     assert JobManager._early_end_reason(config, None, normal) is None
     only_results = "[09:28:11] Scanning: \n[09:28:12] 404 - 3B - http://x/a\n\nTask Completed\n"
     assert JobManager._early_end_reason(config, None, only_results) is None
+
+
+class _LogsFailuresEngine(MockDirsearchEngine):
+    """Finishes normally (progress bar says errors:0) but logged request failures with --log."""
+
+    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
+        record = "2026-10-21 09:23:32,976 [ERROR] \nTraceback (most recent call last):\nhttpx.ReadTimeout\n"
+        script = (
+            f"open({str(log_file)!r}, 'w').write({record!r} * 3)\n"
+            "print('[##########] 100%  300/300  5/s  job:1/1  errors:0')\n"
+            "print('Task Completed')\n"
+        )
+        return [sys.executable, "-c", script]
+
+
+def test_request_failures_in_the_dirsearch_log_count_as_job_errors(workspace_root, tmp_path: Path) -> None:
+    # Reported: errors showed 0 although requests had failed -- the progress bar only redraws on responses.
+    manager = JobManager(_LogsFailuresEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/"), wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status in (JobStatus.PAUSED, JobStatus.COMPLETED, JobStatus.FAILED))
+    final = manager.get_job(job.id)
+    assert final.status == JobStatus.COMPLETED, final.error_reason
+    assert final.errors == 3

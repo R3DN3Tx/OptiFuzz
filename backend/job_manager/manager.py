@@ -970,6 +970,12 @@ class JobManager:
             self._processes.pop(job.id, None)
             job.pid = None
 
+        # The progress bar only redraws when a response arrives, so request errors that kill or
+        # stall the run never reach job.errors through it: the log has them whatever the end.
+        failures = summarize_request_errors(log_file)
+        if failures:
+            job.errors = max(job.errors, failures.count)
+
         if job.pause_requested and not job.stop_requested:
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
         elif exit_code != 0 and not job.stop_requested:
@@ -977,12 +983,8 @@ class JobManager:
             # from where it got to instead of from the last periodic checkpoint.
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
         elif exit_code == 0 and not job.stop_requested:
-            failures = summarize_request_errors(log_file)
             reason = self._early_end_reason(config, progress_state["last"], progress_state["tail"], failures)
             if reason:
-                if failures:
-                    # The progress bar only redraws when a response arrives, so it never showed these.
-                    job.errors = max(job.errors, failures.count)
                 # Keep the true position (not 100%) so Resume continues from there.
                 self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
                 done = job.completed_requests
