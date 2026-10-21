@@ -50,6 +50,9 @@ updates (see [Updating](#updating)).
 - **Auto-pause on status codes** (for example `429` when a target is rate limiting you). OptiFuzz turns
   off dirsearch's own `skip-on-status = 429` default, which silently ends the whole scan at the first
   `429`; the job pauses instead, and you can resume it.
+  It also sees responses that dirsearch hides from its own output (for example the wildcard `403`
+  page its auto-calibration filters out): it reads them from dirsearch's request log and pauses on
+  the first one. The request that paused the job is sent again when you resume.
 - A job is never reported as complete when dirsearch quit early. If it gives up on its own (too many
   request errors, a time limit, ...), the job is **paused** at the position it really reached, with the
   reason one click away (*stopped early*), and Resume continues from there.

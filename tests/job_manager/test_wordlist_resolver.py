@@ -183,3 +183,15 @@ def test_estimate_requests_of_a_remainder_counts_paths_already_requested_before_
     done_lines, done_requests = find_resume_point(lines, 3, [], True)
     assert (done_lines, done_requests) == (1, 2)
     assert done_requests + estimate_requests(lines[done_lines:], [], True) == 5  # not 4
+
+
+def test_first_line_requesting_finds_the_line_behind_a_requested_path() -> None:
+    from backend.job_manager.wordlist_resolver import first_line_requesting
+
+    lines = ["admin", "# note", "/cgi-files", "login.php"]
+    assert first_line_requesting(lines, "cgi-files", [], False) == 2
+    assert first_line_requesting(lines, "cgi-files/", [], False) is None  # no -f: no directory variant
+    assert first_line_requesting(lines, "cgi-files/", [], True) == 2
+    assert first_line_requesting(lines, "admin.php", ["php"], True) == 0
+    assert first_line_requesting(lines, "login.php", [], False) == 3
+    assert first_line_requesting(lines, "nothing", [], True) is None

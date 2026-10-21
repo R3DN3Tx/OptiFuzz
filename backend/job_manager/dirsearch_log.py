@@ -26,6 +26,8 @@ _RECORD_START_RE = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d+ \[(?P<level>
 # A top-level exception line closing a traceback (httpx.ReadTimeout: ..., ssl.SSLError: ..., ...).
 _EXCEPTION_LINE_RE = re.compile(r"^(?:[\w.]+\.)?(?P<cls>\w*(?:Error|Exception|Timeout)\w*)(?:: (?P<msg>.*))?$")
 _URL_RE = re.compile(r"https?://\S+")
+# A request dirsearch logged, answered or not filtered out: [INFO] "GET https://host/path" 403 - 34280B
+_REQUEST_MESSAGE_RE = re.compile(r'^"[A-Z]+ (?P<url>\S+)" (?P<status>\d{3}) ')
 _MAX_TEXT = 140
 
 
@@ -33,6 +35,15 @@ _MAX_TEXT = 140
 class RequestErrorSummary:
     count: int
     text: str
+
+
+def parse_request_record(line: str) -> tuple[int, str] | None:
+    """(status, url) of a log line recording a response, or None for any other line."""
+    start = _RECORD_START_RE.match(line)
+    if not start or start.group("level") != "INFO":
+        return None
+    request = _REQUEST_MESSAGE_RE.match(start.group("msg"))
+    return (int(request.group("status")), request.group("url")) if request else None
 
 
 def _tidy(text: str) -> str:

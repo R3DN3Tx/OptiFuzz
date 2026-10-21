@@ -11,18 +11,19 @@ import uuid
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from backend import platform_compat
 from backend.engine.base import FuzzingEngine
 from backend.events.bus import EventBus
 from backend.events.bus import event_bus as default_event_bus
-from backend.job_manager.dirsearch_log import RequestErrorSummary, summarize_request_errors
+from backend.job_manager.dirsearch_log import RequestErrorSummary, parse_request_record, summarize_request_errors
 from backend.job_manager.pty_output import LiveOutputParser
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
     estimate_requests,
     find_resume_point,
+    first_line_requesting,
     load_wordlist_lines,
     resolve_wordlist,
     write_remainder_wordlist,
@@ -124,6 +125,8 @@ EARLY_END_MESSAGE_RE = re.compile(
 _RESULT_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
 _PROGRESS_TEXT_RE = re.compile(r"\d+%\s+\d+/\d+")
 STDOUT_TAIL_CHARS = 4096
+# How often the auto-pause watcher reads what dirsearch appended to its --log file.
+LOG_WATCH_INTERVAL_SECONDS = 0.2
 # The last progress dirsearch printed may trail the true end a little; only an end
 # further from the total than this (a fraction of it, or a few threads' worth) is
 # treated as "stopped early".
@@ -214,6 +217,8 @@ class JobManager:
         # Why a job whose dirsearch exited 0 did not actually reach the end of its
         # wordlist (see _early_end_reason); read once by _run_job.
         self._early_ends: dict[str, str] = {}
+        # job id -> URL of the response that auto-paused it (its wordlist line is requested again on resume)
+        self._auto_pause_urls: dict[str, str] = {}
 
         self._load_persisted_jobs()
 
@@ -445,6 +450,7 @@ class JobManager:
             job.pause_requested = False
             job.auto_paused = False
             job.auto_pause_status = None
+            self._auto_pause_urls.pop(job_id, None)
             job.error_reason = None
             job.stop_requested = False
             job.pid = None
@@ -961,10 +967,22 @@ class JobManager:
         )
         stdout_thread.start()
         stderr_thread.start()
+        log_stop = threading.Event()
+        log_thread = None
+        if job.pause_on_status:
+            log_thread = threading.Thread(
+                target=self._watch_log_for_pause_status,
+                args=(job, proc, log_file, set(job.pause_on_status), log_stop),
+                daemon=True,
+            )
+            log_thread.start()
 
         exit_code = proc.wait()
         stdout_thread.join()
         stderr_thread.join()
+        log_stop.set()
+        if log_thread is not None:
+            log_thread.join()
 
         with self._lock:
             self._processes.pop(job.id, None)
@@ -1064,7 +1082,7 @@ class JobManager:
                 {"job_id": job.id, "line": f"[{parsed.time}] {parsed.status} - {parsed.size} - {parsed.url}"},
             )
             batcher.add(parsed)
-            self._maybe_trigger_auto_pause(job, parsed.status, pause_statuses, proc)
+            self._maybe_trigger_auto_pause(job, parsed.status, pause_statuses, proc, parsed.url)
 
     def _read_stdout(
         self,
@@ -1276,7 +1294,31 @@ class JobManager:
             error_reason = CONTROL_SEQUENCE_RE.sub("", raw_tail).strip()[-2000:] or None
         return exit_code, error_reason
 
-    def _maybe_trigger_auto_pause(self, job: FuzzJob, status: int, pause_statuses: set[int], proc) -> None:
+    def _watch_log_for_pause_status(
+        self, job: FuzzJob, proc: subprocess.Popen, log_file: Path, pause_statuses: set[int], stop: threading.Event,
+    ) -> None:
+        """Auto-pause on responses dirsearch never prints: its filters (wildcard auto-calibration,
+        status filters) drop them from stdout, but its --log records every request it made."""
+        position = 0
+        pending = b""
+        while not stop.wait(LOG_WATCH_INTERVAL_SECONDS):
+            try:
+                with open(log_file, "rb") as handle:
+                    handle.seek(position)
+                    data = handle.read()
+            except OSError:
+                continue  # dirsearch has not created the log yet
+            position += len(data)
+            *complete, pending = (pending + data).split(b"\n")
+            for raw in complete:
+                record = parse_request_record(raw.decode("utf-8", errors="replace"))
+                if record and record[0] in pause_statuses:
+                    self._maybe_trigger_auto_pause(job, record[0], pause_statuses, proc, record[1])
+                    return
+
+    def _maybe_trigger_auto_pause(
+        self, job: FuzzJob, status: int, pause_statuses: set[int], proc, url: str | None = None,
+    ) -> None:
         if not (pause_statuses and status in pause_statuses):
             return
         if job.pause_requested or job.stop_requested:
@@ -1289,6 +1331,8 @@ class JobManager:
             job.pause_requested = True
             job.auto_paused = True
             job.auto_pause_status = status
+            if url:
+                self._auto_pause_urls[job.id] = url
         if isinstance(proc, subprocess.Popen):
             self._terminate_with_escalation(proc)
         else:
@@ -1315,6 +1359,28 @@ class JobManager:
         """
         job.completed_lines, job.completed_requests = self._compute_checkpoint(
             lines, config, last_progress, base_lines, base_requests,
+        )
+        trigger_url = self._auto_pause_urls.pop(job.id, None)
+        if trigger_url and job.auto_paused:
+            self._repeat_auto_pause_trigger(job, trigger_url, lines, config, base_lines, base_requests)
+
+    def _repeat_auto_pause_trigger(
+        self, job: FuzzJob, url: str, lines: list[str], config: DirsearchJobConfig, base_lines: int, base_requests: int,
+    ) -> None:
+        """Makes sure the request that auto-paused the job (a 429, a 403 from a block...) is
+        requested again on resume: its answer is not a real result of that path."""
+        base_path = urlparse(config.url).path.rstrip("/") + "/"
+        path = unquote(urlparse(url).path)
+        if not path.startswith(base_path):
+            return  # not a wordlist path (e.g. dirsearch's own calibration probe)
+        index = first_line_requesting(
+            lines[base_lines:], path[len(base_path):], list(config.extensions), config.force_extensions,
+        )
+        if index is None or base_lines + index >= job.completed_lines:
+            return
+        job.completed_lines = base_lines + index
+        job.completed_requests = base_requests + estimate_requests(
+            lines[base_lines : base_lines + index], list(config.extensions), config.force_extensions,
         )
 
     def _publish_progress(self, job: FuzzJob, progress: ParsedProgress, base_requests: int) -> None:

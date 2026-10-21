@@ -145,6 +145,26 @@ def _estimate_requests(lines: list[str], extensions: list[str], force_extensions
     return count
 
 
+def _line_variants(raw_line: str, extensions: list[str], force_extensions: bool) -> list[str]:
+    """The paths dirsearch requests for one raw wordlist line (before dedup against earlier lines)."""
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return []
+    line = line.lstrip("/")
+    lower = line.lower()
+
+    if "%ext%" in lower:
+        return [lower.replace("%ext%", ext) for ext in extensions] or [line]
+    if force_extensions and "." not in line and not line.endswith("/"):
+        # dirsearch always keeps the line itself too (verified against real
+        # dirsearch output -- an earlier version of this function missed
+        # that, wrongly treating "add the line" and "add the -f variants" as
+        # alternatives instead of both happening): {line, line/, line.ext1,
+        # line.ext2, ...}.
+        return [line, line + "/"] + [f"{line}.{ext}" for ext in extensions]
+    return [line]
+
+
 def _count_line_requests(
     raw_line: str, extensions: list[str], force_extensions: bool, seen: set[str],
 ) -> int:
@@ -152,27 +172,22 @@ def _count_line_requests(
     a `seen` set shared across the whole walk (a duplicate expanded path --
     from this line or an earlier one -- only ever counts once, matching
     dirsearch's own OrderedSet-based dictionary generation)."""
-    line = raw_line.strip()
-    if not line or line.startswith("#"):
-        return 0
-    line = line.lstrip("/")
-    lower = line.lower()
-
-    if "%ext%" in lower:
-        variants = [lower.replace("%ext%", ext) for ext in extensions] or [line]
-    elif force_extensions and "." not in line and not line.endswith("/"):
-        # dirsearch always keeps the line itself too (verified against real
-        # dirsearch output -- an earlier version of this function missed
-        # that, wrongly treating "add the line" and "add the -f variants" as
-        # alternatives instead of both happening): {line, line/, line.ext1,
-        # line.ext2, ...}.
-        variants = [line, line + "/"] + [f"{line}.{ext}" for ext in extensions]
-    else:
-        variants = [line]
-
     count = 0
-    for variant in variants:
+    for variant in _line_variants(raw_line, extensions, force_extensions):
         if variant not in seen:
             seen.add(variant)
             count += 1
     return count
+
+
+def first_line_requesting(
+    lines: list[str], path: str, extensions: list[str], force_extensions: bool,
+) -> int | None:
+    """Index in `lines` of the first one that makes dirsearch request `path` (relative to the
+    job's base URL, e.g. "cgi-files/"), or None when no line produces it."""
+    wanted = path.lstrip("/")
+    extensions = list(extensions or [])
+    for index, raw_line in enumerate(lines):
+        if wanted in _line_variants(raw_line, extensions, force_extensions):
+            return index
+    return None

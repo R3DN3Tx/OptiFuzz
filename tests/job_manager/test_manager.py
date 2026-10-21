@@ -1414,3 +1414,51 @@ def test_request_failures_in_the_dirsearch_log_count_as_job_errors(workspace_roo
     final = manager.get_job(job.id)
     assert final.status == JobStatus.COMPLETED, final.error_reason
     assert final.errors == 3
+
+
+class _FilteredBlockEngine(MockDirsearchEngine):
+    """Logs 200s, then a 403 on word10 that dirsearch's filters hide from stdout, while its progress
+    bar already says 50 requests were dispatched."""
+
+    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
+        script = (
+            "import time\n"
+            f"log = open({str(log_file)!r}, 'w')\n"
+            "for i in range(10):\n"
+            "    log.write(f'2026-10-21 10:00:0{i},100 [INFO] \"GET https://target.local/word{i}\" 200 - 10B\\n')\n"
+            "log.write('2026-10-21 10:00:11,100 [INFO] \"GET https://target.local/word10\" 403 - 34280B\\n')\n"
+            "log.flush()\n"
+            "print('[##########] 17%  50/300  5/s  job:1/1  errors:0', flush=True)\n"
+            "time.sleep(60)\n"
+        )
+        return [sys.executable, "-c", script]
+
+
+def test_auto_pause_sees_a_status_dirsearch_filtered_out_of_stdout_and_repeats_that_request(
+    workspace_root, tmp_path: Path
+) -> None:
+    # Reported: 403 was armed but the job never paused; Burp showed 403s that dirsearch's
+    # auto-calibration hid from stdout. Its --log has every response, and the answer that paused the
+    # job is not trustworthy, so its wordlist line must be requested again on resume.
+    manager = JobManager(_FilteredBlockEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/", threads=5),
+        wordlist_files=[_wordlist(tmp_path, 300)], pause_on_status=[403],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED, timeout=15)
+    paused = manager.get_job(job.id)
+    assert paused.auto_paused is True
+    assert paused.auto_pause_status == 403
+    assert paused.completed_lines == 10  # word10 (the 403) is the first one requested again
+
+
+def test_parse_request_record_reads_status_and_url_of_responses_only() -> None:
+    from backend.job_manager.dirsearch_log import parse_request_record
+
+    ok = '2026-10-21 10:39:31,202 [INFO] "GET https://www.x.com/api/auth/~tmp" 403 - 34280B'
+    assert parse_request_record(ok) == (403, "https://www.x.com/api/auth/~tmp")
+    assert parse_request_record(ok + "\r") == (403, "https://www.x.com/api/auth/~tmp")
+    assert parse_request_record('2026-10-21 10:39:31,213 [DEBUG] "https://www.x.com/a" filtered by auto-calibration') is None
+    assert parse_request_record("2026-10-21 10:32:17,341 [ERROR] ") is None
+    assert parse_request_record("Traceback (most recent call last):") is None
