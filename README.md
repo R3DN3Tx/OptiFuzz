@@ -84,6 +84,8 @@ updates (see [Updating](#updating)).
 - A single, self-contained **HTML report** for a target (tree, results, jobs). It opens offline with
   no backend and is **interactive**: search, filters and hide rules keep working inside the file.
 - Export every target of a project at once, as a `.zip` of reports or one combined HTML page.
+- A plain **`.txt` with the absolute URL of every tree path**, one per line (TREE tab), to import into
+  other tools such as scanners or crawlers.
 - Optionally mirror dirsearch's raw output (the `.txt` file of every job) into a folder of your
   choice, with one subfolder per target. It is a convenience copy, set per project in its
   *Outputs mirror* section; the original files stay where they are.
