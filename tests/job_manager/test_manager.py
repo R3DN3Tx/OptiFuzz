@@ -1344,3 +1344,30 @@ def test_a_failed_job_can_be_resumed_and_then_completes(workspace_root, tmp_path
     final = manager.get_job(job.id)
     assert final.error_reason is None
     assert final.completed_lines == 6
+
+
+def test_resuming_a_job_whose_host_is_down_keeps_its_progress(workspace_root, tmp_path: Path) -> None:
+    # A paused job with progress, resumed while the host is unreachable, fails at the pre-flight
+    # check WITHOUT touching its checkpoint: the next Resume continues from there, not from line 0.
+    engine = _UnreachableEngine()
+    manager = JobManager(engine, max_concurrent_jobs=2)
+    config = DirsearchJobConfig(url="https://target.local/", threads=5)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=config, wordlist_files=[_wordlist(tmp_path, 10)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.FAILED)
+    live = manager.get_job(job.id)
+    live.status = JobStatus.PAUSED  # as if it had been paused after real progress
+    live.completed_lines, live.completed_requests = 4, 4
+
+    manager.resume_job(job.id)
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.FAILED)
+    failed = manager.get_job(job.id)
+    assert failed.error_reason == "Unreachable host"
+    assert (failed.completed_lines, failed.completed_requests) == (4, 4)
+
+    engine.is_target_reachable = lambda url: True  # the host is back
+    manager.resume_job(job.id)
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.COMPLETED)
+    assert manager.get_job(job.id).completed_lines == 10
