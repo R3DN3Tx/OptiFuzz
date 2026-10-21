@@ -1371,3 +1371,20 @@ def test_resuming_a_job_whose_host_is_down_keeps_its_progress(workspace_root, tm
     manager.resume_job(job.id)
     _wait_until(lambda: manager.get_job(job.id).status == JobStatus.COMPLETED)
     assert manager.get_job(job.id).completed_lines == 10
+
+
+def test_early_end_reason_reads_any_error_dirsearch_prints_before_task_completed() -> None:
+    # Reproduced with a real dirsearch against a server that resets connections: it printed
+    # "Failed to read response body: <url>" then "Task Completed" and exited 0 after 8 requests.
+    config = DirsearchJobConfig(url="https://t/", threads=5)
+    aborted = (
+        "Target: http://x/\n\n\n[09:28:11] Scanning: \n\n"
+        "Failed to read response body: http://x/word1.php\n\nTask Completed\n"
+    )
+    assert "Failed to read response body: http://x/word1.php" in JobManager._early_end_reason(config, None, aborted)
+
+    # A normal end: the last thing before "Task Completed" is a result or a progress bar.
+    normal = "[09:28:11] 200 -  10B  - http://x/a\n[#####] 100% 400/400 5/s job:1/1 errors:0\n\nTask Completed\n"
+    assert JobManager._early_end_reason(config, None, normal) is None
+    only_results = "[09:28:11] Scanning: \n[09:28:12] 404 - 3B - http://x/a\n\nTask Completed\n"
+    assert JobManager._early_end_reason(config, None, only_results) is None

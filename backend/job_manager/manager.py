@@ -117,6 +117,12 @@ EARLY_END_MESSAGE_RE = re.compile(
     r"(Too many request errors|Skipped the target due to \d+ status code"
     r"|Runtime for target exceeded[^\r\n]*|Canceled due to an error)"
 )
+# Any request error dirsearch cannot absorb (e.g. "Failed to read response body: <url>" when
+# the server resets a connection) aborts the scan the same way: it prints the error as the
+# last thing before "Task Completed" and exits 0. Such a line is neither a result
+# ("[hh:mm:ss] 200 - ...") nor a progress bar ("12% 123/400").
+_RESULT_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
+_PROGRESS_TEXT_RE = re.compile(r"\d+%\s+\d+/\d+")
 STDOUT_TAIL_CHARS = 4096
 # The last progress dirsearch printed may trail the true end a little; only an end
 # further from the total than this (a fraction of it, or a few threads' worth) is
@@ -993,6 +999,22 @@ class JobManager:
         return exit_code, error_reason
 
     @staticmethod
+    def _error_before_task_completed(stdout_tail: str) -> str | None:
+        """The error line dirsearch printed right before "Task Completed", if what precedes
+        it is not an ordinary result or progress line (see _RESULT_LINE_RE)."""
+        head, found, _ = stdout_tail.rpartition("Task Completed")
+        if not found:
+            return None
+        for line in reversed(re.split(r"[\r\n]+", head)):
+            line = line.strip()
+            if not line:
+                continue
+            if _RESULT_LINE_RE.match(line) or _PROGRESS_TEXT_RE.search(line):
+                return None
+            return line[:300]
+        return None
+
+    @staticmethod
     def _early_end_reason(
         config: DirsearchJobConfig,
         last_progress: ParsedProgress | None,
@@ -1008,6 +1030,8 @@ class JobManager:
         found = EARLY_END_MESSAGE_RE.findall(stdout_tail)
         if found:
             parts.append(found[-1].strip())
+        elif (aborted_by := JobManager._error_before_task_completed(stdout_tail)):
+            parts.append(aborted_by)
         if last_progress is not None and last_progress.length > 0:
             tolerance = max(config.threads * 2, int(last_progress.length * EARLY_END_TOLERANCE_FRACTION))
             if last_progress.index < last_progress.length - tolerance and not parts:
