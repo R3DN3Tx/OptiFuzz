@@ -8,8 +8,6 @@ It runs entirely on your machine, on **Windows and Linux**. Nothing is sent anyw
 no cloud, and the app only listens on `127.0.0.1`. It only goes online when you ask it to check for
 updates (see [Updating](#updating)).
 
-![Jobs: queued, running, paused, stopped, failed and completed fuzzes for one target](docs/images/jobs.png)
-
 > **Legal notice.** OptiFuzz is provided for educational purposes and for security testing of
 > systems you own or have explicit authorisation to test. Using it against anything else may be
 > illegal. The author accepts no responsibility for misuse. Read the full
@@ -17,80 +15,53 @@ updates (see [Updating](#updating)).
 
 ## Contents
 
-- [Features](#features)
+- [Main features](#main-features)
 - [Installation](#installation)
 - [Updating](#updating)
-- [Quick start](#quick-start)
 - [Trying it safely: the demo target](#trying-it-safely-the-demo-target)
-- [Using OptiFuzz](#using-optifuzz)
-- [Settings](#settings)
-- [How it works](#how-it-works)
+- [User guide](docs/USAGE.md)
 - [Development and tests](#development-and-tests)
 - [Troubleshooting](#troubleshooting)
 - [Credits](#credits)
 - [Legal disclaimer](#legal-disclaimer)
 - [License](#license)
 
-## Features
+## Main features
 
-**Organisation**
-- One installation, many **projects**, each with several **targets** (hosts). Everything a target
-  produces (jobs, results, tree, notes, reports) stays isolated from every other target.
-- Per-target form defaults are remembered: wordlist, extensions, threads, headers and options.
+The essentials. Every feature, option and screen is explained in the
+**[user guide](docs/USAGE.md)**.
 
-**Fuzzing**
-- Starts dirsearch jobs from a form: path, wordlist, extensions, threads, *force extensions*,
-  extra headers, any other dirsearch flag as free text, and an optional *authenticated* tag that
-  appends `__AUTH` to the file name of the job's raw dirsearch output (its `.txt` file), so
-  authenticated runs are easy to tell apart.
-- **Pause, Resume and Stop** at any time. A paused job resumes from where it stopped, not from the
-  start, and progress is checkpointed regularly, so an app crash does not lose a long run: jobs
-  that were running come back as paused.
-  A failed job can be resumed too, from the position it had reached, once the cause is gone.
-- **Auto-pause on status codes** (for example `429` when a target is rate limiting you). OptiFuzz turns
-  off dirsearch's own `skip-on-status = 429` default, which silently ends the whole scan at the first
-  `429`; the job pauses instead, and you can resume it.
-  It also sees responses that dirsearch hides from its own output (for example the wildcard `403`
-  page its auto-calibration filters out): it reads them from dirsearch's request log and pauses on
-  the first one. The request that paused the job is sent again when you resume, or skipped if you
-  untick *Repeat the word that paused it* in the gear next to Resume (useful when that word really
-  answers `403` and you were not blocked). The choice is remembered per job.
-- A job is never reported as complete when dirsearch quit early. If it gives up on its own (too many
-  request errors, a time limit, ...), the job is **paused** at the position it really reached, with the
-  reason one click away (*stopped early*), and Resume continues from there.
-- A per-target limit on concurrent jobs, with a queue for the rest.
-- Live progress (percentage, request rate, errors, elapsed time) for every running job.
-- A **failed** job is not a **stopped** one: failures keep their reason, one click away.
-- Every job keeps the exact options it ran with. dirsearch's own raw output for each job is kept on
-  disk as a readable `.txt` file in the target's `outputs` folder.
+- **Projects and targets.** One installation holds many projects, each with several targets (hosts).
+  Everything a target produces stays isolated from every other target.
+- **Fuzzing you control.** Start dirsearch jobs from a form with a wordlist, extensions, headers and any
+  other dirsearch flag. **Pause, resume and stop** at any time; a paused job continues from where it
+  stopped, and an app crash does not lose a long run.
+- **Auto-pause.** A job pauses when the target answers a status code you armed (for example `429` or a
+  `403` block), and you choose whether Resume repeats that word or moves on.
+- **Honest job states.** A job is never reported as complete when dirsearch quit early: it is paused at
+  the position it reached, with the reason one click away. Live progress, rate, errors and elapsed time.
+- **Readable results.** Colour-coded status codes, a **NEW** badge on what you have not seen yet,
+  search, filters and persistent hide rules to cut noise.
 
-**Results**
-- Status codes colour-coded by class at a glance (1xx, 2xx, 3xx, 4xx, 5xx, with 401 and 403
-  highlighted), size, and redirect destination.
-- A **NEW** badge on everything you have not seen yet, so a re-run shows only what changed for you.
-- Search, filters (status, size, parent path) and persistent **hide rules** to cut noise.
-- One click to **fuzz deeper** from any result, or to open it in your browser of choice.
+![Jobs: queued, running, paused, stopped, failed and completed fuzzes for one target](docs/images/jobs.png)
 
 ![Results grouped by directory, with status codes and NEW markers](docs/images/results.png)
 
-**FUZZ TREE** (the map you curate)
-- The tree is yours: it is **not** filled automatically. Add paths by hand or promote results
-  into it, so it contains what matters.
-- Mark paths as **interesting**, attach **notes**, and see at a glance which paths have already
-  been fuzzed, with which wordlists.
-- Fuzz any node, with no automatic recursion: you decide what to explore next.
+- **A tree you curate.** The FUZZ TREE is not filled automatically: you add the paths that matter, star
+  the interesting ones, write notes, and fuzz any node deeper. OptiFuzz never recurses on its own.
 
 ![The tree with notes and interesting markers](docs/images/tree.png)
 
-**Export**
-- A single, self-contained **HTML report** for a target (tree, results, jobs). It opens offline with
-  no backend and is **interactive**: search, filters and hide rules keep working inside the file.
-- Export every target of a project at once, as a `.zip` of reports or one combined HTML page.
-- A plain **`.txt` with the absolute URL of every tree path**, one per line (TREE tab), to import into
-  other tools such as scanners or crawlers.
-- Optionally mirror dirsearch's raw output (the `.txt` file of every job) into a folder of your
-  choice, with one subfolder per target. It is a convenience copy, set per project in its
-  *Outputs mirror* section; the original files stay where they are.
+- **Reports you can share.** A self-contained, interactive HTML report per target (it works offline),
+  every target of a project at once, a plain list of tree URLs for other tools, and an optional mirror
+  of dirsearch's raw output.
+
+> ### 📖 Full documentation
+>
+> **[User guide: everything OptiFuzz does, screen by screen →](docs/USAGE.md)**
+>
+> Getting started, every form field and option, job states, auto-pause, Results filters and hide
+> rules, the tree, exports, settings and where your data lives.
 
 ## Installation
 
@@ -186,24 +157,6 @@ the repository again, and your projects, targets, jobs and wordlists are kept (y
 outside the program folder). It works on any copy installed with `git clone`; if you changed tracked
 files yourself, it refuses to overwrite them.
 
-## Quick start
-
-1. Start OptiFuzz.
-2. Create a **Project**, then add a **Target** with its base URL (for example `https://target.example`).
-3. On the **JOBS** tab, enter a path (`/`), pick a wordlist, optionally add extensions
-   (`php,html`) and click **Fuzz**.
-4. Watch it run; open **RESULTS** when hits appear. Use the lightning icon on a result to fuzz
-   inside it, or the tree icon (*Add to TREE*) to promote it to the **TREE**.
-5. In the **TREE**, mark what looks interesting and write down why.
-6. Click **Export target (HTML)** when you want a report.
-
-The repository ships one example wordlist, `wordlists/test_wordlist.txt`. For real work, use your own
-lists. The wordlist picker browses one folder, which is the `wordlists` folder of OptiFuzz by default:
-either copy your lists into it, or point OptiFuzz at a folder you already have (for example SecLists)
-in **Settings -> Wordlists folder**, typing the path or choosing it with the folder button. Its
-subfolders show up as groups in the picker, and OptiFuzz only reads from it. Then pick a list in the
-wordlist picker and star your favourite as the default.
-
 ## Trying it safely: the demo target
 
 `dev/demo-target/` is a tiny fake website that runs on `127.0.0.1:8910` and answers with a
@@ -218,72 +171,8 @@ python dev/demo-target/demo_server.py
 Create a target with base URL `http://127.0.0.1` and port `8910` (in the separate *Port* field), fuzz it with `test_wordlist.txt`, and follow the
 guided walkthrough, including what each path returns and what to try (deeper fuzzing, pause and
 resume, a failed job, the tree, the export), in
-[`dev/demo-target/README.md`](dev/demo-target/README.md).
-
-## Using OptiFuzz
-
-**Choosing what to fuzz.** *Force extensions* makes dirsearch also try `word/` and
-`word.<ext>` for every extension you list; without it, extensions are only appended to
-wordlist lines that contain `%EXT%`. Any other dirsearch flag goes in *Advanced options -> Custom
-options*, written exactly as on the dirsearch command line (for example
-`--max-rate 50 --timeout 10` or `--proxy 127.0.0.1:8080`).
-
-dirsearch also adds a few headers of its own to every request (`User-Agent`, `Accept`,
-`Accept-Encoding`, `Keep-Alive`, `Cache-Control`), and `-H` can only override them. Some servers
-answering over HTTP/2 reject the connection-specific `Keep-Alive`. *Advanced options -> Default
-headers* lists them with a checkbox each: untick the ones this job must not send. Like the other
-options it is remembered per target as the default for new jobs.
-
-**Staying in control.** OptiFuzz is built for manual, step-by-step exploration: it never recurses
-on its own. When a result looks worth exploring you start that fuzz yourself, from the result or
-from the tree, so every request is a decision.
-
-dirsearch has its own recursion flags (`-r`, `-R`, ...). You can pass them in *Custom options* and
-the job runs and records everything it finds, including the nested paths. They are, however, not
-officially supported: the progress counters, and Pause and Resume, are designed around a single
-pass over the wordlist. With recursion the progress only reflects the first level, and a paused
-job cannot restore dirsearch's internal recursion queue when it is resumed.
-
-**Long runs.** Pause before closing the app, or just close it: running jobs come back as paused
-and resume from their last checkpoint. Several jobs can run at once (the limit is per target, in
-*Advanced options*).
-
-**Sharing findings.** *Export target (HTML)*, at the top right of a target, saves a single HTML
-file with that target's jobs, results and tree. It has no dependencies, so you can open it anywhere,
-offline, and it stays interactive: you can still search and use the filters and hide rules. On the
-TREE tab, *Export URLs (TXT)* next to it downloads a plain `.txt` with the absolute URL of every tree
-path, one per line, ready to import into other tools (scanners, crawlers). On a
-project's targets page, *Export all targets* has a small arrow to choose between two
-formats. Choosing one only changes the button's label; the file is downloaded when you click the
-button itself, and your choice is remembered:
-
-- **`.zip`**: one separate HTML report per target, inside a zip file.
-- **`.html`**: one single HTML file containing every target of the project, with navigation
-  between them.
-
-## Settings
-
-The gear icon in the header opens:
-
-| Setting | What it does |
-|---|---|
-| Browser for opening results | The browser launched when you open a result's URL (detected automatically; or a custom path) |
-| Output filenames | The naming pattern of each job's raw dirsearch output file (`.txt`) |
-| Default extensions | What dirsearch uses when *Force extensions* is on but no extensions were picked |
-| Wordlists folder | The folder the wordlist picker browses: the `wordlists` folder of OptiFuzz by default, or one you already have (type the path or use the folder button) |
-| Desktop app port | A custom local port for the app to listen on, instead of the built-in default |
-| Display zoom (Linux only) | Makes the whole app bigger or smaller, in percent (50 to 300). Empty means automatic. It applies right away; on Windows the app follows the system display scaling by itself |
-| Updates | Check for a newer version and update in place, keeping your projects |
-
-## How it works
-
-- A **FastAPI** backend, bound to `127.0.0.1`, owns the data and runs dirsearch as a subprocess,
-  one process per job, parsing its live output.
-- A static web **frontend** (plain JavaScript and CSS, no build step) talks to it over HTTP and
-  server-sent events for live updates.
-- **pywebview** shows the frontend in a native window: WebView2 on Windows, GTK + WebKit2GTK on
-  Linux.
-- State is stored as JSON files plus dirsearch's untouched raw output (`.txt`), written atomically.
+[`dev/demo-target/README.md`](dev/demo-target/README.md). For a first run, follow
+[Getting started](docs/USAGE.md#2-getting-started) in the user guide.
 
 ## Development and tests
 
