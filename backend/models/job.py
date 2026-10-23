@@ -90,8 +90,19 @@ class FuzzJob:
     output_stem: str = ""  # "" => pre-existing job, use layout.job_output_base_legacy
     output_flat: bool = False  # True => outputs/<stem>_<id>.{ext}, no per-job subfolder
 
+    @property
+    def raw_filename(self) -> str:
+        """Name of this job's raw dirsearch output (.txt), the same one the outputs mirror copy has."""
+        from backend.persistence import layout  # lazy: persistence imports this module's package
+
+        base = layout.job_output_base_for(
+            self.project_id, self.target_id, self.id, self.output_stem, self.output_flat
+        )
+        return f"{base.name}.txt"
+
     def to_dict(self) -> dict[str, Any]:
         return {
+            "raw_filename": self.raw_filename,  # derived: ignored when a job is loaded back
             "id": self.id,
             "target_id": self.target_id,
             "project_id": self.project_id,

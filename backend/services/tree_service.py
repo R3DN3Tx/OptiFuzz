@@ -319,6 +319,7 @@ def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]
             "ended_at": j.ended_at,
             "result_count": j.result_count,
             "output_stem": j.output_stem,
+            "raw_filename": j.raw_filename,
             "pause_on_status": j.pause_on_status,
             "error_reason": j.error_reason,
             # Full config too (threads, headers, method, filters, ...) --

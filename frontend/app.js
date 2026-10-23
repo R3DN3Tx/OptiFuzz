@@ -226,6 +226,10 @@ const GEAR_ICON_SVG = (() => {
         + '<circle cx="8" cy="8" r="2.2"/></svg>';
 })();
 
+// "Raw" column of a job's details: an arrow pointing up and to the right (opens the job's raw .txt).
+const ARROW_UP_RIGHT_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 11.5l7-7M5.8 4.5h5.7v5.7"/></svg>';
+
 // Whether Resume repeats the word that auto-paused a job, remembered per job (default: repeat).
 let openResumeMenuId = null;
 function resumeRepeatsWord(jobId) {
@@ -429,16 +433,18 @@ function closePathContextMenu() {
 document.addEventListener("click", closePathContextMenu);
 document.addEventListener("scroll", closePathContextMenu, true);
 
-function attachCopyPathContextMenu(element, getFullPath) {
+// `getFullPath` may return a promise. Nothing is copied when it gives an empty value.
+function attachCopyPathContextMenu(element, getFullPath, label = "Copy full path") {
     element.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
-        const item = h("button", { type: "button", class: "path-context-menu-item", text: "Copy full path" });
+        const item = h("button", { type: "button", class: "path-context-menu-item", text: label });
         item.addEventListener("click", async (ev) => {
             ev.stopPropagation();
             try {
-                await navigator.clipboard.writeText(getFullPath());
+                const value = await getFullPath();
+                if (value) await navigator.clipboard.writeText(value);
             } catch (err) { /* clipboard permission denied or unavailable -- fail silently */ }
             closePathContextMenu();
         });
@@ -480,14 +486,20 @@ new MutationObserver(() => {
 // white background that can't be themed). Safe to attach even to an
 // element that gets rebuilt/replaced later (e.g. by a click handler on
 // that same element) -- see the orphan-cleanup observer above.
+// `text` may also be a function returning (a promise of) the text, looked up each time the tooltip opens.
 function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
-    const box = h("div", { class: "app-tooltip", text });
+    const dynamic = typeof text === "function";
+    const box = h("div", { class: "app-tooltip", text: dynamic ? "…" : text });
     document.body.appendChild(box);
-    const show = () => {
+    const show = async () => {
         if (!document.body.contains(el)) { box.remove(); return; }
         box.style.display = "block";
         positionFloatingBox(el, box, maxWidth || 320);
         _visibleTooltipBoxes.set(el, box);
+        if (dynamic) {
+            box.textContent = await text();
+            if (_visibleTooltipBoxes.get(el) === box) positionFloatingBox(el, box, maxWidth || 320);
+        }
     };
     const hide = () => {
         box.style.display = "none";
@@ -571,6 +583,39 @@ function buildHeaderNameChip(name, value, fullText = `${name}: ${value}`) {
 // above this exact panel already shows this exact job's own status pill),
 // unlike TREE/Results' own multi-row history (a path fuzzed several times
 // can genuinely have a different status each time, so Status stays there).
+// The "Raw" cell of a job's details: an arrow that opens the job's raw .txt, as copied into the project's
+// outputs mirror. The original raw files stay untouched because they feed the app. Hover shows where the
+// copy is (or that a mirror must be set), right-click offers "Copy path".
+function buildRawCell(entry) {
+    const jobId = entry.job_id || entry.id;
+    const button = h("button", { type: "button", class: "icon-btn raw-link-btn" });
+    button.innerHTML = ARROW_UP_RIGHT_ICON_SVG;
+    const cell = h("td", { class: "jobs-col-center" }, [button]);
+    if (!jobId) return cell;
+    const lookUp = () => api(`/api/jobs/${jobId}/raw-mirror`);
+    attachTooltip(button, async () => {
+        try {
+            const info = await lookUp();
+            if (!info.configured) {
+                return "Set an Outputs mirror folder (on the project's targets page) to open this job's raw file from here.";
+            }
+            return info.exists ? info.path : `${info.path} (not copied yet: the job has not finished)`;
+        } catch (err) {
+            return "Could not look up the raw file.";
+        }
+    }, 520);
+    button.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+            await api(`/api/jobs/${jobId}/raw-mirror/open`, { method: "POST" });
+        } catch (err) {
+            alert(`Could not open the raw file: ${err.message}`);
+        }
+    });
+    attachCopyPathContextMenu(button, async () => (await lookUp()).path || "", "Copy path");
+    return cell;
+}
+
 // The Extensions cell of a job's details: the ones typed, or -- when none were -- the default list
 // dirsearch used instead (frozen on the job when it was created), marked "(default)".
 function extensionsCellText(extensions, cfg) {
@@ -661,6 +706,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
             const dateValue = entry.date || entry.started_at || entry.created_at;
             cells.push(h("td", { class: "jobs-date-cell", text: dateValue ? formatJobDate(dateValue) : "—" }));
         }
+        cells.push(buildRawCell(entry));
         return h("tr", {}, cells);
     });
     const headCells = [];
@@ -671,6 +717,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     );
     if (!hideStatus) headCells.push(h("th", { text: "Results", class: "jobs-col-center" }));
     if (anyDate) headCells.push(h("th", { text: "Date" }));
+    headCells.push(h("th", { text: "Raw", class: "jobs-col-center" }));
     const sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
     if (anyQuery) {
         sections.push(h("tfoot", {}, [h("tr", {}, [
@@ -2346,6 +2393,7 @@ async function renderWorkspace(projectId, targetId, tab) {
             config: job.config || {},
             result_count: job.result_count,
             output_stem: job.output_stem,
+            raw_filename: job.raw_filename,
             pause_on_status: job.pause_on_status || [],
             // Only actually rendered for JOBS' own single-job panel
             // (buildFuzzHistoryPanel's hideStatus branch) -- Date moved

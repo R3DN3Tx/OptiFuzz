@@ -1115,7 +1115,7 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    fixed set of words (QUEUED/RUNNING/PAUSED/COMPLETED/FAILED/STOPPED), so
    this guarantees the badge never wraps onto two lines even if the
    percentage above computes narrower than expected in some container. */
-.fuzz-history-table th:nth-child(1), .fuzz-history-table td:nth-child(1) { width: 12%; padding-right: 10px; white-space: nowrap; }
+.fuzz-history-table th:nth-child(1), .fuzz-history-table td:nth-child(1) { width: 11%; padding-right: 6px; white-space: nowrap; }
 /* The status BADGE (.job-status) has its own 6px left padding on top of
    this cell's own 8px (from the base th/td rule, left untouched above) --
    stacked, that put the badge's actual TEXT a further 6px right of where
@@ -1123,17 +1123,20 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    this -- reduce its own padding-left by that same 6px so the two line up
    (2px cell padding + 6px badge padding = 8px, matching the header). */
 .fuzz-history-table td:nth-child(1) { padding-left: 2px; }
-.fuzz-history-table th:nth-child(2), .fuzz-history-table td:nth-child(2) { width: 18%; padding-left: 4px; padding-right: 2px; }
-.fuzz-history-table th:nth-child(3), .fuzz-history-table td:nth-child(3) { width: 12%; padding-left: 2px; }
+.fuzz-history-table th:nth-child(2), .fuzz-history-table td:nth-child(2) { width: 17%; padding-left: 2px; padding-right: 1px; }
+.fuzz-history-table th:nth-child(3), .fuzz-history-table td:nth-child(3) { width: 12%; padding-left: 1px; }
 /* Headers/Other options each gave up more (20->17, 26->21) to fit a 7th
    column, Results (2026-09-26, explicit request: between Other options and
    Date) -- same "take it from these two, they have the most slack"
    reasoning as Date's own addition (see this comment's own history) --
-   12+18+12+17+21+8+12 = 100%. */
-.fuzz-history-table th:nth-child(4), .fuzz-history-table td:nth-child(4) { width: 17%; }
-.fuzz-history-table th:nth-child(5), .fuzz-history-table td:nth-child(5) { width: 21%; }
+   12+18+12+17+21+8+12 = 100%. The Raw column (an arrow, last) took 5%: Status 12->11, Wordlist 18->17,
+   Options 21->19, Date 12->11 (11+17+12+17+19+8+11+5 = 100%), and a little padding was trimmed between
+   Status/Wordlist, Wordlist/Extensions and Headers/Options. */
+.fuzz-history-table th:nth-child(4), .fuzz-history-table td:nth-child(4) { width: 17%; padding-right: 4px; }
+.fuzz-history-table th:nth-child(5), .fuzz-history-table td:nth-child(5) { width: 19%; padding-left: 4px; }
 .fuzz-history-table th:nth-child(6), .fuzz-history-table td:nth-child(6) { width: 8%; }
-.fuzz-history-table th:nth-child(7), .fuzz-history-table td:nth-child(7) { width: 12%; }
+.fuzz-history-table th:nth-child(7), .fuzz-history-table td:nth-child(7) { width: 11%; }
+.fuzz-history-table th:nth-child(8), .fuzz-history-table td:nth-child(8) { width: 5%; }
 /* JOBS' own "i" info panel (one single-row table, always exactly this
    job): Status dropped as redundant there (see buildFuzzHistoryPanel's own
    comment) -- the freed 12% redistributed proportionally across the
@@ -1142,16 +1145,20 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    th/td rule above -- explicit request confirmed this is what "left-align
    the columns" meant once Status (whose own left-aligned badge visually
    read as more indented) was gone. */
-.fuzz-history-table.no-status th:nth-child(1), .fuzz-history-table.no-status td:nth-child(1) { width: 18%; padding-left: 4px; padding-right: 2px; }
-.fuzz-history-table.no-status th:nth-child(2), .fuzz-history-table.no-status td:nth-child(2) { width: 12%; padding-left: 2px; }
-.fuzz-history-table.no-status th:nth-child(3), .fuzz-history-table.no-status td:nth-child(3) { width: 22%; }
+.fuzz-history-table.no-status th:nth-child(1), .fuzz-history-table.no-status td:nth-child(1) { width: 18%; padding-left: 4px; padding-right: 1px; }
+.fuzz-history-table.no-status th:nth-child(2), .fuzz-history-table.no-status td:nth-child(2) { width: 12%; padding-left: 1px; }
+.fuzz-history-table.no-status th:nth-child(3), .fuzz-history-table.no-status td:nth-child(3) { width: 21%; padding-right: 4px; }
 /* Results dropped out of this panel entirely (2026-10-09, explicit request --
    it overflowed JOBS' own narrower single-job panel; the main JOBS row's own
    Results count is the clickable one there instead). Its 9% went to Other
    options (27 -> 36); Date is the 5th column now, not the 6th.
    18+12+22+36+12 = 100%. */
-.fuzz-history-table.no-status th:nth-child(4), .fuzz-history-table.no-status td:nth-child(4) { width: 36%; }
+.fuzz-history-table.no-status th:nth-child(4), .fuzz-history-table.no-status td:nth-child(4) { width: 32%; padding-left: 4px; }
 .fuzz-history-table.no-status th:nth-child(5), .fuzz-history-table.no-status td:nth-child(5) { width: 12%; }
+.fuzz-history-table.no-status th:nth-child(6), .fuzz-history-table.no-status td:nth-child(6) { width: 5%; }
+/* Raw column: the arrow that opens the job's raw .txt. */
+.fuzz-history-table .raw-link-btn { padding: 2px 4px; }
+.fuzz-history-table .raw-link-btn.raw-static { cursor: default; }
 /* Footnote under a history table that has a "query*" chip. */
 .fuzz-history-table .fuzz-history-note { color: var(--muted); font-size: 11px; padding-top: 6px; text-align: left; }
 .fuzz-history-header-chip {

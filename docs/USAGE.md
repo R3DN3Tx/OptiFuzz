@@ -27,6 +27,7 @@ Use OptiFuzz only against systems you own or have explicit permission to test (s
   - [Job states](#job-states)
   - [Pause, Resume, Stop and Delete](#pause-resume-stop-and-delete)
   - [Details a job was started with](#details-a-job-was-started-with)
+    - [The Raw column](#the-raw-column)
   - [Queue and concurrency](#queue-and-concurrency)
   - [Output files](#output-files)
 - [6. Auto-pause and early stops](#6-auto-pause-and-early-stops)
@@ -264,12 +265,31 @@ makes it fail with the reason *Unreachable host*.
 Click the information icon <img src="images/icons/info.svg" width="16" alt="info icon"> on a job to see
 the settings it was launched with: the **wordlist**, **extensions**, **headers** (and `query*` when the
 path had a query string), **options** (threads, force extensions, `AUTH`, auto-pause codes, HTTP method,
-proxy, disabled default headers and custom options) and the **date** it started.
+proxy, disabled default headers and custom options), the **date** it started and, at the far right, the
+**Raw** column (see below).
 
 The same table appears when you click a **Fuzzed** tag in Results or Tree, with one row per job that
 fuzzed that path. There it also has a **Status** column (the state of each job) and a **Results**
 column (how many findings it has). When a job had no extensions of its own, the **extensions** column
 shows the default list dirsearch used, marked `(default)`.
+
+#### The Raw column
+
+The last column of every details table, **Raw**, has an arrow pointing up and to the right
+<img src="images/icons/raw.svg" width="16" alt="raw file arrow icon"> on each row. It opens the raw `.txt` that dirsearch wrote for that job.
+
+It opens the **copy kept in the [Outputs mirror](#outputs-mirror)**, not the original file. This is on
+purpose: the original raw files are what feed OptiFuzz (it reads the results from them), so opening them
+from here could end up modifying them by accident. The copy is the one to read, search or edit freely.
+
+- **Hover** the arrow to see the full path of that copy. If the project has no Outputs mirror yet, the
+  tooltip tells you that you need to set one. If the job is still running (or paused), its copy does not
+  exist yet and the tooltip says so: it is made when the job finishes.
+- **Click** the arrow to open the file in the program your system uses for `.txt` files.
+- **Right-click** the arrow and choose **Copy path** to copy the full path of the copy, file name
+  included.
+
+This works the same in every details table: the Jobs list, and the **Fuzzed** tags in Results and Tree.
 
 ### Queue and concurrency
 
@@ -285,7 +305,8 @@ authenticated. OptiFuzz reads the results from dirsearch's JSON report next to i
 deletes both.
 
 If the project has an [Outputs mirror](#outputs-mirror), a copy of each `.txt` is also saved in the folder
-you chose, when the job finishes. Deleting the job removes that copy too.
+you chose, when the job finishes. Deleting the job removes that copy too. The **Raw** column of the job's
+details opens that copy (see [The Raw column](#the-raw-column)).
 
 ---
 
@@ -363,7 +384,8 @@ those further down the list that you did not scroll to, or those inside a folded
 
 When a path has already been fuzzed, a **Fuzzed** tag appears next to it automatically, both in Results
 and in Tree. Click the tag to unfold the details of the jobs that fuzzed it: status, wordlist, extensions,
-headers, options, number of results and date. The number of results is a link to those results.
+headers, options, number of results, date and the **Raw** arrow (see [The Raw column](#the-raw-column)).
+The number of results is a link to those results.
 
 ### Actions on a path
 
@@ -490,6 +512,11 @@ changes the button: the file is downloaded when you click the button itself.
 In both formats each target keeps its own saved hide rules, search and filters, exactly as in an
 individual export.
 
+In every export, the job details have the **Raw** column too. Because a report is meant to be shared, hovering
+the arrow only shows the **name** of the raw file, never its full path. Right-click the arrow and choose
+**Copy path** to copy the path the copy had in the Outputs mirror when the report was made, file name
+included (only the file name, if the project had no mirror). Clicking the arrow does nothing in a report, because it cannot open files on another computer.
+
 ### Outputs mirror
 
 The outputs mirror keeps a second copy of every job's raw `.txt` output in a folder you choose, outside
@@ -504,7 +531,9 @@ page: type the folder path or pick it with the folder button
 - Leave the field empty to turn the mirror off. Files already copied are left where they are; OptiFuzz
   does not delete them.
 
-The original files inside OptiFuzz are never moved or changed, whatever you do here.
+The original files inside OptiFuzz are never moved or changed, whatever you do here. The mirror is also
+what the **Raw** column of the job details opens, so that you never open the originals by accident (see
+[The Raw column](#the-raw-column)).
 
 ---
 

@@ -1,5 +1,6 @@
 import sys
 import time
+import json
 from pathlib import Path
 
 import pytest
@@ -1055,3 +1056,45 @@ def test_create_job_records_the_default_extensions_it_will_use(client: TestClien
     client.put("/api/settings/default-extensions-fallback", json={"value": "bak,old"})
     custom = client.post(url, json=body).json()
     assert custom["config"]["default_extensions"] == ["bak", "old"]
+
+
+def test_raw_column_points_at_the_outputs_mirror_copy_of_the_jobs_txt(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    from backend.services import output_mirror_service
+
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets", json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+    job = client.post(
+        f"/api/projects/{project['id']}/targets/{target['id']}/jobs",
+        json={"path": "/", "wordlist_files": [_wordlist(tmp_path)]},
+    ).json()
+    # The job dict carries the raw file name (what the details table and the exports show on hover).
+    assert job["raw_filename"].startswith("dirsearch_t1_") and job["raw_filename"].endswith(f"_{job['id']}.txt")
+
+    # No mirror set: the column only has a message to show, and opening is refused.
+    info = client.get(f"/api/jobs/{job['id']}/raw-mirror").json()
+    assert info["configured"] is False and info["path"] is None and info["filename"] == job["raw_filename"]
+    assert client.post(f"/api/jobs/{job['id']}/raw-mirror/open").status_code == 400
+
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    client.put(f"/api/projects/{project['id']}/outputs-mirror", json={"dir": str(mirror)})
+    info = client.get(f"/api/jobs/{job['id']}/raw-mirror").json()
+    expected = mirror / "t1" / job["raw_filename"]
+    assert info["configured"] is True and info["path"] == str(expected) and info["exists"] is False
+    assert client.post(f"/api/jobs/{job['id']}/raw-mirror/open").status_code == 404  # not copied yet
+
+    opened = []
+    monkeypatch.setattr(output_mirror_service, "open_file", lambda path: opened.append(path))
+    expected.parent.mkdir(parents=True, exist_ok=True)
+    expected.write_text("200  1KB  http://t1.local/admin", encoding="utf-8")
+    assert client.get(f"/api/jobs/{job['id']}/raw-mirror").json()["exists"] is True
+    assert client.post(f"/api/jobs/{job['id']}/raw-mirror/open").status_code == 200
+    assert opened == [expected]
+
+    # A report embeds the copy's path (only the file name is shown on hover; Copy path copies the path).
+    exported = client.get(f"/api/projects/{project['id']}/targets/{target['id']}/export").text
+    assert json.dumps(str(expected))[1:-1] in exported

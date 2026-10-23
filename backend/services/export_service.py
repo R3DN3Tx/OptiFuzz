@@ -13,7 +13,7 @@ from backend.job_manager.manager import JobManager
 from backend.models.timestamps import now_iso
 from backend.persistence import app_settings
 from backend.persistence.slug import slugify
-from backend.services import project_service, results_service, target_service, tree_service
+from backend.services import output_mirror_service, project_service, results_service, target_service, tree_service
 
 # A single, self-contained HTML snapshot of one
 # Target -- Tree (interactive expand/collapse), Results, fuzz
@@ -72,6 +72,11 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
     results_view = [r.to_dict() for r in results]
 
     jobs_view = [job.to_dict() for job in sorted(jobs, key=lambda j: j.created_at, reverse=True)]
+    # Where each job's raw .txt copy is in the outputs mirror (None when no mirror is set): the report
+    # shows only the file name on hover, but "Copy path" on the Raw column copies this.
+    for entry in jobs_view:
+        copy_path = output_mirror_service.mirror_file_path(project, target.name, entry["raw_filename"])
+        entry["raw_path"] = str(copy_path) if copy_path is not None else None
 
     return {
         "project": {"id": project.id, "name": project.name},
@@ -490,6 +495,21 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
+// "Raw" column: an arrow for the job's raw .txt. A report has no way to open files on someone else's
+// computer, so hover shows only the file name, and right-click "Copy path" copies where the copy was kept
+// (the outputs mirror) when the report was made.
+var RAW_ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 11.5l7-7M5.8 4.5h5.7v5.7"/></svg>';
+function buildRawCell(entry) {
+    var job = null;
+    DATA.jobs.forEach(function (j) { if (j.id === entry.job_id) job = j; });
+    var button = h("button", { type: "button", class: "icon-btn raw-link-btn raw-static" });
+    button.innerHTML = RAW_ARROW_SVG;
+    var cell = h("td", { class: "jobs-col-center" }, [button]);
+    if (!job) return cell;
+    button.setAttribute("title", job.raw_filename);
+    attachCopyPathContextMenu(button, job.raw_path || job.raw_filename, "Copy path");
+    return cell;
+}
 // Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
 function extensionsCellText(extensions, cfg) {
     if (extensions.length) return extensions.join(",");
@@ -688,12 +708,12 @@ function closePathContextMenu() {
 }
 document.addEventListener("click", closePathContextMenu);
 document.addEventListener("scroll", closePathContextMenu, true);
-function attachCopyPathContextMenu(element, fullPath) {
+function attachCopyPathContextMenu(element, fullPath, label) {
     element.addEventListener("contextmenu", function (e) {
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
-        var item = h("button", { type: "button", class: "path-context-menu-item", text: "Copy full path" });
+        var item = h("button", { type: "button", class: "path-context-menu-item", text: label || "Copy full path" });
         item.addEventListener("click", function (ev) {
             ev.stopPropagation();
             navigator.clipboard.writeText(fullPath).catch(function () { /* denied/unavailable -- fail silently */ });
@@ -796,6 +816,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
     // practice; the .some() guard is just defensive.
     var showDate = history.some(function (entry) { return entry.date || entry.created_at; });
     if (showDate) headCells.push(h("th", { text: "Date" }));
+    headCells.push(h("th", { text: "Raw", class: "jobs-col-center" }));
     var anyQuery = false;
     var rows = history.map(function (entry) {
         var headerEntries = Object.entries(entry.config && entry.config.headers || {});
@@ -855,6 +876,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
             var dateValue = entry.date || entry.created_at;
             cells.push(h("td", { class: "jobs-date-cell", text: dateValue ? formatJobDate(dateValue) : "—" }));
         }
+        cells.push(buildRawCell(entry));
         return h("tr", {}, cells);
     });
     var sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
@@ -1462,7 +1484,7 @@ if (!DATA.jobs.length) {
         if (errorRow) jobsBody.appendChild(errorRow);
 
         var detailRow = buildFuzzHistoryRow(8, [{
-            status: job.status, wordlist_sources: job.wordlist_sources,
+            job_id: job.id, status: job.status, wordlist_sources: job.wordlist_sources,
             extensions: job.config && job.config.extensions, config: job.config,
             date: job.started_at || job.created_at, result_count: job.result_count, output_stem: job.output_stem,
             pause_on_status: job.pause_on_status || [],
@@ -1736,6 +1758,21 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
+// "Raw" column: an arrow for the job's raw .txt. A report has no way to open files on someone else's
+// computer, so hover shows only the file name, and right-click "Copy path" copies where the copy was kept
+// (the outputs mirror) when the report was made.
+var RAW_ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 11.5l7-7M5.8 4.5h5.7v5.7"/></svg>';
+function buildRawCell(entry) {
+    var job = null;
+    DATA.jobs.forEach(function (j) { if (j.id === entry.job_id) job = j; });
+    var button = h("button", { type: "button", class: "icon-btn raw-link-btn raw-static" });
+    button.innerHTML = RAW_ARROW_SVG;
+    var cell = h("td", { class: "jobs-col-center" }, [button]);
+    if (!job) return cell;
+    button.setAttribute("title", job.raw_filename);
+    attachCopyPathContextMenu(button, job.raw_path || job.raw_filename, "Copy path");
+    return cell;
+}
 // Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
 function extensionsCellText(extensions, cfg) {
     if (extensions.length) return extensions.join(",");
@@ -1951,12 +1988,12 @@ function closePathContextMenu() {
 }
 document.addEventListener("click", closePathContextMenu);
 document.addEventListener("scroll", closePathContextMenu, true);
-function attachCopyPathContextMenu(element, fullPath) {
+function attachCopyPathContextMenu(element, fullPath, label) {
     element.addEventListener("contextmenu", function (e) {
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
-        var item = h("button", { type: "button", class: "path-context-menu-item", text: "Copy full path" });
+        var item = h("button", { type: "button", class: "path-context-menu-item", text: label || "Copy full path" });
         item.addEventListener("click", function (ev) {
             ev.stopPropagation();
             navigator.clipboard.writeText(fullPath).catch(function () { /* denied/unavailable -- fail silently */ });
@@ -2059,6 +2096,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
     // practice; the .some() guard is just defensive.
     var showDate = history.some(function (entry) { return entry.date || entry.created_at; });
     if (showDate) headCells.push(h("th", { text: "Date" }));
+    headCells.push(h("th", { text: "Raw", class: "jobs-col-center" }));
     var anyQuery = false;
     var rows = history.map(function (entry) {
         var headerEntries = Object.entries(entry.config && entry.config.headers || {});
@@ -2118,6 +2156,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
             var dateValue = entry.date || entry.created_at;
             cells.push(h("td", { class: "jobs-date-cell", text: dateValue ? formatJobDate(dateValue) : "—" }));
         }
+        cells.push(buildRawCell(entry));
         return h("tr", {}, cells);
     });
     var sections = [h("thead", {}, [h("tr", {}, headCells)]), h("tbody", {}, rows)];
@@ -2710,7 +2749,7 @@ function renderJobs() {
         if (errorRow) jobsBody.appendChild(errorRow);
 
         var detailRow = buildFuzzHistoryRow(8, [{
-            status: job.status, wordlist_sources: job.wordlist_sources,
+            job_id: job.id, status: job.status, wordlist_sources: job.wordlist_sources,
             extensions: job.config && job.config.extensions, config: job.config,
             date: job.started_at || job.created_at, result_count: job.result_count, output_stem: job.output_stem,
             pause_on_status: job.pause_on_status || [],

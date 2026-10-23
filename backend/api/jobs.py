@@ -10,7 +10,9 @@ from backend.api.schemas import CreateJobRequest
 from backend.job_manager.manager import JobManager
 from backend.models.job_config import DIRSEARCH_DEFAULT_HEADERS, DirsearchJobConfig
 from backend.persistence import app_settings
-from backend.services import output_naming, target_service
+from backend.persistence import layout
+from backend.persistence.paths import path_is_file
+from backend.services import output_mirror_service, output_naming, project_service, target_service
 
 router = APIRouter(tags=["jobs"])
 
@@ -118,6 +120,41 @@ def list_jobs(
 @router.get("/api/jobs/{job_id}")
 def get_job(job_id: str, job_manager: JobManager = Depends(get_job_manager)) -> dict:
     return job_manager.get_job(job_id).to_dict()
+
+
+def _mirror_info(job_id: str, job_manager: JobManager) -> dict:
+    """Where the outputs-mirror copy of a job's raw .txt is, for the "Raw" column of the job details."""
+    job = job_manager.get_job(job_id)
+    project = project_service.get_project(job.project_id)
+    target = target_service.get_target(job.project_id, job.target_id)
+    # The name the copy was really made with (the final one, or the working one if the rename never worked).
+    filename = f"{layout.job_output_base_current(job.project_id, job.target_id, job).name}.txt"
+    path = output_mirror_service.mirror_file_path(project, target.name, filename)
+    return {
+        "configured": path is not None,
+        "filename": filename,
+        "path": str(path) if path is not None else None,
+        "exists": path is not None and path_is_file(path),
+    }
+
+
+@router.get("/api/jobs/{job_id}/raw-mirror")
+def get_raw_mirror(job_id: str, job_manager: JobManager = Depends(get_job_manager)) -> dict:
+    return _mirror_info(job_id, job_manager)
+
+
+@router.post("/api/jobs/{job_id}/raw-mirror/open")
+def open_raw_mirror(job_id: str, job_manager: JobManager = Depends(get_job_manager)) -> dict:
+    info = _mirror_info(job_id, job_manager)
+    if not info["configured"]:
+        raise HTTPException(status_code=400, detail="No outputs mirror is set for this project")
+    if not info["exists"]:
+        raise HTTPException(status_code=404, detail="The mirrored copy does not exist yet (the job has not finished)")
+    try:
+        output_mirror_service.open_file(Path(info["path"]))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not open the file: {exc}") from exc
+    return info
 
 
 @router.post("/api/jobs/{job_id}/stop")

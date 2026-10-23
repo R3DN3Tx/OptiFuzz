@@ -25,6 +25,25 @@ def mirror_target_subdir(project: Project, target_name: str) -> Path:
     return Path(project.outputs_mirror_dir) / slugify(target_name)
 
 
+def mirror_file_path(project: Project, target_name: str, filename: str) -> Path | None:
+    """Where the mirrored copy of a job's raw .txt is (or will be), or None when no mirror is set."""
+    if not project.outputs_mirror_dir:
+        return None
+    return mirror_target_subdir(project, target_name) / filename
+
+
+def open_file(path: Path) -> None:
+    """Opens a file with the application the system associates with it (the user's text editor)."""
+    import os
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        os.startfile(str(path))  # noqa: S606 -- a path built server-side, never client input
+    else:
+        subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def mirror_output_file(project: Project, target_name: str, txt_path: Path) -> None:
     """Copies one finished job's .txt report into its mirror subfolder --
     best-effort: a mirror-copy failure (e.g. the configured drive is
