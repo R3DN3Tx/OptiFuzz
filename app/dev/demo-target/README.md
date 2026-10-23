@@ -15,7 +15,7 @@ From the repository root, with any Python 3.9 or newer (on some Linux distributi
 `python3`):
 
 ```bash
-python dev/demo-target/demo_server.py
+python app/dev/demo-target/demo_server.py
 ```
 
 The server keeps running in that terminal (leave it open). To check that it is up, open

@@ -36,9 +36,9 @@ jobs:
       - name: Tests
         run: .venv/bin/python -m pytest -q
       - name: End-to-end with real dirsearch (run, pause, resume, stop, failed job)
-        run: .venv/bin/python dev/ci_e2e.py
+        run: .venv/bin/python app/dev/ci_e2e.py
       - name: Desktop window smoke test (virtual display)
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" .venv/bin/python dev/ci_smoke.py
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" .venv/bin/python app/dev/ci_smoke.py
       - name: Upload screenshot and log
         if: always()
         uses: actions/upload-artifact@v7
@@ -71,7 +71,7 @@ jobs:
       - name: Tests
         run: python -m pytest -q
       - name: End-to-end with real dirsearch
-        run: python dev/ci_e2e.py
+        run: python app/dev/ci_e2e.py
 
   windows:
     name: Windows (Python 3.13)
@@ -89,4 +89,4 @@ jobs:
       - name: Tests
         run: python -m pytest -q
       - name: End-to-end with real dirsearch
-        run: python dev/ci_e2e.py
+        run: python app/dev/ci_e2e.py

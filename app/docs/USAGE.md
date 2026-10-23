@@ -1,10 +1,10 @@
 # OptiFuzz user guide
 
 Everything OptiFuzz does, screen by screen. Installation and updating are in the
-[README](../README.md).
+[README](../../README.md).
 
 Use OptiFuzz only against systems you own or have explicit permission to test (see the
-[legal disclaimer](../README.md#legal-disclaimer)).
+[legal disclaimer](../../README.md#legal-disclaimer)).
 
 ## Contents
 
@@ -104,8 +104,8 @@ one where you left it.
 use your own: copy them into the `wordlists` folder of OptiFuzz, or point OptiFuzz at a folder you
 already have (SecLists, for example) in [Settings](#wordlists-folder).
 
-**Trying it without a real target.** `dev/demo-target/` is a small fake website for practising every
-feature safely. Start it with `python dev/demo-target/demo_server.py`, then create a target with base URL
+**Trying it without a real target.** `app/dev/demo-target/` is a small fake website for practising every
+feature safely. Start it with `python app/dev/demo-target/demo_server.py`, then create a target with base URL
 `http://127.0.0.1` and port `8910`. Its [walkthrough](../dev/demo-target/README.md) explains what each
 path returns and what to try.
 
@@ -639,4 +639,4 @@ and dirsearch's untouched output, written so that a crash cannot corrupt it.
 
 ---
 
-*Back to the [README](../README.md).*
+*Back to the [README](../../README.md).*

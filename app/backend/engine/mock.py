@@ -42,8 +42,8 @@ class MockDirsearchEngine(FuzzingEngine):
         del output_base, log_file  # the mock runner doesn't write report or log files (yet)
         argv = [
             self._python_executable,
-            "-m",
-            "backend.engine.mock_runner",
+            # A script path, not `-m backend...`: the child process does not need the package on its path.
+            str(Path(__file__).with_name("mock_runner.py")),
             "--url",
             config.url,
             "--wordlist",

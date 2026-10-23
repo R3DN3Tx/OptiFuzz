@@ -1,6 +1,6 @@
 """CI smoke test (Linux): start the real desktop window and check it comes up.
 
-Run it through a virtual display, e.g. `xvfb-run -a .venv/bin/python dev/ci_smoke.py`. It starts
+Run it through a virtual display, e.g. `xvfb-run -a .venv/bin/python app/dev/ci_smoke.py`. It starts
 run_desktop.py, waits for the backend to answer /health, takes a screenshot (shot.png) and checks
 the window process is still alive, then stops it. Writes shot.png and app.log in the current
 directory. Meant for GitHub Actions only -- it opens a window.
@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 
 PORT = 58947  # run_desktop.py's default (backend/persistence/app_settings.py::DEFAULT_PORT)
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # repository root: <repo>/app/dev/ci_smoke.py
 
 
 def fail(message: str) -> None:

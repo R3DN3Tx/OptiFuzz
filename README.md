@@ -19,7 +19,7 @@ updates (see [Updating](#updating)).
 - [Installation](#installation)
 - [Updating](#updating)
 - [Trying it safely: the demo target](#trying-it-safely-the-demo-target)
-- [User guide](docs/USAGE.md)
+- [User guide](app/docs/USAGE.md)
 - [Development and tests](#development-and-tests)
 - [Troubleshooting](#troubleshooting)
 - [Credits](#credits)
@@ -33,7 +33,7 @@ complete documentation:**
 
 > ### Full documentation
 >
-> **[User guide: all the features, options and screens →](docs/USAGE.md)**
+> **[User guide: all the features, options and screens →](app/docs/USAGE.md)**
 >
 > Getting started, every form field and option, job states, auto-pause, Results filters and hide
 > rules, the tree, exports, settings and where your data lives.
@@ -55,15 +55,15 @@ complete documentation:**
   every target of a project at once, a plain list of tree URLs for other tools, and an optional mirror
   of dirsearch's raw output.
 
-<p align="center"><img src="docs/images/jobs.png" alt="Jobs screen"></p>
+<p align="center"><img src="app/docs/images/jobs.png" alt="Jobs screen"></p>
 
 <p align="center"><em>Jobs screen: every fuzz of a target with its status, live progress, rate and errors, and the buttons to pause, resume or stop it.</em></p>
 
-<p align="center"><img src="docs/images/results.png" alt="Results screen"></p>
+<p align="center"><img src="app/docs/images/results.png" alt="Results screen"></p>
 
 <p align="center"><em>Results screen: what dirsearch found, grouped by directory, with colour-coded status codes, the NEW badge and the search, filter and hide-rule controls.</em></p>
 
-<p align="center"><img src="docs/images/tree.png" alt="Tree screen"></p>
+<p align="center"><img src="app/docs/images/tree.png" alt="Tree screen"></p>
 
 <p align="center"><em>Tree screen: the paths you chose to keep, with interesting markers, notes and the wordlists already used on each one.</em></p>
 
@@ -86,7 +86,7 @@ cd OptiFuzz
 The window uses WebView2, which ships with current Windows.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\app\scripts\windows\install-windows.ps1
 ```
 
 The installer also adds an **OptiFuzz** shortcut to the Start menu: search for "OptiFuzz" there to launch
@@ -98,7 +98,7 @@ installer again to refresh the shortcut.
 The window uses GTK 3 and WebKit2GTK 4.1 from your distribution.
 
 ```bash
-./scripts/linux/install-linux.sh
+./app/scripts/linux/install-linux.sh
 ```
 
 Run it as your normal user, without `sudo` in front: it asks for `sudo` itself, only for the system
@@ -126,12 +126,12 @@ If you would rather leave nothing outside the program folder (no Start menu or a
 install with the shortcut turned off and launch OptiFuzz from the folder:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-windows.ps1 -NoShortcut
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\app\scripts\windows\install-windows.ps1 -NoShortcut
+powershell -ExecutionPolicy Bypass -File .\app\scripts\windows\run-windows.ps1
 ```
 ```bash
-./scripts/linux/install-linux.sh --no-shortcut
-./scripts/linux/run-linux.sh
+./app/scripts/linux/install-linux.sh --no-shortcut
+./app/scripts/linux/run-linux.sh
 ```
 
 The policy flag is needed because Windows blocks `.ps1` scripts by default. The program, its virtual
@@ -140,10 +140,10 @@ environment and your data stay where they are; only the shortcut is skipped.
 ### Uninstall
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\uninstall-windows.ps1   # Windows
+powershell -ExecutionPolicy Bypass -File .\app\scripts\windows\uninstall-windows.ps1   # Windows
 ```
 ```bash
-./scripts/linux/uninstall-linux.sh                                                  # Linux
+./app/scripts/linux/uninstall-linux.sh                                                  # Linux
 ```
 
 This removes the menu shortcut and the virtual environment, and asks whether to delete your data
@@ -163,22 +163,27 @@ files yourself, it refuses to overwrite them.
 
 ## Trying it safely: the demo target
 
-`dev/demo-target/` is a tiny fake website that runs on `127.0.0.1:8910` and answers with a
+`app/dev/demo-target/` is a tiny fake website that runs on `127.0.0.1:8910` and answers with a
 variety of status codes (200, 301, 302, 403, 404, 500, among others) at several directory levels. It exists so you
 can try every feature without touching a real system, and it is what the screenshots above were
 taken against.
 
 ```bash
-python dev/demo-target/demo_server.py
+python app/dev/demo-target/demo_server.py
 ```
 
 Create a target with base URL `http://127.0.0.1` and port `8910` (in the separate *Port* field), fuzz it with `test_wordlist.txt`, and follow the
 guided walkthrough, including what each path returns and what to try (deeper fuzzing, pause and
 resume, a failed job, the tree, the export), in
-[`dev/demo-target/README.md`](dev/demo-target/README.md). For a first run, follow
-[Getting started](docs/USAGE.md#2-getting-started) in the user guide.
+[`app/dev/demo-target/README.md`](app/dev/demo-target/README.md). For a first run, follow
+[Getting started](app/docs/USAGE.md#2-getting-started) in the user guide.
 
 ## Development and tests
+
+The repository root keeps what you use directly: this README, the launcher, `wordlists/` (where your
+own lists go) and the install files. Everything else the program needs, which you do not have to touch
+once it is installed, is inside `app/`: the backend, the frontend, the install and uninstall scripts
+(`app/scripts/`), the tests, the demo target and the documentation (`app/docs/`).
 
 ```bash
 .venv/bin/python -m pytest          # Windows: .venv\Scripts\python -m pytest
@@ -187,9 +192,9 @@ resume, a failed job, the tree, the export), in
 CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
 
 - Ubuntu 24.04 with the distribution's own Python (3.12) and the system GTK/WebKit packages: the
-  full test suite, an end-to-end check against real dirsearch (`dev/ci_e2e.py`: complete run,
+  full test suite, an end-to-end check against real dirsearch (`app/dev/ci_e2e.py`: complete run,
   Pause, Resume, Stop, a failed job) and a smoke test that starts the real desktop window under a
-  virtual display (`dev/ci_smoke.py`), which also checks the window actually painted.
+  virtual display (`app/dev/ci_smoke.py`), which also checks the window actually painted.
 - Linux with Python 3.11 (the minimum) and 3.13, and Windows with Python 3.13: the suite plus the
   end-to-end check.
 
@@ -202,7 +207,7 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
   `OPTIFUZZ_UI_SCALE` (for example `1.25`) to override it.
 - **On Linux, a fuzz fails with `AttributeError: 'typing.Union' object has no attribute '__module__'`
   (in `httpcore`).** An old copy of a library that comes with the distribution was used instead of
-  the one OptiFuzz installs. Update from *Settings -> Updates*, or run `./scripts/linux/install-linux.sh`
+  the one OptiFuzz installs. Update from *Settings -> Updates*, or run `./app/scripts/linux/install-linux.sh`
   again: both now install OptiFuzz's own copies.
 - **Text too small, or wide empty margins, on Linux.** The window uses your desktop's scaling, and
   the content is limited to a fixed width, so on a high-resolution screen at 100% it looks small and
@@ -218,7 +223,7 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
 - [pywebview](https://pywebview.flowrl.com), [FastAPI](https://fastapi.tiangolo.com) and
   [uvicorn](https://www.uvicorn.org) for the application shell.
 - Fonts bundled for Linux (SIL Open Font License 1.1): **Selawik** and **Cascadia Mono**, both by
-  Microsoft. See [`frontend/fonts/`](frontend/fonts/).
+  Microsoft. See [`app/frontend/fonts/`](app/frontend/fonts/).
 
 ## Legal disclaimer
 
@@ -254,5 +259,5 @@ notices and make the complete corresponding source code available under the same
 cannot be turned into closed-source software.
 
 Third-party components keep their own licenses: the bundled fonts are under the SIL Open Font
-License 1.1 (texts in [`frontend/fonts/`](frontend/fonts/)), and dirsearch is a separate program
+License 1.1 (texts in [`app/frontend/fonts/`](app/frontend/fonts/)), and dirsearch is a separate program
 under its own license, installed from its repository and not redistributed here.

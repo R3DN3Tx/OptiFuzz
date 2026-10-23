@@ -5,7 +5,8 @@ from backend.engine.mock import MOCK_ENGINE_VERSION, MockDirsearchEngine
 from backend.models.job_config import DirsearchJobConfig
 from backend.parser.stdout_parser import parse_result_line
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[2]  # the app/ folder
+MOCK_RUNNER = REPO_ROOT / "backend" / "engine" / "mock_runner.py"
 
 
 def _dummy_config(url: str = "https://target.local/") -> DirsearchJobConfig:
@@ -22,7 +23,7 @@ def test_build_command_shape() -> None:
     )
 
     assert argv == [
-        "python.exe", "-m", "backend.engine.mock_runner",
+        "python.exe", str(MOCK_RUNNER),
         "--url", "https://target.local/",
         "--wordlist", "wordlist.txt",
         "--delay", "0.01",

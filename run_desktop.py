@@ -35,6 +35,9 @@ import threading
 import time
 from pathlib import Path
 
+# The program lives in the app/ folder next to this launcher: make its packages (backend) importable.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "app"))
+
 from backend.persistence.paths import app_data_dir
 from backend.platform_compat import IS_WINDOWS
 
@@ -72,7 +75,7 @@ import webview
 # imported by _boot_backend() below, on a worker thread, while the window is
 # already up showing a loading indicator.
 
-_FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+_FRONTEND_DIR = Path(__file__).resolve().parent / "app" / "frontend"
 # Two ink colors, picked to actually stay legible against whichever the
 # *shell chrome* (taskbar/Start menu/Alt-Tab) is -- not to match OptiFuzz's
 # own always-dark in-page theme. Verified by compositing each onto a dark

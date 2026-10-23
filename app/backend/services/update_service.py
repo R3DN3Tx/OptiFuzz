@@ -14,7 +14,7 @@ from backend.platform_compat import no_window_kwargs
 # `pip install -r requirements.txt` so a changed dependency (e.g. the pinned dirsearch commit) comes
 # along. The user's data never lives in the checkout (workspace is under %APPDATA% / ~/.local/share),
 # so projects, targets and jobs are untouched. Nothing is contacted until the user clicks.
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]  # <repo>/app/backend/services/update_service.py
 
 _ENV = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}  # never hang waiting for credentials
 
@@ -143,7 +143,7 @@ def _pip_install_flags() -> list[str]:
     toolkit, PyGObject, comes from the distribution), so without --ignore-installed pip reuses a system
     copy of a dependency (Kali's old httpcore, which crashes on Python 3.14) instead of installing it
     in the venv; --no-warn-conflicts hides its complaints about unrelated system tools. Same flags as
-    scripts/linux/install-linux.sh. Windows has no system packages in its venv."""
+    app/scripts/linux/install-linux.sh. Windows has no system packages in its venv."""
     return [] if sys.platform == "win32" else ["--ignore-installed", "--no-warn-conflicts"]
 
 

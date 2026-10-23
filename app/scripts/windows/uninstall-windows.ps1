@@ -3,7 +3,7 @@
 # The program folder itself is not deleted; remove it by hand if you want it gone.
 param([switch]$RemoveData)
 $ErrorActionPreference = "Stop"
-$root = Split-Path (Split-Path $PSScriptRoot)  # repository root (this script lives in scripts\windows)
+$root = Split-Path (Split-Path (Split-Path $PSScriptRoot))  # repository root (this script lives in app\scripts\windows)
 $venv = Join-Path $root ".venv"
 
 # A running OptiFuzz holds files inside .venv open and would make the removal fail halfway.

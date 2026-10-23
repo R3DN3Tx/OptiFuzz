@@ -4,7 +4,7 @@
 # The system packages (GTK, WebKit, fonts, git) are not removed: other programs may use them.
 # The program folder itself is not deleted; remove it by hand if you want it gone.
 set -euo pipefail
-cd "$(dirname "$0")/../.."  # repository root (this script lives in scripts/linux)
+cd "$(dirname "$0")/../../.."  # repository root (this script lives in app/scripts/linux)
 
 remove_data=false
 [ "${1:-}" = "--remove-data" ] && remove_data=true

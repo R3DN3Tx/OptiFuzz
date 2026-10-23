@@ -2,7 +2,7 @@
 # and a Start Menu shortcut. Pass -NoShortcut to skip the shortcut and leave nothing outside this folder.
 param([switch]$NoShortcut)
 $ErrorActionPreference = "Stop"
-Set-Location (Split-Path (Split-Path $PSScriptRoot))  # repository root (this script lives in scripts\windows)
+Set-Location (Split-Path (Split-Path (Split-Path $PSScriptRoot)))  # repository root (this script lives in app\scripts\windows)
 
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
@@ -22,7 +22,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 if ($NoShortcut) {
     Write-Host ""
-    Write-Host "Done (no shortcut created). Start OptiFuzz with: powershell -ExecutionPolicy Bypass -File .\scripts\windows\run-windows.ps1"
+    Write-Host "Done (no shortcut created). Start OptiFuzz with: powershell -ExecutionPolicy Bypass -File .\app\scripts\windows\run-windows.ps1"
     return
 }
 
@@ -33,7 +33,7 @@ $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $root ".venv\Scripts\pythonw.exe"
 $shortcut.Arguments = "run_desktop.py"
 $shortcut.WorkingDirectory = $root
-$shortcut.IconLocation = Join-Path $root "frontend\icon-dark.ico"
+$shortcut.IconLocation = Join-Path $root "app\frontend\icon-dark.ico"
 $shortcut.Description = "OptiFuzz"
 $shortcut.Save()
 

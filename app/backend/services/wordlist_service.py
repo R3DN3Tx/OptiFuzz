@@ -8,7 +8,7 @@ from backend.persistence import app_settings
 # The app's own bundled wordlists, browsable from the New Fuzz form's
 # wordlist picker -- the default when no other folder is configured in
 # Settings.
-WORDLISTS_DIR = Path(__file__).resolve().parent.parent.parent / "wordlists"
+WORDLISTS_DIR = Path(__file__).resolve().parents[3] / "wordlists"  # at the repository root, outside app/
 
 
 def effective_wordlists_dir() -> Path:

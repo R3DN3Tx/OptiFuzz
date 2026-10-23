@@ -8,7 +8,7 @@
 # (pacman). Debian-family is the tested path; the Fedora and Arch package names are provided but
 # not tested. Any other distribution: install the equivalents by hand, then run this again.
 set -euo pipefail
-cd "$(dirname "$0")/../.."  # repository root (this script lives in scripts/linux)
+cd "$(dirname "$0")/../../.."  # repository root (this script lives in app/scripts/linux)
 
 if ! command -v python3 >/dev/null; then
     echo "python3 is required (3.11 or newer)." >&2
@@ -53,7 +53,7 @@ python3 -m venv --system-site-packages .venv
 
 if [ "${1:-}" = "--no-shortcut" ]; then
     echo
-    echo "Done (no menu entry created). Start OptiFuzz with: ./scripts/linux/run-linux.sh"
+    echo "Done (no menu entry created). Start OptiFuzz with: ./app/scripts/linux/run-linux.sh"
     exit 0
 fi
 
@@ -65,13 +65,13 @@ cat > "$entry_dir/optifuzz.desktop" <<EOF
 Type=Application
 Name=OptiFuzz
 Comment=Web content discovery with dirsearch
-Exec="$PWD/scripts/linux/run-linux.sh"
+Exec="$PWD/app/scripts/linux/run-linux.sh"
 Path=$PWD
-Icon=$PWD/frontend/icon-dark.png
+Icon=$PWD/app/frontend/icon-dark.png
 Terminal=false
 Categories=Network;Security;
 EOF
 command -v update-desktop-database >/dev/null && update-desktop-database "$entry_dir" || true
 
 echo
-echo "Done. Find OptiFuzz in your application menu, or start it with: ./scripts/linux/run-linux.sh"
+echo "Done. Find OptiFuzz in your application menu, or start it with: ./app/scripts/linux/run-linux.sh"
