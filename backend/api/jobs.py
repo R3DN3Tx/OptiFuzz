@@ -21,6 +21,14 @@ def dirsearch_default_headers() -> dict:
     return {"headers": [{"name": n, "value": v} for n, v in DIRSEARCH_DEFAULT_HEADERS.items()]}
 
 
+def _effective_default_extensions() -> tuple[str, ...]:
+    """What dirsearch uses when a job has no extensions: Settings' list, dirsearch's own when nothing
+    is configured, none when "use no extensions" is chosen."""
+    configured = app_settings.get_default_extensions_fallback()
+    value = app_settings.DIRSEARCH_DEFAULT_EXTENSIONS if configured is None else configured
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
 @router.post("/api/projects/{project_id}/targets/{target_id}/jobs")
 def create_job(
     project_id: str,
@@ -69,6 +77,7 @@ def create_job(
         delay=body.delay,
         extra_args=extra_args,
         disabled_default_headers=disabled_headers,
+        default_extensions=() if body.extensions else _effective_default_extensions(),
     )
 
     output_stem = output_naming.build_output_stem(

@@ -348,3 +348,16 @@ def test_build_command_passes_the_job_log_file_to_dirsearch() -> None:
 
     assert argv[argv.index("--log") + 1] == "jobs/j/dirsearch.log"
     assert "--log" not in without
+
+
+def test_build_command_uses_the_default_extensions_frozen_on_the_job(workspace_root) -> None:
+    # The list recorded when the job was created wins over later settings changes (a resumed job).
+    app_settings.set_default_extensions_fallback("changed,later")
+    engine = DirsearchEngine(python_executable="python.exe")
+    config = DirsearchJobConfig(url="https://target.local/", default_extensions=("php", "html"))
+
+    argv = engine.build_command(
+        config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_006")
+    )
+
+    assert argv[argv.index("-e") + 1] == "php,html"

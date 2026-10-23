@@ -173,6 +173,8 @@ class DirsearchEngine(FuzzingEngine):
 
         if config.extensions:
             argv += ["-e", ",".join(config.extensions)]
+        elif config.default_extensions:
+            argv += ["-e", ",".join(config.default_extensions)]
         else:
             # See this module's own top-of-file comment for the full story.
             fallback = app_settings.get_default_extensions_fallback()

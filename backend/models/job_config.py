@@ -49,6 +49,10 @@ class DirsearchJobConfig:
     # its defaults under `-H`, so `-H` can only override one, never remove it;
     # DirsearchEngine drops them in the spawned process instead.
     disabled_default_headers: tuple[str, ...] = ()
+    # The extensions dirsearch falls back to when `extensions` is empty (dirsearch's own default list
+    # or the one set in Settings), frozen when the job is created so the job's details can list them
+    # and a later settings change does not alter a resumed job. Empty = no fallback in effect.
+    default_extensions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.url:
@@ -79,6 +83,7 @@ def config_to_dict(config: DirsearchJobConfig) -> dict[str, Any]:
         "delay": config.delay,
         "extra_args": list(config.extra_args),
         "disabled_default_headers": list(config.disabled_default_headers),
+        "default_extensions": list(config.default_extensions),
     }
 
 
@@ -101,4 +106,5 @@ def config_from_dict(data: dict[str, Any]) -> DirsearchJobConfig:
         delay=data.get("delay"),
         extra_args=tuple(data.get("extra_args", ())),
         disabled_default_headers=tuple(data.get("disabled_default_headers", ())),
+        default_extensions=tuple(data.get("default_extensions", ())),
     )

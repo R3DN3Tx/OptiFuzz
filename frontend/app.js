@@ -480,19 +480,25 @@ new MutationObserver(() => {
 // white background that can't be themed). Safe to attach even to an
 // element that gets rebuilt/replaced later (e.g. by a click handler on
 // that same element) -- see the orphan-cleanup observer above.
-function attachTooltip(el, text, maxWidth) {
+function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
     const box = h("div", { class: "app-tooltip", text });
     document.body.appendChild(box);
-    el.addEventListener("mouseenter", () => {
+    const show = () => {
         if (!document.body.contains(el)) { box.remove(); return; }
         box.style.display = "block";
         positionFloatingBox(el, box, maxWidth || 320);
         _visibleTooltipBoxes.set(el, box);
-    });
-    el.addEventListener("mouseleave", () => {
+    };
+    const hide = () => {
         box.style.display = "none";
         _visibleTooltipBoxes.delete(el);
-    });
+    };
+    el.addEventListener("mouseenter", show);
+    el.addEventListener("mouseleave", hide);
+    if (alsoOnFocus) {
+        el.addEventListener("focus", show);
+        el.addEventListener("blur", hide);
+    }
     return el;
 }
 
@@ -565,6 +571,14 @@ function buildHeaderNameChip(name, value, fullText = `${name}: ${value}`) {
 // above this exact panel already shows this exact job's own status pill),
 // unlike TREE/Results' own multi-row history (a path fuzzed several times
 // can genuinely have a different status each time, so Status stays there).
+// The Extensions cell of a job's details: the ones typed, or -- when none were -- the default list
+// dirsearch used instead (frozen on the job when it was created), marked "(default)".
+function extensionsCellText(extensions, cfg) {
+    if (extensions.length) return extensions.join(",");
+    const defaults = (cfg && cfg.default_extensions) || [];
+    return defaults.length ? `${defaults.join(",")} (default)` : "—";
+}
+
 function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     if (!history || !history.length) {
         return h("div", { class: "hint", text: "Not fuzzed yet from this exact path." });
@@ -621,7 +635,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: `job-status job-${entry.status}`, text: entry.status })]));
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
-            h("td", { text: extensions.join(",") || "—" }),
+            h("td", { text: extensionsCellText(extensions, cfg) }),
             headersCell,
             h("td", { text: other.join(" · ") || "—" }),
         );
@@ -1522,20 +1536,22 @@ function setupSettingsMenu() {
         panel.appendChild(h("div", {
             class: "hint",
             text: "Placeholders: {target} (target name), {port}, {path} (fuzzed path, slashes become "
-                + "underscores). Applies to jobs created from now on.",
+                + "underscores). A job id is always added at the end so two jobs never overwrite each other's "
+                + "file. Applies to jobs created from now on. Leave it empty to use the default.",
         }));
 
-        const input = h("input", { value: data.template });
+        // The default is shown as the input's placeholder (like the other settings), never as a value:
+        // only what you type is saved, and it is kept across restarts and updates.
+        const input = h("input", { placeholder: data.default_template, value: data.configured || "" });
         const preview = h("div", { class: "hint", text: `Example: ${data.example}` });
         const saveBtn = h("button", { type: "button", class: "primary", text: "Save" });
         saveBtn.addEventListener("click", async () => {
-            const value = input.value.trim();
-            if (!value) return;
             try {
                 const result = await api("/api/settings/output-filename-template", {
                     method: "PUT",
-                    body: JSON.stringify({ template: value }),
+                    body: JSON.stringify({ template: input.value.trim() }),
                 });
+                input.value = result.configured || "";
                 preview.textContent = `Example: ${result.example}`;
             } catch (err) {
                 alert(`Could not save: ${err.message}`);
@@ -1543,6 +1559,11 @@ function setupSettingsMenu() {
         });
         panel.appendChild(h("div", { class: "field-row" }, [input, saveBtn]));
         panel.appendChild(preview);
+        panel.appendChild(h("div", {
+            class: "hint",
+            text: "Tip: avoid {path}. A long fuzzed path makes a very long file name, and on Windows such "
+                + "files can fail to extract after being zipped (7-Zip handles them).",
+        }));
     }
 
     async function renderPortPage() {
@@ -1625,10 +1646,10 @@ function setupSettingsMenu() {
         pageHeader("Default extensions (Force extensions)");
         panel.appendChild(h("div", {
             class: "hint",
-            text: "When Force extensions is on and a fuzz's own Extensions field is empty, "
-                + "dirsearch itself silently falls back to a hidden default -- not none. Leave "
-                + "this blank to keep that (matches a plain dirsearch run); check the box to "
-                + "use none instead, or list your own.",
+            text: "When a fuzz's own Extensions field is empty, dirsearch does not use none: it falls back to "
+                + "its own default list. That is what OptiFuzz does until you change it here. Leave this "
+                + "blank to keep dirsearch's list (like a plain dirsearch run); check the box to use no "
+                + "extensions instead, or type your own list.",
         }));
 
         const useNone = data.configured_value === "";
@@ -4141,6 +4162,17 @@ async function fetchConcurrencyForNewFuzz(projectId, targetId) {
         return 2; // fall back to the default shown below
     }
 }
+// The extensions dirsearch uses when a fuzz has none: the list set in Settings, dirsearch's own when
+// nothing is set, none when "use no extensions" is chosen.
+async function fetchDefaultExtensionsForNewFuzz() {
+    try {
+        const data = await api("/api/settings/default-extensions-fallback");
+        const value = data.configured_value === null ? data.dirsearch_default : data.configured_value;
+        return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+    } catch (e) {
+        return []; // no hint shown
+    }
+}
 async function fetchDefaultHeadersForNewFuzz() {
     try {
         return (await api("/api/dirsearch-default-headers")).headers;
@@ -4170,19 +4202,31 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // fuzz) should still be remembered, and both the main New Fuzz section
     // AND every inline "Fuzz this path" launcher from Results/TREE share
     // this same function, so fixing it here covers both for free.
-    const [wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders] = await Promise.all([
+    const [wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders, defaultExtensions] = await Promise.all([
         fetchWordlistTreeForNewFuzz(),
         fetchConcurrencyForNewFuzz(projectId, targetId),
         fetchFuzzDefaultsForNewFuzz(projectId, targetId),
         fetchDefaultHeadersForNewFuzz(),
+        fetchDefaultExtensionsForNewFuzz(),
     ]);
     const hasSavedDefaults = Object.keys(fuzzDefaults).length > 0;
 
     const pathInput = h("input", { placeholder: "/path/ (e.g. /api/)", value: "/" });
+    // With a default extension list in effect (dirsearch's own, or the one from Settings) an empty
+    // field does not mean "none": say so, and list them on hover or focus.
     const extInput = h("input", {
-        placeholder: "Extensions (php,html)",
+        placeholder: defaultExtensions.length ? "Default extensions activated" : "Extensions (php,html)",
         value: hasSavedDefaults ? (fuzzDefaults.extensions || []).join(",") : "",
     });
+    if (defaultExtensions.length) {
+        attachTooltip(
+            extInput,
+            `While this field is empty, dirsearch uses its default extensions: ${defaultExtensions.join(", ")}. `
+                + "Type your own to replace them, or change the default in Settings → Default extensions.",
+            320,
+            true,
+        );
+    }
     const threadsInput = h("input", {
         type: "number", value: String(hasSavedDefaults ? fuzzDefaults.threads || 5 : 5), min: "1", style: "width:70px",
     });
@@ -4455,7 +4499,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
             pathInput,
             wordlistPicker.element,
             extInput,
-            h("label", { text: "threads" }),
+            h("label", { text: "Threads" }),
             threadsInput,
             buildIconTextButton("button", LIGHTNING_FILLED_ICON_SVG, "Fuzz", { class: "primary", type: "submit" }),
         ]),

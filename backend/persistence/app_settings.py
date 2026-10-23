@@ -41,11 +41,18 @@ def set_browser_path(path: str | None) -> None:
     save_settings(settings)
 
 
-DEFAULT_OUTPUT_FILENAME_TEMPLATE = "dirsearch_{target}_{port}_{path}"
+# No {path} by default: a long fuzzed path makes a file name Windows cannot always zip and unzip (see
+# output_naming). A job id is always appended after the template, so two jobs never share a file.
+DEFAULT_OUTPUT_FILENAME_TEMPLATE = "dirsearch_{target}_{port}"
+
+
+def get_configured_output_filename_template() -> str | None:
+    """The template the user saved, or None when the default is in use."""
+    return load_settings().get("output_filename_template") or None
 
 
 def get_output_filename_template() -> str:
-    return load_settings().get("output_filename_template") or DEFAULT_OUTPUT_FILENAME_TEMPLATE
+    return get_configured_output_filename_template() or DEFAULT_OUTPUT_FILENAME_TEMPLATE
 
 
 def set_output_filename_template(value: str) -> None:

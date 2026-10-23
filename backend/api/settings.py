@@ -36,23 +36,29 @@ def get_version() -> dict:
     return {"version": version}
 
 
-@router.get("/api/settings/output-filename-template")
-def get_output_filename_template() -> dict:
+def _output_filename_template_payload() -> dict:
     template = app_settings.get_output_filename_template()
     example = output_naming.build_output_stem(
         template, target_name="api.example.com", url="http://api.example.com:8080/", path="/admin/subfolder"
     )
-    return {"template": template, "example": f"{example}.txt"}
+    return {
+        "template": template,  # the one in effect
+        "configured": app_settings.get_configured_output_filename_template(),  # None = the default
+        "default_template": app_settings.DEFAULT_OUTPUT_FILENAME_TEMPLATE,
+        "example": f"{example}_<job id>.txt",
+    }
+
+
+@router.get("/api/settings/output-filename-template")
+def get_output_filename_template() -> dict:
+    return _output_filename_template_payload()
 
 
 @router.put("/api/settings/output-filename-template")
 def set_output_filename_template(body: OutputFilenameTemplateRequest) -> dict:
+    # An empty template goes back to the default.
     app_settings.set_output_filename_template(body.template)
-    template = app_settings.get_output_filename_template()
-    example = output_naming.build_output_stem(
-        template, target_name="api.example.com", url="http://api.example.com:8080/", path="/admin/subfolder"
-    )
-    return {"template": template, "example": f"{example}.txt"}
+    return _output_filename_template_payload()
 
 
 @router.get("/api/settings/browser")

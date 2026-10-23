@@ -490,6 +490,12 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
+// Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
+function extensionsCellText(extensions, cfg) {
+    if (extensions.length) return extensions.join(",");
+    var defaults = (cfg && cfg.default_extensions) || [];
+    return defaults.length ? defaults.join(",") + " (default)" : "—";
+}
 function wordlistBaseName(path) {
     if (!path) return "?";
     var parts = String(path).split(/[\\/]/);
@@ -824,7 +830,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
-            h("td", { text: (entry.extensions || []).join(",") || "—" }),
+            h("td", { text: extensionsCellText(entry.extensions || [], cfg) }),
             headersCell,
             h("td", { text: other.join(" · ") || "—" }),
         );
@@ -1730,6 +1736,12 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
+// Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
+function extensionsCellText(extensions, cfg) {
+    if (extensions.length) return extensions.join(",");
+    var defaults = (cfg && cfg.default_extensions) || [];
+    return defaults.length ? defaults.join(",") + " (default)" : "—";
+}
 function wordlistBaseName(path) {
     if (!path) return "?";
     var parts = String(path).split(/[\\/]/);
@@ -2081,7 +2093,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
-            h("td", { text: (entry.extensions || []).join(",") || "—" }),
+            h("td", { text: extensionsCellText(entry.extensions || [], cfg) }),
             headersCell,
             h("td", { text: other.join(" · ") || "—" }),
         );

@@ -28,14 +28,23 @@ updates (see [Updating](#updating)).
 
 ## Main features
 
-The essentials. Every feature, option and screen is explained in the
-**[user guide](docs/USAGE.md)**.
+The main features at a glance. **Everything OptiFuzz does, screen by screen, is explained in the
+complete documentation:**
+
+> ### Full documentation
+>
+> **[User guide: all the features, options and screens →](docs/USAGE.md)**
+>
+> Getting started, every form field and option, job states, auto-pause, Results filters and hide
+> rules, the tree, exports, settings and where your data lives.
 
 - **Projects and targets.** One installation holds many projects, each with several targets (hosts).
   Everything a target produces stays isolated from every other target.
 - **Fuzzing you control.** Start dirsearch jobs from a form with a wordlist, extensions, headers and any
-  other dirsearch flag. **Pause, resume and stop** at any time; a paused job continues from where it
-  stopped, and an app crash does not lose a long run.
+  other dirsearch flag. If you type no extensions, the form tells you that dirsearch's default
+  extensions are active (*Default extensions activated*) and lists them when you hover it. **Pause,
+  resume and stop** at any time; a paused job continues from where it stopped, and an app crash does
+  not lose a long run.
 - **Auto-pause.** A job pauses when the target answers a status code you chose (for example `429` or a
   `403` block), and you decide whether Resume repeats that word or moves on.
 - **Readable results.** Colour-coded status codes, a **NEW** badge on what you have not seen yet,
@@ -46,24 +55,17 @@ The essentials. Every feature, option and screen is explained in the
   every target of a project at once, a plain list of tree URLs for other tools, and an optional mirror
   of dirsearch's raw output.
 
-![Jobs screen](docs/images/jobs.png)
+<p align="center"><img src="docs/images/jobs.png" alt="Jobs screen"></p>
 
-*Jobs screen: every fuzz of a target with its status, live progress, rate and errors, and the buttons to pause, resume or stop it.*
+<p align="center"><em>Jobs screen: every fuzz of a target with its status, live progress, rate and errors, and the buttons to pause, resume or stop it.</em></p>
 
-![Results screen](docs/images/results.png)
+<p align="center"><img src="docs/images/results.png" alt="Results screen"></p>
 
-*Results screen: what dirsearch found, grouped by directory, with colour-coded status codes, the NEW badge and the search, filter and hide-rule controls.*
+<p align="center"><em>Results screen: what dirsearch found, grouped by directory, with colour-coded status codes, the NEW badge and the search, filter and hide-rule controls.</em></p>
 
-![Tree screen](docs/images/tree.png)
+<p align="center"><img src="docs/images/tree.png" alt="Tree screen"></p>
 
-*Tree screen: the paths you chose to keep, with interesting markers, notes and the wordlists already used on each one.*
-
-> ### Full documentation
->
-> **[User guide: everything OptiFuzz does, screen by screen →](docs/USAGE.md)**
->
-> Getting started, every form field and option, job states, auto-pause, Results filters and hide
-> rules, the tree, exports, settings and where your data lives.
+<p align="center"><em>Tree screen: the paths you chose to keep, with interesting markers, notes and the wordlists already used on each one.</em></p>
 
 ## Installation
 

@@ -456,14 +456,21 @@ def test_target_fuzz_defaults_round_trip_is_scoped_to_that_target(client: TestCl
 
 def test_output_filename_template_settings_round_trip(client: TestClient) -> None:
     got = client.get("/api/settings/output-filename-template").json()
-    assert "{target}" in got["template"]
-    assert got["example"].endswith(".txt")
+    # No {path} by default (long names break zip/unzip on Windows); nothing saved yet.
+    assert got["template"] == got["default_template"] == "dirsearch_{target}_{port}"
+    assert got["configured"] is None
+    assert got["example"].endswith("_<job id>.txt")
 
     updated = client.put(
         "/api/settings/output-filename-template", json={"template": "{path}_{target}"}
     ).json()
-    assert updated["template"] == "{path}_{target}"
+    assert updated["template"] == updated["configured"] == "{path}_{target}"
     assert updated["example"].endswith(".txt")
+
+    # Saving an empty value goes back to the default, and is remembered as "not customised".
+    reset = client.put("/api/settings/output-filename-template", json={"template": ""}).json()
+    assert reset["template"] == "dirsearch_{target}_{port}"
+    assert reset["configured"] is None
 
 
 def test_port_settings_round_trip(client: TestClient) -> None:
@@ -1023,3 +1030,28 @@ def test_projects_list_reports_is_fuzzing_with_the_running_targets(
 
     client.post(f"/api/jobs/{job['id']}/stop")
     _wait_for_terminal(client, job["id"])
+
+
+def test_create_job_records_the_default_extensions_it_will_use(client: TestClient, tmp_path: Path) -> None:
+    # Reported: the job's details must list every extension in play, including dirsearch's own default
+    # list when none were typed.
+    project = client.post("/api/projects", json={"name": "Client A"}).json()
+    target = client.post(
+        f"/api/projects/{project['id']}/targets", json={"name": "t1", "base_url": "https://t1.local/"},
+    ).json()
+    url = f"/api/projects/{project['id']}/targets/{target['id']}/jobs"
+    body = {"path": "/", "wordlist_files": [_wordlist(tmp_path)]}
+
+    untyped = client.post(url, json=body).json()
+    assert untyped["config"]["default_extensions"] == ["php", "asp", "aspx", "jsp", "html", "htm"]
+
+    typed = client.post(url, json={**body, "extensions": ["bak"]}).json()
+    assert typed["config"]["default_extensions"] == []
+
+    client.put("/api/settings/default-extensions-fallback", json={"value": ""})
+    none_configured = client.post(url, json=body).json()
+    assert none_configured["config"]["default_extensions"] == []
+
+    client.put("/api/settings/default-extensions-fallback", json={"value": "bak,old"})
+    custom = client.post(url, json=body).json()
+    assert custom["config"]["default_extensions"] == ["bak", "old"]
