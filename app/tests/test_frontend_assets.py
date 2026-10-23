@@ -20,3 +20,10 @@ def test_bundled_fonts_ship_with_their_license_notice() -> None:
 
     assert "SIL Open Font License" in notice
     assert "Selawik" in notice and "Cascadia" in notice
+
+
+def test_new_fuzz_form_follows_the_default_extensions_setting_without_a_tab_switch() -> None:
+    # Reported: the "Default extensions activated" field only changed after leaving the tab. Settings announces
+    # its new value with a window event and every New Fuzz form listens for it.
+    source = (FRONTEND / "app.js").read_text(encoding="utf-8")
+    assert source.count('"optifuzz:default-extensions"') == 3  # dispatch, add and remove of the listener

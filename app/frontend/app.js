@@ -439,11 +439,7 @@ function attachCopyPathContextMenu(element, getFullPath, label = "Copy full path
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
-        const hover = _visibleTooltipBoxes.get(element);
-        if (hover) {
-            hover.style.display = "none";
-            _visibleTooltipBoxes.delete(element);
-        }
+        if (element._hideTooltip) element._hideTooltip();
         const item = h("button", { type: "button", class: "path-context-menu-item", text: label });
         item.addEventListener("click", async (ev) => {
             ev.stopPropagation();
@@ -491,28 +487,37 @@ new MutationObserver(() => {
 // white background that can't be themed). Safe to attach even to an
 // element that gets rebuilt/replaced later (e.g. by a click handler on
 // that same element) -- see the orphan-cleanup observer above.
-// `text` may also be a function returning (a promise of) the text, looked up each time the tooltip opens.
+// `text` may also be a function returning (a promise of) the text -- or of { heading, body }, shown as a bold
+// line followed by the explanation -- looked up each time the tooltip opens.
 function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
     const dynamic = typeof text === "function";
     const box = h("div", { class: "app-tooltip", text: dynamic ? "…" : text });
     document.body.appendChild(box);
+    let openToken = 0; // a lookup that finishes after the pointer left (or after a right-click) must not show the box
     const show = async () => {
         if (!document.body.contains(el)) { box.remove(); return; }
+        const token = ++openToken;
+        if (dynamic) {
+            const content = await text();
+            if (token !== openToken || !content) return;
+            if (typeof content === "string") {
+                box.textContent = content;
+            } else {
+                // { heading, body }: a bold first line, then the explanation on its own line
+                box.textContent = "";
+                box.append(h("strong", { class: "app-tooltip-heading", text: content.heading }), h("div", { text: content.body }));
+            }
+        }
         box.style.display = "block";
         positionFloatingBox(el, box, maxWidth || 320);
         _visibleTooltipBoxes.set(el, box);
-        if (dynamic) {
-            const content = await text();
-            if (_visibleTooltipBoxes.get(el) === box) {
-                box.textContent = content;
-                positionFloatingBox(el, box, maxWidth || 320);
-            }
-        }
     };
     const hide = () => {
+        openToken++;
         box.style.display = "none";
         _visibleTooltipBoxes.delete(el);
     };
+    el._hideTooltip = hide;
     el.addEventListener("mouseenter", show);
     el.addEventListener("mouseleave", hide);
     if (alsoOnFocus) {
@@ -1774,9 +1779,11 @@ function setupSettingsMenu() {
             const value = checkbox.checked ? "" : (input.value.trim() || null);
             fieldError.hidden = true;
             try {
-                await api("/api/settings/default-extensions-fallback", {
+                const saved = await api("/api/settings/default-extensions-fallback", {
                     method: "PUT", body: JSON.stringify({ value }),
                 });
+                // Every New Fuzz form on screen follows the new default straight away.
+                window.dispatchEvent(new CustomEvent("optifuzz:default-extensions", { detail: effectiveDefaultExtensions(saved) }));
                 await renderPage("default-extensions");
             } catch (err) {
                 fieldError.textContent = `Could not save: ${err.message}`;
@@ -2081,7 +2088,7 @@ async function renderTargets(projectId) {
         return url.trim().toLowerCase().startsWith("https://") ? "443" : "80";
     }
     const nameInput = h("input", { class: "target-name-input", placeholder: "Target name (e.g. api.example.com)", required: "required" });
-    const urlInput = h("input", { class: "target-url-input", placeholder: "Base URL (https://api.example.com/)", required: "required" });
+    const urlInput = h("input", { class: "target-url-input", placeholder: "Base URL (e.g. https://api.example.com/)", required: "required" });
     const portInput = h("input", {
         type: "number", min: "1", max: "65535", class: "port-input", placeholder: "Default",
     });
@@ -4269,11 +4276,13 @@ async function fetchConcurrencyForNewFuzz(projectId, targetId) {
 }
 // The extensions dirsearch uses when a fuzz has none: the list set in Settings, dirsearch's own when
 // nothing is set, none when "use no extensions" is chosen.
+function effectiveDefaultExtensions(settings) {
+    const value = settings.configured_value === null ? settings.dirsearch_default : settings.configured_value;
+    return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+}
 async function fetchDefaultExtensionsForNewFuzz() {
     try {
-        const data = await api("/api/settings/default-extensions-fallback");
-        const value = data.configured_value === null ? data.dirsearch_default : data.configured_value;
-        return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+        return effectiveDefaultExtensions(await api("/api/settings/default-extensions-fallback"));
     } catch (e) {
         return []; // no hint shown
     }
@@ -4319,20 +4328,37 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     const pathInput = h("input", { placeholder: "/path/ (e.g. /api/)", value: "/" });
     // With a default extension list in effect (dirsearch's own, or the one from Settings) an empty
     // field does not mean "none": say so, and list them on hover or focus.
+    let currentDefaultExtensions = defaultExtensions;
     const extInput = h("input", {
-        placeholder: defaultExtensions.length ? "Default extensions activated" : "Extensions (php,html)",
+        class: "extensions-input", // wide enough for either placeholder
         value: hasSavedDefaults ? (fuzzDefaults.extensions || []).join(",") : "",
     });
-    if (defaultExtensions.length) {
-        extInput.classList.add("has-default-extensions"); // wide enough for the whole placeholder
-        attachTooltip(
-            extInput,
-            `While this field is empty, dirsearch uses its default extensions: ${defaultExtensions.join(", ")}. `
-                + "Type your own to replace them, or change the default in Settings → Default extensions.",
-            320,
-            true,
-        );
+    function applyDefaultExtensions() {
+        extInput.placeholder = currentDefaultExtensions.length ? "Default extensions activated" : "Extensions (e.g. php,html)";
     }
+    applyDefaultExtensions();
+    attachTooltip(
+        extInput,
+        () => (currentDefaultExtensions.length
+            ? {
+                heading: `Default extensions: ${currentDefaultExtensions.join(", ")}`,
+                body: "While this field is empty, dirsearch uses them. Type your own to replace them, "
+                    + "or change the default in Settings → Default extensions.",
+            }
+            : ""),
+        320,
+        true,
+    );
+    // Settings -> Default extensions announces its new value: the field updates at once, not on the next tab switch.
+    function onDefaultExtensionsChanged(event) {
+        if (!document.body.contains(extInput)) {
+            window.removeEventListener("optifuzz:default-extensions", onDefaultExtensionsChanged);
+            return;
+        }
+        currentDefaultExtensions = event.detail;
+        applyDefaultExtensions();
+    }
+    window.addEventListener("optifuzz:default-extensions", onDefaultExtensionsChanged);
     const threadsInput = h("input", {
         type: "number", value: String(hasSavedDefaults ? fuzzDefaults.threads || 5 : 5), min: "1", style: "width:70px",
     });
@@ -4435,7 +4461,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // pentester adds more flags, instead of scrolling off to the right
     // (same auto-grow-height technique as .tree-path-input / .header-value-input).
     const customOptionsInput = h("textarea", {
-        rows: "1", class: "custom-options-input", placeholder: "--max-rate 50 --timeout 10 --proxy 127.0.0.1:8080",
+        rows: "1", class: "custom-options-input", placeholder: "e.g. --max-rate 50 --timeout 10 --proxy 127.0.0.1:8080",
     });
     // .value set as a property, not via h()'s attrs -- a <textarea> has no
     // real `value` ATTRIBUTE (its rendered content comes from a child text
