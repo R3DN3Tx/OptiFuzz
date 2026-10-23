@@ -969,7 +969,9 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
    pins it to the row's own right edge whether or not a redirect link is
    also present as an earlier sibling. */
 .result-redirect-cell-inner { display: flex; align-items: center; min-height: 100%; }
-.result-redirect-cell-inner .new-badge { margin-left: auto; }
+.result-redirect-cell-inner .new-badge { margin-left: auto; flex: none; white-space: nowrap; }
+/* A long redirect wraps inside what is left of the cell while NEW shows; without NEW it uses all of it. */
+.result-redirect-cell-inner .result-redirect-link { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
 /* ---- FUZZ TREE ---- */
 /* Same table-layout: fixed reasoning as .results-table above -- keeps
@@ -1500,4 +1502,18 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
        differently. */
     -webkit-user-select: text;
     user-select: text;
+}
+
+/* ---- Resume options (gear next to Resume on an auto-paused job) ---- */
+.resume-gear-wrap { position: relative; }
+.resume-gear-btn { padding: 4px 6px; }
+.resume-gear-btn.resume-gear-skip { color: var(--orange); position: relative; }
+.resume-gear-btn.resume-gear-skip::after {
+    content: ""; position: absolute; top: 1px; right: 1px; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--orange);
+}
+.resume-gear-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; padding: 6px 10px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px; cursor: pointer;
 }

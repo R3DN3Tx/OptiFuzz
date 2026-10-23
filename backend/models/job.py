@@ -78,6 +78,11 @@ class FuzzJob:
     auto_paused: bool = False
     # The one status code that triggered the auto-pause (pause_on_status is the whole armed list).
     auto_pause_status: int | None = None
+    # Where the job would restart if the word that auto-paused it were SKIPPED instead of repeated
+    # (completed_lines/completed_requests always hold the repeat point). Set only by an auto-pause
+    # that has the request that triggered it; consumed by resume_job.
+    skip_completed_lines: int | None = None
+    skip_completed_requests: int | None = None
     error_reason: str | None = None
     result_count: int = 0
     wordlist_sources: list[str] = field(default_factory=list)
@@ -106,6 +111,8 @@ class FuzzJob:
             "pause_requested": self.pause_requested,
             "auto_paused": self.auto_paused,
             "auto_pause_status": self.auto_pause_status,
+            "skip_completed_lines": self.skip_completed_lines,
+            "skip_completed_requests": self.skip_completed_requests,
             "error_reason": self.error_reason,
             "result_count": self.result_count,
             "wordlist_sources": self.wordlist_sources,
@@ -136,6 +143,8 @@ class FuzzJob:
             pause_requested=data.get("pause_requested", False),
             auto_paused=data.get("auto_paused", False),
             auto_pause_status=data.get("auto_pause_status"),
+            skip_completed_lines=data.get("skip_completed_lines"),
+            skip_completed_requests=data.get("skip_completed_requests"),
             error_reason=data.get("error_reason"),
             result_count=data.get("result_count", 0),
             wordlist_sources=data.get("wordlist_sources", []),

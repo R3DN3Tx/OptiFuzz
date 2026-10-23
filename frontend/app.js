@@ -216,6 +216,23 @@ const FOLDER_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="c
 // fuzz-history panel the "Fuzzed" tag opens elsewhere, just for this one
 // job. Outline while closed, blue (.job-info-btn.active, matching the
 // "Fuzzed" tag's own active color) once open.
+// Gear next to Resume (auto-paused jobs): opens the "repeat the word" option.
+const GEAR_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
+    + '<circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3"/></svg>';
+
+// Whether Resume repeats the word that auto-paused a job, remembered per job (default: repeat).
+let openResumeMenuId = null;
+function resumeRepeatsWord(jobId) {
+    try { return localStorage.getItem(`optifuzz.resume-repeat.${jobId}`) !== "0"; } catch (e) { return true; }
+}
+function setResumeRepeatsWord(jobId, repeat) {
+    try {
+        if (repeat) localStorage.removeItem(`optifuzz.resume-repeat.${jobId}`);
+        else localStorage.setItem(`optifuzz.resume-repeat.${jobId}`, "0");
+    } catch (e) { /* storage unavailable: the choice just is not remembered */ }
+}
+
 const INFO_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
     + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
     + '<circle cx="8" cy="8" r="6.3"/><line x1="8" y1="7.3" x2="8" y2="11.3"/><circle cx="8" cy="4.9" r="0.15" fill="currentColor"/></svg>';
@@ -589,7 +606,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
         if (cfg.http_method && cfg.http_method !== "GET") other.push(cfg.http_method);
         if (cfg.proxy) other.push(`proxy ${cfg.proxy}`);
         if (cfg.disabled_default_headers && cfg.disabled_default_headers.length) other.push(`no ${cfg.disabled_default_headers.join(", ")}`);
-        if (cfg.extra_args && cfg.extra_args.length) other.push(String(cfg.extra_args));
+        if (cfg.extra_args && cfg.extra_args.length) other.push(cfg.extra_args.join(" "));
 
         const cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: `job-status job-${entry.status}`, text: entry.status })]));
@@ -2456,11 +2473,43 @@ async function renderWorkspace(projectId, targetId, tab) {
 
             const actions = h("div", { style: "display:flex;gap:4px;align-items:center;" });
             if (job.status === "PAUSED" || job.status === "FAILED") {
+                // Only an auto-pause that caught its trigger request can skip that word.
+                const canSkipWord = job.skip_completed_lines !== null && job.skip_completed_lines !== undefined;
+                const repeatWord = !canSkipWord || resumeRepeatsWord(job.id);
                 actions.appendChild(h("button", {
                     class: "primary",
                     text: "▶ Resume",
-                    onclick: async () => { await api(`/api/jobs/${job.id}/resume`, { method: "POST" }); refreshJobs(); },
+                    title: repeatWord ? "Resume" : "Resume, skipping the word that paused it",
+                    onclick: async () => {
+                        await api(`/api/jobs/${job.id}/resume?repeat_word=${repeatWord}`, { method: "POST" });
+                        refreshJobs();
+                    },
                 }));
+                if (canSkipWord) {
+                    const gearBtn = h("button", {
+                        type: "button",
+                        class: `icon-btn resume-gear-btn${repeatWord ? "" : " resume-gear-skip"}`,
+                        title: repeatWord ? "Resume options" : "Resume options: the word that paused it will be skipped",
+                        onclick: () => {
+                            openResumeMenuId = openResumeMenuId === job.id ? null : job.id;
+                            refreshJobs();
+                        },
+                    });
+                    gearBtn.innerHTML = GEAR_ICON_SVG;
+                    const wrap = h("div", { class: "resume-gear-wrap" }, [gearBtn]);
+                    if (openResumeMenuId === job.id) {
+                        const check = h("input", { type: "checkbox" });
+                        check.checked = repeatWord;
+                        check.addEventListener("change", () => {
+                            setResumeRepeatsWord(job.id, check.checked);
+                            refreshJobs();
+                        });
+                        wrap.appendChild(h("label", { class: "resume-gear-menu" }, [
+                            check, h("span", { text: "Repeat the word that paused it" }),
+                        ]));
+                    }
+                    actions.appendChild(wrap);
+                }
             } else if (job.status === "QUEUED" || job.status === "RUNNING") {
                 actions.appendChild(h("button", {
                     text: "⏸ Pause",
@@ -3010,6 +3059,10 @@ async function renderWorkspace(projectId, targetId, tab) {
         if (!document.body.contains(jobsSection)) {
             document.removeEventListener("click", onDocumentClickCloseJobInfo);
             return;
+        }
+        if (openResumeMenuId !== null && !e.target.closest(".resume-gear-wrap")) {
+            openResumeMenuId = null;
+            refreshJobs();
         }
         if (openJobInfoId === null) return;
         if (e.target.closest(".job-info-btn") || e.target.closest(".fuzz-history-row")) return;

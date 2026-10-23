@@ -142,6 +142,7 @@ def _claim_windows_app_identity() -> None:
 
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_TEXT_COLOR = 36  # Windows 11 (build 22000+) only
+_TITLE_BAR_WATCH_SECONDS = 1.0
 
 # Windows' own default dark-mode caption background (RGB 32,32,32) -- not an
 # officially documented constant, but the consistently observed shade every
@@ -215,6 +216,38 @@ def _style_title_bar(window: webview.Window) -> None:
     window.events.shown += _apply
     window.events.restored += _apply
     window.events.maximized += _apply
+
+    # Those events are not enough: the bar still turned white at random moments (Windows
+    # re-themes the caption on focus/theme changes no event reports). So once shown, a daemon
+    # thread keeps checking the dark flag and puts it back when it was lost. Raw dwmapi/user32
+    # calls on the stored HWND only, safe from any thread (see _hide_title_bar_icon).
+    def _watch(*_args, **_kwargs) -> None:
+        try:
+            hwnd = window.native.Handle.ToInt32()
+        except (AttributeError, OSError):
+            return
+
+        def _guard() -> None:
+            while ctypes.windll.user32.IsWindow(hwnd):
+                try:
+                    current = ctypes.c_int(-1)
+                    ctypes.windll.dwmapi.DwmGetWindowAttribute(
+                        hwnd, _DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(current), ctypes.sizeof(current),
+                    )
+                    if current.value != 1:
+                        for attr, value in (
+                            (_DWMWA_USE_IMMERSIVE_DARK_MODE, 1),
+                            (_DWMWA_TEXT_COLOR, _colorref(_DEFAULT_DARK_CAPTION_COLOR)),
+                        ):
+                            cval = ctypes.c_int(value)
+                            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(cval), ctypes.sizeof(cval))
+                except OSError:
+                    pass
+                time.sleep(_TITLE_BAR_WATCH_SECONDS)
+
+        threading.Thread(target=_guard, name="title-bar-guard", daemon=True).start()
+
+    window.events.shown += _watch
 
 
 _GWL_EXSTYLE = -20

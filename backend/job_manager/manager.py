@@ -433,18 +433,27 @@ class JobManager:
             self.pause_job(job_id)
         return len(active)
 
-    def resume_job(self, job_id: str) -> FuzzJob:
+    def resume_job(self, job_id: str, repeat_word: bool = True) -> FuzzJob:
         """Resume a PAUSED (or FAILED) job from `job.completed_lines` -- a freshly-sliced remainder wordlist, not a pre-existing
         chunk file (see `_run_job`). Only the small, thread-bounded window of
         requests that were in flight when the run was cut short gets redone,
         the same "never lose a word" guarantee as before, just far more
-        fine-grained."""
+        fine-grained.
+
+        `repeat_word=False` resumes an auto-paused job AFTER the word whose answer paused it
+        instead of requesting it again (that word really answers 403, say, it is not a block)."""
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 raise JobNotFoundError(job_id)
             if job.status not in (JobStatus.PAUSED, JobStatus.FAILED):
                 return job
+
+            if not repeat_word and job.skip_completed_lines is not None:
+                job.completed_lines = job.skip_completed_lines
+                job.completed_requests = job.skip_completed_requests or 0
+            job.skip_completed_lines = None
+            job.skip_completed_requests = None
 
             job.status = JobStatus.QUEUED
             job.pause_requested = False
@@ -890,6 +899,8 @@ class JobManager:
         # completed_lines), so repeated calls stay consistent instead of
         # drifting/double-counting.
         base_lines, base_requests = job.completed_lines, job.completed_requests
+        # dirsearch counts errors per process: the job keeps the total across pauses/resumes.
+        base_errors = job.errors
         if base_lines:
             # A resumed segment is deduplicated on its own by dirsearch, so paths already requested
             # before the pause are requested again: the true total is what is done + this remainder.
@@ -959,7 +970,7 @@ class JobManager:
         progress_state: dict[str, Any] = {"last": None, "tail": ""}
         stdout_thread = threading.Thread(
             target=self._read_stdout,
-            args=(job, proc, batcher, progress_state, lines, config, base_lines, base_requests),
+            args=(job, proc, batcher, progress_state, lines, config, base_lines, base_requests, base_errors),
             daemon=True,
         )
         stderr_thread = threading.Thread(
@@ -992,7 +1003,7 @@ class JobManager:
         # stall the run never reach job.errors through it: the log has them whatever the end.
         failures = summarize_request_errors(log_file)
         if failures:
-            job.errors = max(job.errors, failures.count)
+            job.errors = max(job.errors, base_errors + failures.count)
 
         if job.pause_requested and not job.stop_requested:
             self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
@@ -1094,6 +1105,7 @@ class JobManager:
         config: DirsearchJobConfig,
         base_lines: int,
         base_requests: int,
+        base_errors: int = 0,
     ) -> None:
         """Not line-based (`for line in proc.stdout`) anymore, since 2026-09-24:
         dirsearch's own live progress-bar redraws share the exact same
@@ -1144,7 +1156,7 @@ class JobManager:
                 progress_state["last"] = progress
                 now = time.monotonic()
                 if now - last_progress_published_at >= PROGRESS_PUBLISH_MIN_INTERVAL_SECONDS:
-                    self._publish_progress(job, progress, base_requests)
+                    self._publish_progress(job, progress, base_requests, base_errors)
                     last_progress_published_at = now
                 if now - last_checkpoint_saved_at >= PERIODIC_CHECKPOINT_INTERVAL_SECONDS:
                     self._save_periodic_checkpoint(job, lines, config, progress, base_lines, base_requests)
@@ -1156,7 +1168,7 @@ class JobManager:
         # else is ever coming now, so it's safe to trust it's complete.
         self._emit_parsed_results(job, parser.flush(), batcher, pause_statuses, proc)
         if progress_state["last"] is not None:
-            self._publish_progress(job, progress_state["last"], base_requests)  # make sure the final state always lands
+            self._publish_progress(job, progress_state["last"], base_requests, base_errors)  # make sure the final state always lands
         proc.stdout.close()
 
     def _compute_checkpoint(
@@ -1237,6 +1249,7 @@ class JobManager:
         from backend.job_manager.pty_runner import PtyChunkProcess  # lazy: Windows-only dep
 
         base_lines, base_requests = job.completed_lines, job.completed_requests
+        base_errors = job.errors
 
         argv = self._engine.build_command(config, wordlist_file=wordlist_file, output_base=output_base)
         proc = PtyChunkProcess(argv)
@@ -1271,13 +1284,13 @@ class JobManager:
                 last_progress = progress
                 now = time.monotonic()
                 if now - last_progress_published_at >= PROGRESS_PUBLISH_MIN_INTERVAL_SECONDS:
-                    self._publish_progress(job, progress, base_requests)
+                    self._publish_progress(job, progress, base_requests, base_errors)
                     last_progress_published_at = now
 
         # See _read_stdout's own comment -- same trailing-result release at EOF.
         self._emit_parsed_results(job, parser.flush(), batcher, pause_statuses, proc)
         if last_progress is not None:
-            self._publish_progress(job, last_progress, base_requests)  # make sure the final state always lands
+            self._publish_progress(job, last_progress, base_requests, base_errors)  # make sure the final state always lands
 
         exit_code = proc.wait()
         with self._lock:
@@ -1361,6 +1374,7 @@ class JobManager:
             lines, config, last_progress, base_lines, base_requests,
         )
         trigger_url = self._auto_pause_urls.pop(job.id, None)
+        job.skip_completed_lines = job.skip_completed_requests = None
         if trigger_url and job.auto_paused:
             self._repeat_auto_pause_trigger(job, trigger_url, lines, config, base_lines, base_requests)
 
@@ -1376,14 +1390,23 @@ class JobManager:
         index = first_line_requesting(
             lines[base_lines:], path[len(base_path):], list(config.extensions), config.force_extensions,
         )
-        if index is None or base_lines + index >= job.completed_lines:
+        if index is None:
+            return
+        # Resuming past the word means starting right after it (never before the plain checkpoint).
+        job.skip_completed_lines = max(job.completed_lines, base_lines + index + 1)
+        job.skip_completed_requests = base_requests + estimate_requests(
+            lines[base_lines : job.skip_completed_lines], list(config.extensions), config.force_extensions,
+        ) if job.skip_completed_lines > job.completed_lines else job.completed_requests
+        if base_lines + index >= job.completed_lines:
             return
         job.completed_lines = base_lines + index
         job.completed_requests = base_requests + estimate_requests(
             lines[base_lines : base_lines + index], list(config.extensions), config.force_extensions,
         )
 
-    def _publish_progress(self, job: FuzzJob, progress: ParsedProgress, base_requests: int) -> None:
+    def _publish_progress(
+        self, job: FuzzJob, progress: ParsedProgress, base_requests: int, base_errors: int = 0,
+    ) -> None:
         # total: dirsearch's OWN live-reported total for this run segment's
         # wordlist (progress.length -- parsed straight off its own progress
         # bar, e.g. the "823" in "[412/823]"), not our own upfront estimate
@@ -1426,7 +1449,7 @@ class JobManager:
         # (periodic checkpoint, pause, completion). JOBS' own live Rate/
         # Errors columns (2026-09-24) need this to survive a REST re-fetch
         # after the job goes terminal, not just the transient SSE payload.
-        job.errors = progress.errors
+        job.errors = base_errors + progress.errors
         # This only ever fires while the segment's subprocess is still
         # running -- the job is never actually COMPLETED yet at this point
         # (there's still the process exit, report flush, and job.completed
@@ -1443,7 +1466,7 @@ class JobManager:
                 "overall_total": total,
                 "overall_percent": overall_percent,
                 "rate": progress.rate,
-                "errors": progress.errors,
+                "errors": job.errors,
             },
         )
 

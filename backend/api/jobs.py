@@ -122,8 +122,10 @@ def pause_job(job_id: str, job_manager: JobManager = Depends(get_job_manager)) -
 
 
 @router.post("/api/jobs/{job_id}/resume")
-def resume_job(job_id: str, job_manager: JobManager = Depends(get_job_manager)) -> dict:
-    return job_manager.resume_job(job_id).to_dict()
+def resume_job(
+    job_id: str, repeat_word: bool = True, job_manager: JobManager = Depends(get_job_manager),
+) -> dict:
+    return job_manager.resume_job(job_id, repeat_word=repeat_word).to_dict()
 
 
 @router.delete("/api/jobs/{job_id}", status_code=204)

@@ -1462,3 +1462,45 @@ def test_parse_request_record_reads_status_and_url_of_responses_only() -> None:
     assert parse_request_record('2026-10-21 10:39:31,213 [DEBUG] "https://www.x.com/a" filtered by auto-calibration') is None
     assert parse_request_record("2026-10-21 10:32:17,341 [ERROR] ") is None
     assert parse_request_record("Traceback (most recent call last):") is None
+
+
+def test_resume_can_skip_the_word_that_auto_paused_the_job(workspace_root, tmp_path: Path) -> None:
+    # Reported: a site that blocks (403 on everything) and a word that really answers 403 both pause
+    # the job; the pentester decides on resume whether to request that word again or move on.
+    def paused_job():
+        manager = JobManager(_FilteredBlockEngine(), max_concurrent_jobs=1)
+        job = manager.create_job(
+            project_id="p1", target_id="t1", path="/",
+            config=DirsearchJobConfig(url="https://target.local/", threads=5),
+            wordlist_files=[_wordlist(tmp_path, 300)], pause_on_status=[403],
+        )
+        _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED, timeout=15)
+        return manager, manager.get_job(job.id)
+
+    manager, paused = paused_job()
+    assert (paused.completed_lines, paused.skip_completed_lines) == (10, 45)  # skip: back to the plain checkpoint (50 dispatched - 5 threads)
+    manager.stop_job(paused.id)
+
+    manager, paused = paused_job()
+    manager._engine = MockDirsearchEngine()  # the resumed run itself is not under test
+    resumed = manager.resume_job(paused.id, repeat_word=False)
+    assert resumed.completed_lines == 45
+    assert resumed.skip_completed_lines is None
+
+    manager, paused = paused_job()
+    assert manager.resume_job(paused.id).completed_lines == 10  # default: the word is requested again
+
+
+def test_errors_keep_the_job_total_across_a_pause_and_resume(workspace_root) -> None:
+    # Reported: after an auto-pause the Errors column restarted from 0 (dirsearch counts per process).
+    from backend.models.job import FuzzJob, JobStatus
+    from backend.models.timestamps import now_iso
+    from backend.parser.stdout_parser import ParsedProgress
+
+    manager = JobManager(MockDirsearchEngine(), max_concurrent_jobs=1)
+    job = FuzzJob(
+        id="job1", target_id="t1", project_id="p1", path="/", config={}, status=JobStatus.RUNNING,
+        created_at=now_iso(), total_wordlist_lines=20, total_wordlist_requests=20, errors=4,
+    )
+    manager._publish_progress(job, ParsedProgress(percent=50, index=9, length=18, rate=5, errors=2), 0, 4)
+    assert job.errors == 6

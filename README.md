@@ -52,7 +52,9 @@ updates (see [Updating](#updating)).
   `429`; the job pauses instead, and you can resume it.
   It also sees responses that dirsearch hides from its own output (for example the wildcard `403`
   page its auto-calibration filters out): it reads them from dirsearch's request log and pauses on
-  the first one. The request that paused the job is sent again when you resume.
+  the first one. The request that paused the job is sent again when you resume, or skipped if you
+  untick *Repeat the word that paused it* in the gear next to Resume (useful when that word really
+  answers `403` and you were not blocked). The choice is remembered per job.
 - A job is never reported as complete when dirsearch quit early. If it gives up on its own (too many
   request errors, a time limit, ...), the job is **paused** at the position it really reached, with the
   reason one click away (*stopped early*), and Resume continues from there.
