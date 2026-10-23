@@ -1506,7 +1506,9 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
 
 /* ---- Resume split button: "Resume" + gear joined in one blue pill, like Export all targets ---- */
 .resume-gear-wrap { position: relative; display: inline-flex; white-space: nowrap; }
-.resume-main-btn { white-space: nowrap; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.resume-main-btn { white-space: nowrap; }
+/* Square right corners only when the gear is joined to it. */
+.resume-gear-wrap .resume-main-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 button.resume-gear-btn.primary {
     display: inline-flex; align-items: center; justify-content: center; position: relative;
     border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 6px 7px;
