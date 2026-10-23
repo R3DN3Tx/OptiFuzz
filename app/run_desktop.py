@@ -743,6 +743,40 @@ def _apply_page_zoom(window: webview.Window, scale: float) -> None:
     GLib.idle_add(_do)
 
 
+_REFRESH_SHORTCUT_ICON_SCRIPT = (
+    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:OPTIFUZZ_LNK); "
+    "if ($s.WorkingDirectory.TrimEnd('\\') -ne $env:OPTIFUZZ_ROOT.TrimEnd('\\')) { exit 0 }; "
+    "$want = $env:OPTIFUZZ_ICON + ',0'; "
+    "if ($s.IconLocation -ne $want) { $s.IconLocation = $want; $s.Save() }"
+)
+
+
+def _keep_start_menu_icon_in_step(icon_path: Path | None) -> None:
+    """The app list of the Start menu shows the icon stored in the shortcut, and a shortcut cannot follow the
+    Windows light/dark theme by itself (the taskbar icon can, because the app sets it). If this copy's shortcut
+    exists, point it at the icon that matches the current theme (the dark ink one in light mode), so it follows a
+    theme change the next time the app starts. Only this copy's own shortcut is touched. Best effort, never raises."""
+    if not IS_WINDOWS or icon_path is None:
+        return
+    shortcut = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "OptiFuzz.lnk"
+    if not shortcut.is_file():
+        return
+    env = dict(
+        os.environ,
+        OPTIFUZZ_LNK=str(shortcut),
+        OPTIFUZZ_ICON=str(icon_path),
+        OPTIFUZZ_ROOT=str(Path(__file__).resolve().parent.parent),  # <repo>/app/<this file>
+    )
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+             _REFRESH_SHORTCUT_ICON_SCRIPT],
+            env=env, timeout=30, capture_output=True, creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def main() -> None:
     _claim_windows_app_identity()
     if not IS_WINDOWS:
@@ -788,6 +822,7 @@ def main() -> None:
         _style_title_bar(window)
         _hide_title_bar_icon(window)
     icon_path = _select_icon_path()
+    threading.Thread(target=_keep_start_menu_icon_in_step, args=(icon_path,), daemon=True).start()
     webview.start(
         _boot_backend,
         (window,),

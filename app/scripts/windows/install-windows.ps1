@@ -33,9 +33,11 @@ $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $root ".venv\Scripts\pythonw.exe"
 $shortcut.Arguments = "app\run_desktop.py"
 $shortcut.WorkingDirectory = $root
-# A tile icon (dark square, light mark): the Start menu app list does not follow the light/dark theme of the
-# taskbar, so a one-colour mark would vanish on a light background.
-$shortcut.IconLocation = Join-Path $root "app\frontend\icon-tile.ico"
+# The app list of the Start menu shows this icon as it is: dark ink when Windows is in light mode (the same rule
+# the app uses for its taskbar icon), light ink otherwise. The app keeps it in step when the theme changes.
+$lightMode = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -ErrorAction SilentlyContinue).SystemUsesLightTheme -eq 1
+$iconFile = if ($lightMode) { "icon-light.ico" } else { "icon-dark.ico" }
+$shortcut.IconLocation = Join-Path $root "app\frontend\$iconFile"
 $shortcut.Description = "OptiFuzz"
 $shortcut.Save()
 

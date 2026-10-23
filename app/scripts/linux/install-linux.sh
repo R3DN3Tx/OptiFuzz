@@ -67,7 +67,7 @@ Name=OptiFuzz
 Comment=Web content discovery with dirsearch
 Exec="$PWD/app/scripts/linux/run-linux.sh"
 Path=$PWD
-Icon=$PWD/app/frontend/icon-tile.png
+Icon=$PWD/app/frontend/icon-dark.png
 Terminal=false
 Categories=Network;Security;
 EOF

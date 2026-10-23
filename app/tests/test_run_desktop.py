@@ -79,6 +79,45 @@ def test_open_and_show_download_only_act_on_files_this_app_saved(tmp_path: Path)
         api.show_download(str(stranger))
 
 
+def _powershell(script: str, env: dict) -> str:
+    import subprocess
+
+    done = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    return done.stdout.strip()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Start menu shortcuts are Windows-only")
+def test_start_menu_shortcut_icon_follows_the_theme_icon_but_only_for_this_copy(tmp_path: Path) -> None:
+    # Reported: the app list of the Start menu showed the white-ink icon in light mode (the shortcut keeps one
+    # static icon). The app re-points ITS OWN shortcut at the icon matching the theme at every start.
+    import os
+
+    mine, other = tmp_path / "mine", tmp_path / "other"
+    mine.mkdir()
+    other.mkdir()
+    lnk = tmp_path / "OptiFuzz.lnk"
+    dark, light = tmp_path / "icon-dark.ico", tmp_path / "icon-light.ico"
+    make = (
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK); "
+        "$s.TargetPath = $env:ComSpec; $s.WorkingDirectory = $env:WORKDIR; $s.IconLocation = $env:ICON + ',0'; $s.Save()"
+    )
+    read = "(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK).IconLocation"
+    base = dict(os.environ, LNK=str(lnk))
+
+    _powershell(make, dict(base, WORKDIR=str(mine), ICON=str(dark)))
+    refresh = dict(base, OPTIFUZZ_LNK=str(lnk), OPTIFUZZ_ICON=str(light), OPTIFUZZ_ROOT=str(mine))
+    _powershell(run_desktop._REFRESH_SHORTCUT_ICON_SCRIPT, refresh)
+    assert _powershell(read, base) == f"{light},0"  # light mode: the dark-ink icon
+
+    # A shortcut that belongs to another copy of the program is left alone.
+    _powershell(make, dict(base, WORKDIR=str(other), ICON=str(dark)))
+    _powershell(run_desktop._REFRESH_SHORTCUT_ICON_SCRIPT, refresh)
+    assert _powershell(read, base) == f"{dark},0"
+
+
 def test_free_port_returns_a_bindable_port() -> None:
     port = run_desktop._free_port(0)
 
