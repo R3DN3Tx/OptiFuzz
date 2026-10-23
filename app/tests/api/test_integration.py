@@ -1095,6 +1095,7 @@ def test_raw_column_points_at_the_outputs_mirror_copy_of_the_jobs_txt(
     assert client.post(f"/api/jobs/{job['id']}/raw-mirror/open").status_code == 200
     assert opened == [expected]
 
-    # A report embeds the copy's path (only the file name is shown on hover; Copy path copies the path).
+    # A report only knows the file name: it never carries the local path of the copy.
     exported = client.get(f"/api/projects/{project['id']}/targets/{target['id']}/export").text
-    assert json.dumps(str(expected))[1:-1] in exported
+    assert job["raw_filename"] in exported
+    assert json.dumps(str(mirror))[1:-1] not in exported and "raw_path" not in exported

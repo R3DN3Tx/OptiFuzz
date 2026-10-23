@@ -392,6 +392,69 @@ class _Api:
         result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=initial_dir or "")
         return result[0] if result else None
 
+    # Files this app saved: the only ones open_download / show_download will act on.
+    _saved_paths: set[str] = set()
+
+    def save_download(self, url: str) -> dict | None:
+        """Saves one of this app's own downloads (an export) where the user chooses, with a Save As dialog over
+        the window, and returns {path, name}. The web view's own download popup is not used any more: it
+        could open outside the window, on another screen. None when cancelled, {error} on failure."""
+        import email.message
+        import urllib.parse
+        import urllib.request
+
+        if self._window is None:
+            return {"error": "the window is not ready"}
+        parts = urllib.parse.urlparse(url)
+        if parts.scheme != "http" or parts.hostname not in ("127.0.0.1", "localhost") or not parts.path.startswith("/api/"):
+            return {"error": "not a download of this app"}
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:
+                data = response.read()
+                disposition = response.headers.get("Content-Disposition", "")
+        except OSError as exc:
+            return {"error": str(exc)}
+        header = email.message.Message()
+        header["Content-Disposition"] = disposition
+        name = os.path.basename(header.get_filename() or "") or "optifuzz-export"
+        downloads = Path.home() / "Downloads"
+        chosen = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=str(downloads if downloads.is_dir() else Path.home()),
+            save_filename=name,
+        )
+        if not chosen:
+            return None
+        path = Path(chosen if isinstance(chosen, str) else chosen[0])
+        try:
+            path.write_bytes(data)
+        except OSError as exc:
+            return {"error": str(exc)}
+        self._saved_paths.add(str(path))
+        return {"path": str(path), "name": path.name}
+
+    def open_download(self, path: str) -> None:
+        """Opens a file saved by save_download. An HTML report goes to the browser chosen in Settings, brought
+        to the front like every other URL this app opens; anything else opens with the system's own program."""
+        if path not in self._saved_paths or not Path(path).is_file():
+            raise ValueError("that file was not saved by this app")
+        from backend.persistence import app_settings
+        from backend.services import browser_service
+
+        if Path(path).suffix.lower() in (".html", ".htm"):
+            browser_path = app_settings.get_browser_path() or browser_service.default_browser_path()
+            if browser_service.open_url(Path(path).as_uri(), browser_path):
+                return
+        browser_service.open_with_system(path)
+
+    def show_download(self, path: str) -> None:
+        """Shows a file saved by save_download in the system's file manager."""
+        if path not in self._saved_paths or not Path(path).is_file():
+            raise ValueError("that file was not saved by this app")
+        from backend.services import browser_service
+
+        browser_service.show_in_folder(path)
+
 
 def _free_port(preferred: int) -> int:
     for candidate in (preferred, 0):

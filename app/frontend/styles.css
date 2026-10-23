@@ -477,6 +477,8 @@ button.danger { border-color: var(--red); color: var(--red); }
    scrolled/cut off inside the default (browser-sized) input box. */
 .target-name-input { min-width: 240px; }
 .target-url-input { min-width: 260px; }
+/* The Extensions field says "Default extensions activated" while empty: wide enough to read it all. */
+.has-default-extensions { min-width: 260px; }
 
 .fuzz-form { margin-bottom: 4px; }
 .fuzz-form .inline-form { margin-bottom: 10px; }
@@ -1510,6 +1512,21 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
     -webkit-user-select: text;
     user-select: text;
 }
+
+/* ---- Download notice: top right, inside the window (replaces the web view's own download popup) ---- */
+.download-notice {
+    position: fixed; top: 12px; right: 16px; z-index: 1000; width: 300px; padding: 10px 34px 12px 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, .45);
+}
+.download-notice-title { font-weight: 600; margin-bottom: 4px; }
+.download-notice-name { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; margin-bottom: 8px; }
+.download-notice-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.download-notice-close {
+    position: absolute; top: 4px; right: 6px; padding: 0 6px; border-color: transparent; background: transparent;
+    color: var(--muted); font-size: 16px; line-height: 20px;
+}
+.download-notice-close:hover { color: var(--text); border-color: var(--border); }
 
 /* ---- Resume split button: "Resume" + gear joined in one blue pill, like Export all targets ---- */
 .resume-gear-wrap { position: relative; display: inline-flex; white-space: nowrap; }

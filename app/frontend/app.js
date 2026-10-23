@@ -439,6 +439,11 @@ function attachCopyPathContextMenu(element, getFullPath, label = "Copy full path
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
+        const hover = _visibleTooltipBoxes.get(element);
+        if (hover) {
+            hover.style.display = "none";
+            _visibleTooltipBoxes.delete(element);
+        }
         const item = h("button", { type: "button", class: "path-context-menu-item", text: label });
         item.addEventListener("click", async (ev) => {
             ev.stopPropagation();
@@ -497,8 +502,11 @@ function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
         positionFloatingBox(el, box, maxWidth || 320);
         _visibleTooltipBoxes.set(el, box);
         if (dynamic) {
-            box.textContent = await text();
-            if (_visibleTooltipBoxes.get(el) === box) positionFloatingBox(el, box, maxWidth || 320);
+            const content = await text();
+            if (_visibleTooltipBoxes.get(el) === box) {
+                box.textContent = content;
+                positionFloatingBox(el, box, maxWidth || 320);
+            }
         }
     };
     const hide = () => {
@@ -750,6 +758,55 @@ function buildFuzzedTagButton(detail, isOpen, onToggle) {
         text: detail ? `Fuzzed: ${detail}` : "Fuzzed",
         onclick: (e) => { e.stopPropagation(); onToggle(); },
     });
+}
+
+// ---- Downloads (exports) -------------------------------------------------
+// In the desktop app the file is saved through the app itself (a Save As dialog over this window) and a small
+// notice appears at the top right INSIDE the window, instead of the web view's own download popup, which could
+// open outside the window on another screen. A plain browser tab just downloads the URL.
+let downloadNotice = null;
+
+function closeDownloadNotice() {
+    if (downloadNotice) {
+        downloadNotice.remove();
+        downloadNotice = null;
+    }
+}
+
+function showDownloadNotice(saved) {
+    closeDownloadNotice();
+    const desktopApi = () => window.pywebview.api;
+    const run = async (call) => {
+        try { await call(); } catch (err) { alert(`Could not do that: ${err.message || err}`); }
+        closeDownloadNotice();
+    };
+    const notice = h("div", { class: "download-notice", role: "status" }, [
+        h("div", { class: "download-notice-title", text: "Download saved" }),
+        h("div", { class: "download-notice-name", text: saved.name, title: saved.path }),
+        h("div", { class: "download-notice-actions" }, [
+            h("button", { type: "button", class: "primary", text: "Open file", onclick: () => run(() => desktopApi().open_download(saved.path)) }),
+            h("button", { type: "button", text: "Show in folder", onclick: () => run(() => desktopApi().show_download(saved.path)) }),
+        ]),
+        h("button", { type: "button", class: "download-notice-close", title: "Close", text: "×", onclick: closeDownloadNotice }),
+    ]);
+    downloadNotice = notice;
+    document.body.appendChild(notice);
+    setTimeout(() => { if (downloadNotice === notice) closeDownloadNotice(); }, 20000);
+}
+
+async function downloadFromServer(path) {
+    const desktopApi = window.pywebview && window.pywebview.api;
+    if (!desktopApi || !desktopApi.save_download) {
+        window.location.href = path;
+        return;
+    }
+    try {
+        const saved = await desktopApi.save_download(window.location.origin + path);
+        if (saved && saved.error) alert(`Could not save the file: ${saved.error}`);
+        else if (saved) showDownloadNotice(saved);
+    } catch (err) {
+        alert(`Could not save the file: ${err.message || err}`);
+    }
 }
 
 async function openResultUrl(url) {
@@ -2102,7 +2159,7 @@ async function renderTargets(projectId) {
         return EXPORT_ALL_FORMATS[saved] ? saved : "zip";
     }
     function downloadExportAll(format) {
-        window.location.href = `/api/projects/${projectId}/${EXPORT_ALL_FORMATS[format].path}`;
+        downloadFromServer(`/api/projects/${projectId}/${EXPORT_ALL_FORMATS[format].path}`);
     }
     function setExportAllFormat(format) {
         savePref("export-all-format", format);
@@ -2280,7 +2337,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         const hideRulesParam = resultsHideFilters.length
             ? `?hide_rules=${encodeURIComponent(JSON.stringify(resultsHideFilters))}`
             : "";
-        window.location.href = `/api/projects/${projectId}/targets/${targetId}/export${hideRulesParam}`;
+        downloadFromServer(`/api/projects/${projectId}/targets/${targetId}/export${hideRulesParam}`);
     });
     // TREE only: the absolute URL of every tree path as a .txt, to hand to other tools (scanners, crawlers).
     const treeUrlsBtn = h("button", {
@@ -2288,7 +2345,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         title: "Download a .txt with the absolute URL of every path in the tree, one per line.",
     });
     treeUrlsBtn.addEventListener("click", () => {
-        window.location.href = `/api/projects/${projectId}/targets/${targetId}/tree-urls`;
+        downloadFromServer(`/api/projects/${projectId}/targets/${targetId}/tree-urls`);
     });
     const tabs = h("div", { class: "workspace-tabs" }, [
         h("a", { class: `workspace-tab${tab === "jobs" ? " active" : ""}`, href: workspaceBase, text: "JOBS" }),
@@ -4267,6 +4324,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         value: hasSavedDefaults ? (fuzzDefaults.extensions || []).join(",") : "",
     });
     if (defaultExtensions.length) {
+        extInput.classList.add("has-default-extensions"); // wide enough for the whole placeholder
         attachTooltip(
             extInput,
             `While this field is empty, dirsearch uses its default extensions: ${defaultExtensions.join(", ")}. `

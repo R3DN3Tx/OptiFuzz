@@ -13,7 +13,7 @@ from backend.job_manager.manager import JobManager
 from backend.models.timestamps import now_iso
 from backend.persistence import app_settings
 from backend.persistence.slug import slugify
-from backend.services import output_mirror_service, project_service, results_service, target_service, tree_service
+from backend.services import project_service, results_service, target_service, tree_service
 
 # A single, self-contained HTML snapshot of one
 # Target -- Tree (interactive expand/collapse), Results, fuzz
@@ -72,11 +72,6 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
     results_view = [r.to_dict() for r in results]
 
     jobs_view = [job.to_dict() for job in sorted(jobs, key=lambda j: j.created_at, reverse=True)]
-    # Where each job's raw .txt copy is in the outputs mirror (None when no mirror is set): the report
-    # shows only the file name on hover, but "Copy path" on the Raw column copies this.
-    for entry in jobs_view:
-        copy_path = output_mirror_service.mirror_file_path(project, target.name, entry["raw_filename"])
-        entry["raw_path"] = str(copy_path) if copy_path is not None else None
 
     return {
         "project": {"id": project.id, "name": project.name},
@@ -495,9 +490,8 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
-// "Raw" column: an arrow for the job's raw .txt. A report has no way to open files on someone else's
-// computer, so hover shows only the file name, and right-click "Copy path" copies where the copy was kept
-// (the outputs mirror) when the report was made.
+// "Raw" column: an arrow for the job's raw .txt. A report cannot open files on someone else's computer and
+// never carries a local path: hover shows the file NAME, and a click or a right-click offers "Copy filename".
 var RAW_ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 11.5l7-7M5.8 4.5h5.7v5.7"/></svg>';
 function buildRawCell(entry) {
     var job = null;
@@ -507,7 +501,7 @@ function buildRawCell(entry) {
     var cell = h("td", { class: "jobs-col-center" }, [button]);
     if (!job) return cell;
     button.setAttribute("title", job.raw_filename);
-    attachCopyPathContextMenu(button, job.raw_path || job.raw_filename, "Copy path");
+    attachCopyPathContextMenu(button, job.raw_filename, "Copy filename", true);
     return cell;
 }
 // Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
@@ -708,8 +702,8 @@ function closePathContextMenu() {
 }
 document.addEventListener("click", closePathContextMenu);
 document.addEventListener("scroll", closePathContextMenu, true);
-function attachCopyPathContextMenu(element, fullPath, label) {
-    element.addEventListener("contextmenu", function (e) {
+function attachCopyPathContextMenu(element, fullPath, label, alsoOnClick) {
+    var openMenu = function (e) {
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
@@ -727,7 +721,9 @@ function attachCopyPathContextMenu(element, fullPath, label) {
         var rect = menu.getBoundingClientRect();
         if (rect.right > window.innerWidth) menu.style.left = Math.max(8, window.innerWidth - rect.width - 8) + "px";
         if (rect.bottom > window.innerHeight) menu.style.top = Math.max(8, window.innerHeight - rect.height - 8) + "px";
-    });
+    };
+    element.addEventListener("contextmenu", openMenu);
+    if (alsoOnClick) element.addEventListener("click", openMenu);
 }
 function treeConnectorFor(depth, prefix, isLast) {
     return depth === 0 ? "" : prefix + (isLast ? "└── " : "├── ");
@@ -1758,9 +1754,8 @@ function statusClass(status) {
     var family = Math.floor(status / 100);
     return family >= 1 && family <= 5 ? "status status-" + family : "status status-other";
 }
-// "Raw" column: an arrow for the job's raw .txt. A report has no way to open files on someone else's
-// computer, so hover shows only the file name, and right-click "Copy path" copies where the copy was kept
-// (the outputs mirror) when the report was made.
+// "Raw" column: an arrow for the job's raw .txt. A report cannot open files on someone else's computer and
+// never carries a local path: hover shows the file NAME, and a click or a right-click offers "Copy filename".
 var RAW_ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 11.5l7-7M5.8 4.5h5.7v5.7"/></svg>';
 function buildRawCell(entry) {
     var job = null;
@@ -1770,7 +1765,7 @@ function buildRawCell(entry) {
     var cell = h("td", { class: "jobs-col-center" }, [button]);
     if (!job) return cell;
     button.setAttribute("title", job.raw_filename);
-    attachCopyPathContextMenu(button, job.raw_path || job.raw_filename, "Copy path");
+    attachCopyPathContextMenu(button, job.raw_filename, "Copy filename", true);
     return cell;
 }
 // Extensions typed for the job, or the default list dirsearch used instead (frozen on the job).
@@ -1988,8 +1983,8 @@ function closePathContextMenu() {
 }
 document.addEventListener("click", closePathContextMenu);
 document.addEventListener("scroll", closePathContextMenu, true);
-function attachCopyPathContextMenu(element, fullPath, label) {
-    element.addEventListener("contextmenu", function (e) {
+function attachCopyPathContextMenu(element, fullPath, label, alsoOnClick) {
+    var openMenu = function (e) {
         e.preventDefault();
         e.stopPropagation();
         closePathContextMenu();
@@ -2007,7 +2002,9 @@ function attachCopyPathContextMenu(element, fullPath, label) {
         var rect = menu.getBoundingClientRect();
         if (rect.right > window.innerWidth) menu.style.left = Math.max(8, window.innerWidth - rect.width - 8) + "px";
         if (rect.bottom > window.innerHeight) menu.style.top = Math.max(8, window.innerHeight - rect.height - 8) + "px";
-    });
+    };
+    element.addEventListener("contextmenu", openMenu);
+    if (alsoOnClick) element.addEventListener("click", openMenu);
 }
 function treeConnectorFor(depth, prefix, isLast) {
     return depth === 0 ? "" : prefix + (isLast ? "└── " : "├── ");

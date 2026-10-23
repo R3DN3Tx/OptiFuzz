@@ -7,6 +7,78 @@ import pytest
 import run_desktop
 
 
+class _FakeWindow:
+    """Stands in for the pywebview window: its Save As dialog 'picks' a fixed path."""
+
+    def __init__(self, chosen: Path | None) -> None:
+        self.chosen = chosen
+        self.asked_for: str | None = None
+
+    def create_file_dialog(self, _kind, directory="", save_filename=""):
+        self.asked_for = save_filename
+        return str(self.chosen) if self.chosen else None
+
+
+def _serve_an_export(body: bytes):
+    import http.server
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Disposition", 'attachment; filename="demo_OptiFuzz_Report.html"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_save_download_saves_an_export_where_the_dialog_says(tmp_path: Path) -> None:
+    # Reported: the web view's own download popup opened outside the window on another screen, so the
+    # desktop app saves exports itself (Save As over the window) and shows its own notice in the page.
+    server = _serve_an_export(b"<html>report</html>")
+    try:
+        api = run_desktop._Api()
+        api._window = _FakeWindow(tmp_path / "chosen.html")
+        saved = api.save_download(f"http://127.0.0.1:{server.server_address[1]}/api/x/export")
+
+        assert api._window.asked_for == "demo_OptiFuzz_Report.html"  # the name the server proposed
+        assert saved == {"path": str(tmp_path / "chosen.html"), "name": "chosen.html"}
+        assert (tmp_path / "chosen.html").read_bytes() == b"<html>report</html>"
+
+        api._window = _FakeWindow(None)  # the user cancels the dialog
+        assert api.save_download(f"http://127.0.0.1:{server.server_address[1]}/api/x/export") is None
+    finally:
+        server.shutdown()
+
+
+def test_save_download_refuses_anything_that_is_not_this_apps_api(tmp_path: Path) -> None:
+    api = run_desktop._Api()
+    api._window = _FakeWindow(tmp_path / "x.html")
+
+    assert "error" in api.save_download("http://example.com/api/x")
+    assert "error" in api.save_download("http://127.0.0.1:1/not-api")
+    assert "error" in api.save_download("file:///etc/passwd")
+    assert not (tmp_path / "x.html").exists()
+
+
+def test_open_and_show_download_only_act_on_files_this_app_saved(tmp_path: Path) -> None:
+    stranger = tmp_path / "other.html"
+    stranger.write_text("x")
+    api = run_desktop._Api()
+
+    with pytest.raises(ValueError):
+        api.open_download(str(stranger))
+    with pytest.raises(ValueError):
+        api.show_download(str(stranger))
+
+
 def test_free_port_returns_a_bindable_port() -> None:
     port = run_desktop._free_port(0)
 

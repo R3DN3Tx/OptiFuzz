@@ -1,1 +1,4 @@
 *.sh text eol=lf
+
+# The demo site is served as-is: its files keep exact byte sizes (shown in the screenshots) on every OS.
+app/dev/demo-target/demo_site/** -text

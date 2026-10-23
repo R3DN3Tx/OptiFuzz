@@ -34,14 +34,9 @@ def mirror_file_path(project: Project, target_name: str, filename: str) -> Path 
 
 def open_file(path: Path) -> None:
     """Opens a file with the application the system associates with it (the user's text editor)."""
-    import os
-    import subprocess
-    import sys
+    from backend.services import browser_service
 
-    if sys.platform == "win32":
-        os.startfile(str(path))  # noqa: S606 -- a path built server-side, never client input
-    else:
-        subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    browser_service.open_with_system(str(path))
 
 
 def mirror_output_file(project: Project, target_name: str, txt_path: Path) -> None:

@@ -40,6 +40,7 @@ Use OptiFuzz only against systems you own or have explicit permission to test (s
 - [8. Tree](#8-tree)
 - [9. Fuzzing deeper](#9-fuzzing-deeper)
 - [10. Exporting](#10-exporting)
+  - [Saving an export](#saving-an-export)
   - [Export target (HTML)](#export-target-html)
   - [Export URLs (TXT)](#export-urls-txt)
   - [Export all targets](#export-all-targets)
@@ -287,7 +288,8 @@ from here could end up modifying them by accident. The copy is the one to read, 
   exist yet and the tooltip says so: it is made when the job finishes.
 - **Click** the arrow to open the file in the program your system uses for `.txt` files.
 - **Right-click** the arrow and choose **Copy path** to copy the full path of the copy, file name
-  included.
+  included. The hover text disappears while the menu is open, so it never covers it, and it shows again
+  the next time you hover the arrow.
 
 This works the same in every details table: the Jobs list, and the **Fuzzed** tags in Results and Tree.
 
@@ -488,6 +490,21 @@ HTML reports are fully interactive: the search, the filters, the hide rules and 
 directories all keep working inside the file, so whoever opens it can explore it the way you do. They
 need no internet and no backend.
 
+### Saving an export
+
+In the desktop app, clicking an export button opens a **Save As** window over OptiFuzz, starting in your
+Downloads folder. Once the file is saved, a small notice appears at the **top right, inside the OptiFuzz
+window**, with the file name and two buttons:
+
+- **Open file**: opens the file. An HTML report opens in the browser chosen in
+  [Settings](#browser-for-opening-results) and that browser is brought to the front, the same way the URLs
+  you open from Results are. Any other file opens with the program your system uses for it.
+- **Show in folder**: shows the file in your file manager.
+
+The notice closes by itself after a few seconds, or with its ×. (Before this, the downloads popup of the
+web view could open outside the window, on another screen.) In a plain browser tab, the browser downloads
+the file as usual.
+
 ### Export target (HTML)
 
 The **Export target (HTML)** button, at the top right of the target workspace, downloads one HTML file
@@ -512,10 +529,10 @@ changes the button: the file is downloaded when you click the button itself.
 In both formats each target keeps its own saved hide rules, search and filters, exactly as in an
 individual export.
 
-In every export, the job details have the **Raw** column too. Because a report is meant to be shared, hovering
-the arrow only shows the **name** of the raw file, never its full path. Right-click the arrow and choose
-**Copy path** to copy the path the copy had in the Outputs mirror when the report was made, file name
-included (only the file name, if the project had no mirror). Clicking the arrow does nothing in a report, because it cannot open files on another computer.
+In every export, the job details have the **Raw** column too. A report is meant to be shared and cannot
+open files on another computer, so it never contains a path from your computer: hovering the arrow shows
+only the **name** of the raw file. Click the arrow, or right-click it, and choose **Copy filename** to copy
+that name.
 
 ### Outputs mirror
 

@@ -223,3 +223,22 @@ def open_url(url: str, browser_path: str | None) -> bool:
         subprocess.Popen([browser_path, url])
         return True
     return webbrowser.open(url)
+
+
+def open_with_system(path: str) -> None:
+    """Opens a local file with the program the system associates with it, in front of other windows.
+    `path` is built by this app (never taken from a request), and is always a single argument."""
+    _allow_foreground_steal()
+    if IS_WINDOWS:
+        os.startfile(path)  # noqa: S606
+    else:
+        subprocess.Popen(["xdg-open", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def show_in_folder(path: str) -> None:
+    """Shows a local file in the system's file manager (selected, on Windows)."""
+    _allow_foreground_steal()
+    if IS_WINDOWS:
+        subprocess.Popen(["explorer", f"/select,{path}"])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
