@@ -1,548 +1,568 @@
 # OptiFuzz user guide
 
-The complete reference for everything OptiFuzz does, screen by screen. For installation, updating and
-a short overview, see the [README](../README.md).
+Everything OptiFuzz does, screen by screen. Installation and updating are in the
+[README](../README.md).
 
-> Authorised testing only: use OptiFuzz against systems you own or have explicit permission to test
-> (see the [legal disclaimer](../README.md#legal-disclaimer)).
+Use OptiFuzz only against systems you own or have explicit permission to test (see the
+[legal disclaimer](../README.md#legal-disclaimer)).
 
 ## Contents
 
-| I want to... | Go to |
-|---|---|
-| Understand how the app is organised | [1. Concepts and screens](#1-concepts-and-screens) |
-| Run my first fuzz | [2. Getting started](#2-getting-started) |
-| Create, rename or delete projects and targets | [3. Projects](#3-projects) · [4. Targets](#4-targets) |
-| Start a fuzz and pick options | [5. Starting a fuzz](#5-starting-a-fuzz-the-new-fuzz-form) |
-| Follow, pause, resume or stop jobs | [6. The JOBS tab](#6-the-jobs-tab) |
-| Understand auto-pause and stopped-early jobs | [7. Auto-pause and early stops](#7-auto-pause-and-early-stops) |
-| Browse and filter what was found | [8. The RESULTS tab](#8-the-results-tab) |
-| Curate the paths that matter | [9. The TREE tab](#9-the-tree-tab) |
-| Fuzz deeper, with or without recursion | [10. Fuzzing deeper](#10-fuzzing-deeper) |
-| Share findings | [11. Exporting](#11-exporting) |
-| Change an app setting | [12. Settings](#12-settings) |
-| Find my files on disk | [13. Where your data lives](#13-where-your-data-lives) |
-| Look something up quickly | [14. Quick reference](#14-quick-reference) |
+- [1. Overview](#1-overview)
+  - [How work is organised](#how-work-is-organised)
+  - [The screens](#the-screens)
+  - [Moving around](#moving-around)
+- [2. Getting started](#2-getting-started)
+- [3. Projects and targets](#3-projects-and-targets)
+  - [Projects](#projects)
+  - [Targets](#targets)
+- [4. Starting a fuzz](#4-starting-a-fuzz)
+  - [Where to start one](#where-to-start-one)
+  - [Main fields](#main-fields)
+  - [The wordlist picker](#the-wordlist-picker)
+  - [Advanced options](#advanced-options)
+  - [What is remembered](#what-is-remembered)
+- [5. Managing jobs](#5-managing-jobs)
+  - [The job list](#the-job-list)
+  - [Job states](#job-states)
+  - [Pause, Resume, Stop and Delete](#pause-resume-stop-and-delete)
+  - [Details a job was started with](#details-a-job-was-started-with)
+  - [Queue and concurrency](#queue-and-concurrency)
+  - [Output files](#output-files)
+- [6. Auto-pause and early stops](#6-auto-pause-and-early-stops)
+- [7. Results](#7-results)
+  - [Reading the list](#reading-the-list)
+  - [The NEW badge](#the-new-badge)
+  - [The Fuzzed tag](#the-fuzzed-tag)
+  - [Actions on a path](#actions-on-a-path)
+  - [Search, filters and hide rules](#search-filters-and-hide-rules)
+- [8. Tree](#8-tree)
+- [9. Fuzzing deeper](#9-fuzzing-deeper)
+- [10. Exporting](#10-exporting)
+  - [Export target (HTML)](#export-target-html)
+  - [Export URLs (TXT)](#export-urls-txt)
+  - [Export all targets](#export-all-targets)
+  - [Outputs mirror](#outputs-mirror)
+- [11. Settings](#11-settings)
+- [12. Where your data lives](#12-where-your-data-lives)
 
 ---
 
-## 1. Concepts and screens
+## 1. Overview
 
-OptiFuzz organises work in three levels. Everything a target produces stays isolated from every other
-target.
+### How work is organised
 
-```text
-Project            a client, an engagement, a lab...
- └─ Target         one host (a base URL and port)
-     ├─ JOBS       the fuzzes you started, with live progress
-     ├─ RESULTS    everything dirsearch found, grouped by directory
-     └─ TREE       the paths you chose to keep, with stars and notes
-```
+OptiFuzz has three levels. Everything a target produces (jobs, results, tree, notes, reports) stays
+separate from every other target.
 
-| Screen | How to get there | What it is for |
-|---|---|---|
-| **Projects** | The start page | Create, search, rename and delete projects |
-| **Targets** | Click a project | Add targets, set the project's outputs mirror, export every target |
-| **Target workspace** | Click a target | The **JOBS**, **RESULTS** and **TREE** tabs, plus the export buttons |
-| **Settings** | Gear icon in the header | App-wide options (browser, file names, wordlists folder, port, zoom, updates) |
+- **Project**: a client, an engagement or a lab.
+- **Target**: one host inside a project, defined by a base URL and port.
+- **Jobs, Results and Tree**: what you work with inside a target. Jobs are the fuzzes you started,
+  Results is everything they found, and the Tree is the short list of paths you decided to keep.
 
-The header shows a breadcrumb (`Projects / project / target / TAB`; every part but the last is a
-link) and the installed version. The window is always dark: there is no light theme.
+### The screens
+
+- **Projects**: the start page. Create, search, rename and delete projects.
+- **Targets**: opened by clicking a project. Add targets to it, set the project's outputs mirror, and
+  export all its targets at once.
+- **Target workspace**: opened by clicking a target. It has the **JOBS**, **RESULTS** and **TREE** tabs
+  and the buttons to export that single target.
+- **Settings**: the gear icon at the top right of the header, next to the version number. It holds the
+  app-wide options (see [Settings](#11-settings)).
+
+### Moving around
+
+The line at the top of every page shows where you are, for example
+`Projects / Acme / api.example.com / RESULTS`. Each part except the last is a link: click it to go back
+to that level. `Projects` returns to the project list and the project name returns to that project's targets page.
+
+Each page remembers its scroll position, so you can switch between JOBS, RESULTS and TREE and find each
+one where you left it.
 
 ---
 
 ## 2. Getting started
 
-1. Start OptiFuzz (Start menu entry on Windows, application menu entry on Linux).
-2. On **Projects**, type a name and click **+ New Project**; click the project.
-3. Fill in a **Target**: name, base URL (`https://target.example`) and, if needed, a port; click
-   **+ New Target**; click the target.
-4. On **JOBS**, leave the path as `/`, pick a wordlist, optionally type extensions (`php,html`) and
-   click **Fuzz**.
-5. Watch the job run. When hits appear, open **RESULTS**.
-6. From a result, use the lightning icon to fuzz inside it, or the tree icon to add it to the **TREE**.
-7. In the **TREE**, star what looks interesting and write a note.
-8. Click **Export target (HTML)** for a report.
+1. Start OptiFuzz from the Start menu (Windows) or the application menu (Linux).
+2. On **Projects**, type a name, click **+ New Project**, then click the new project.
+3. Fill in the target's name and base URL (for example `https://target.example`), click
+   **+ New Target**, then click the target.
+4. On **JOBS**, leave the path as `/`, pick a wordlist, optionally type extensions (for example
+   `php,html`) and click **Fuzz**.
+5. Watch the job run. When findings appear, open **RESULTS**.
+6. On a result, click the fuzz icon <img src="images/icons/fuzz.svg" width="16" alt="fuzz icon"> to fuzz
+   inside that path, or the tree icon <img src="images/icons/tree.svg" width="16" alt="tree icon"> to add
+   it to the Tree.
+7. In **TREE**, star what looks interesting and write a note about it.
+8. Click **Export target (HTML)** when you want a report.
 
-**Wordlists.** The repository ships one example list, `wordlists/test_wordlist.txt`. For real work use
-your own: copy your lists into the `wordlists` folder of OptiFuzz, or point OptiFuzz at a folder you
-already have (for example SecLists) in [Settings → Wordlists folder](#wordlists-folder).
+**Wordlists.** The repository includes one example list, `wordlists/test_wordlist.txt`. For real work,
+use your own: copy them into the `wordlists` folder of OptiFuzz, or point OptiFuzz at a folder you
+already have (SecLists, for example) in [Settings](#wordlists-folder).
 
-**Trying it without a real target.** `dev/demo-target/` is a tiny fake website for practising every
-feature safely. Start it with `python dev/demo-target/demo_server.py`, then create a target with base
-URL `http://127.0.0.1` and port `8910`. Its [walkthrough](../dev/demo-target/README.md) lists what each
+**Trying it without a real target.** `dev/demo-target/` is a small fake website for practising every
+feature safely. Start it with `python dev/demo-target/demo_server.py`, then create a target with base URL
+`http://127.0.0.1` and port `8910`. Its [walkthrough](../dev/demo-target/README.md) explains what each
 path returns and what to try.
 
 ---
 
-## 3. Projects
+## 3. Projects and targets
 
-| Action | How |
-|---|---|
-| Create | Type a name in the field, click **+ New Project** |
-| Open | Click the card |
-| Search | The search box filters cards by name |
-| Rename | Card **⋯** menu → **Rename**, edit, press Enter |
-| Delete | Card **⋯** menu → **Delete** (removes the project with all its targets, jobs and results) |
+### Projects
 
-A small **orange dot** on a card means something in it is fuzzing right now; hover it to see each
-running job with its target, path and percentage. It updates live.
+Type a name and click **+ New Project** to create one. Click a project card to open it, and use the
+search box above the cards to filter them by name.
 
----
+To rename or delete a project, click the three dots (⋯) in the top-right corner of its card and choose
+**Rename** or **Delete**. After choosing Rename, type the new name where the old one was and press
+Enter. Deleting removes the project together with its targets, jobs and results.
 
-## 4. Targets
+A small orange dot on a card means something is fuzzing inside it right now. Hover the dot to see each
+running job with its target, path and progress. It updates live.
 
-### Adding a target
+### Targets
 
-| Field | Meaning |
-|---|---|
-| **Target name** | A label, for example `api.example.com`. Used in file names and reports |
-| **Base URL** | Scheme and host, for example `https://api.example.com/`. A sub-path is kept |
-| **Port** | Optional. Empty means the scheme's default: **443** for `https`, **80** for `http`. The port is added to the URL for you, and left out when it is the default |
+Opening a project shows its targets page. To add a target, fill in:
 
-Click **+ New Target** to create it.
+- **Target name**: a label of your choice, for example `api.example.com`. It is used in file names and
+  reports.
+- **Base URL**: the scheme and host, for example `https://api.example.com/`.
+- **Port** (optional): leave it empty to use the default of the scheme, 443 for `https` and 80 for
+  `http`. The port is added to the URL for you, and omitted when it is the default one.
 
-### The Targets page
+Then click **+ New Target**. Target cards work like project cards: click one to open its workspace, use
+the search box to filter by name or URL, use the three-dot menu to rename or delete it, and watch for the
+orange dot.
 
-| Element | What it does |
-|---|---|
-| Target card | Click to open the workspace. The orange dot works as on projects. **⋯** menu → **Rename** / **Delete** |
-| Search | Filters by target name or URL |
-| **Outputs mirror** | Optional folder where a copy of every job's raw `.txt` output is saved, one subfolder per target. Type the path or use the folder button. Already finished jobs are copied too. Empty disables it. The original files are never moved. See [Outputs mirror](#outputs-mirror) |
-| **Export all targets** | Downloads a report of every target in the project. See [Exporting](#11-exporting) |
+The targets page also has two project-wide tools, described in
+[Exporting](#10-exporting): the **Outputs mirror** and **Export all targets**.
 
 ---
 
-## 5. Starting a fuzz: the New Fuzz form
+## 4. Starting a fuzz
 
-The form is at the top of **JOBS**. The same form opens under any row of **RESULTS** or **TREE** when
-you click the lightning icon, pre-filled with that path.
+### Where to start one
 
-![The JOBS tab with fuzzes in every state](images/jobs.png)
+The **New Fuzz** form is at the top of the JOBS tab.
+
+You can also start a fuzz from a path you already found. In RESULTS and in TREE, each path has a fuzz
+icon <img src="images/icons/fuzz.svg" width="16" alt="fuzz icon">. Clicking it opens the same New Fuzz
+form directly below that row, with the path already filled in, so you can choose a wordlist and launch
+without leaving the tab. Click the icon again to close it.
 
 ### Main fields
 
-| Field | Meaning |
-|---|---|
-| **Path** | Where to fuzz. `/` fuzzes the root; `/api/` fuzzes inside `/api/`. A path without trailing slash is stored with one, because dirsearch always fuzzes a directory. A `?query` is kept and sent with every request |
-| **Wordlist** | The list to use; see [the picker](#the-wordlist-picker) |
-| **Extensions** | Comma-separated, for example `php,html`. Empty means none |
-| **threads** | Number of parallel requests (default 5) |
-| **Fuzz** | Starts the job (it queues if the target is already at its concurrency limit) |
+- **Path**: where to fuzz. `/` fuzzes the whole site, `/api/` fuzzes inside `/api/`. A path typed without
+  a trailing slash is saved with one, because dirsearch always fuzzes a directory. A query string such as
+  `?lang=en` is kept and sent with every request.
+- **Wordlist**: the list of words to try. See the picker below.
+- **Extensions**: comma-separated, for example `php,html`. Leave empty for none.
+- **threads**: how many requests run in parallel (default 5).
+- **Fuzz**: starts the job. If the target is already running as many jobs as it is allowed, the new one
+  waits in the queue.
 
 ### The wordlist picker
 
-- Opens a searchable dropdown of the [wordlists folder](#wordlists-folder); subfolders are groups
-  that expand and collapse. Typing in the search box lists matching files from every folder.
-- The **star** next to a file makes it the default wordlist for **new** targets (one at a time).
-- The initial choice is, in order: this target's own last choice, the starred list, the last list you
-  picked, then the bundled example.
+Click it to open a dropdown with the files of your [wordlists folder](#wordlists-folder). Subfolders
+appear as groups you can expand and collapse. Typing in the search box lists the matching files from every
+folder.
+
+The star next to a file, <img src="images/icons/star.svg" width="16" alt="star icon">, makes it the
+default wordlist for new targets (only one list can be the default). When you open the form, the list
+selected is the first that applies of: this target's last choice, the starred default, the last list you
+picked anywhere, and the example list.
 
 ### Advanced options
 
-Open **Advanced options** under the form.
+Click **Advanced options** under the form to see them.
 
-| Option | What it does | Default |
-|---|---|---|
-| **Force extensions (-f)** | For every wordlist word, also tries `word/` and `word.<ext>` for each extension. Without it, extensions are only appended to wordlist lines that contain `%EXT%` | On |
-| **Authenticated** | Adds `__AUTH` to the file name of the job's output, to tell authenticated runs apart. It does not change any request | Off |
-| **Auto-pause on status codes** | Comma-separated codes that pause the job as soon as one is seen. See [section 7](#7-auto-pause-and-early-stops) | `429,503` |
-| **Concurrent fuzzes** | How many jobs of this target run at once; the rest wait in the queue. Applies immediately and only to this target | 2 |
-| **Extra headers (-H)** | One header per row, written `Name: value`. A value may contain colons (`Authorization: Bearer abc:def`). Long values wrap while you edit. **+ Add header** adds a row, **×** removes it | none |
-| **Custom options** | Any other dirsearch flag, written exactly as on its command line (`--max-rate 50 --timeout 10 --proxy 127.0.0.1:8080`). Appended after everything else | empty |
-| **Default headers** | dirsearch adds `User-Agent`, `Accept`, `Accept-Encoding`, `Keep-Alive` and `Cache-Control` to every request, and `-H` can only override them. Untick one to stop sending it (for example `Keep-Alive`, which servers answering over HTTP/2 reject). The summary shows how many are off | all sent |
+- **Force extensions (-f)**: for every word, also tries `word/` and `word.<extension>` for each
+  extension. Without it, extensions are only added to wordlist lines that contain `%EXT%`. On by default.
+- **Authenticated**: adds `__AUTH` to the name of the job's output file so authenticated runs are easy
+  to tell apart. It does not change any request. Off by default.
+- **Auto-pause on status codes**: the status codes that make the job pause. You can list any codes you
+  want, separated by commas (default `429,503`). Leave it empty to turn auto-pause off. See
+  [section 6](#6-auto-pause-and-early-stops).
+- **Concurrent fuzzes**: how many jobs of this target run at the same time (default 2). It applies
+  immediately and only to this target.
+- **Extra headers (-H)**: one header per row, written as `Name: value`. The value can contain colons, as
+  in `Authorization: Bearer abc:def`. **+ Add header** adds a row and **×** removes it.
+- **Custom options**: any other dirsearch flag, written exactly as on the dirsearch command line, for
+  example `--max-rate 50 --timeout 10 --proxy 127.0.0.1:8080`. It is added after everything else.
+- **Default headers**: dirsearch adds `User-Agent`, `Accept`, `Accept-Encoding`, `Keep-Alive` and
+  `Cache-Control` to every request, and `-H` can only override them. Untick a header to stop sending it
+  (for example `Keep-Alive`, which servers answering over HTTP/2 reject). The title shows how many are
+  turned off.
 
 ### What is remembered
 
-Everything on the form except the path is saved per target as its **default options**, automatically,
-even if you never click **Fuzz**. Every new job and every inline launcher of that target starts from
-them. A job also keeps the exact options it ran with, whatever you change later.
+Everything on the form except the path is saved for each target as its default options, automatically,
+even if you never click Fuzz. New jobs and the forms opened from Results and Tree start from them. Each
+job also keeps the exact options it ran with, whatever you change later.
 
 ---
 
-## 6. The JOBS tab
+## 5. Managing jobs
 
-### Job table
+### The job list
 
-| Column | Meaning |
+Each job is a row of the **Running / Jobs** table:
+
+- **Status**: the current state (see below), sometimes followed by a tag such as `⚠ auto` or
+  `⚠ stopped early`.
+- **Information icon** <img src="images/icons/info.svg" width="16" alt="info icon">: shows
+  [the details the job was started with](#details-a-job-was-started-with).
+- **Buttons**: Resume, Pause and Stop, depending on the state.
+- **Path**: the path that was fuzzed. Click it to open it in your browser.
+- **Progress**: percentage and `(done/total)` requests, updated live.
+- **Results**: how many findings the job has. Click the number to go straight to the Results of that
+  fuzzed path. Identical findings are counted once.
+- **Rate**: requests per second while running, and the average once the job has stopped.
+- **Errors**: failed requests, counted over the whole job. Pausing and resuming does not reset it.
+- **Elapsed**: running time. It stops counting while the job is paused.
+- **Trash icon** <img src="images/icons/trash.svg" width="16" alt="trash icon">: deletes a finished job
+  with its results and output file.
+
+### Job states
+
+| State | Meaning |
 |---|---|
-| **Status** | Current state (see below), plus tags such as `⚠ auto` or `⚠ stopped early` |
-| **ⓘ** | Opens a panel with the options this job ran with |
-| **Actions** | Resume, Pause and Stop, as they apply |
-| **Path** | The path that was fuzzed (click to open it in your browser) |
-| **Progress** | Percentage and `(done/total)` requests, live |
-| **Results** | Number of findings; click to jump to them in RESULTS. Identical findings are counted once |
-| **Rate** | Requests per second while running; the average once the job has stopped |
-| **Errors** | Request errors, accumulated across the whole job (pauses and resumes do not reset it) |
-| **Elapsed** | Running time. It stops while the job is paused and continues when it resumes |
-| 🗑 | Deletes a finished job together with its results and output file. Disabled while the job is active or paused |
+| QUEUED | Waiting for a free slot on its target |
+| RUNNING | dirsearch is running |
+| PAUSED | Stopped at a checkpoint, ready to resume. Caused by you, by auto-pause, by dirsearch quitting early, or by closing the app |
+| COMPLETED | The whole wordlist was requested |
+| STOPPED | You stopped it. The findings so far are kept, but it cannot be resumed |
+| FAILED | It could not run or it crashed. The reason is one click away, on the information button next to the status. It can be resumed manually once the cause is fixed |
 
-### Statuses
+### Pause, Resume, Stop and Delete
 
-| Status | Meaning |
-|---|---|
-| **QUEUED** | Waiting for a free slot (the target's concurrency limit) |
-| **RUNNING** | dirsearch is running |
-| **PAUSED** | Stopped at a checkpoint and resumable. By you, by [auto-pause](#7-auto-pause-and-early-stops), because dirsearch quit early, or because the app was closed |
-| **COMPLETED** | The whole wordlist was requested |
-| **STOPPED** | You stopped it. Results found so far are kept; it cannot be resumed |
-| **FAILED** | It could not run or crashed. The reason is one click away (ⓘ next to the status); it can be resumed once the cause is gone |
+- **Pause** stops the run and remembers the exact position.
+- **Resume** continues from that position, not from the start; only the few requests that were in flight
+  are repeated. It works on paused and failed jobs. On a job that auto-paused it has an extra option,
+  explained in [section 6](#choosing-what-resume-does).
+- **Stop** ends the job for good.
+- **Delete** (trash icon) removes a finished job together with its results and output file. It is
+  disabled while the job is queued, running or paused.
 
-### Pause, Resume, Stop
+Progress is saved about every 15 seconds. If the app closes or crashes, the jobs that were running come
+back as paused, with the `⚠ auto` tag, ready to resume. A target that cannot be reached when a job starts
+makes it fail with the reason *Unreachable host*.
 
-| Button | What it does |
-|---|---|
-| **⏸ Pause** | Cuts the run short and keeps the exact position |
-| **▶ Resume** | Continues from the checkpoint, not from the start. Only the few requests that were in flight are repeated. Also works on a FAILED job. On an auto-paused job it has a gear, see [section 7](#choosing-what-resume-does) |
-| **Stop** | Ends the job for good (STOPPED) |
+### Details a job was started with
 
-Progress is checkpointed about every 15 seconds. If the app closes or crashes, jobs that were running
-come back as **PAUSED** (tagged `⚠ auto`) and can be resumed. Several jobs can run at once; when a
-job finishes, the next queued one starts.
+Click the information icon <img src="images/icons/info.svg" width="16" alt="info icon"> on a job to see
+the settings it was launched with: the **wordlist**, **extensions**, **headers** (and `query*` when the
+path had a query string), **options** (threads, force extensions, `AUTH`, auto-pause codes, HTTP method,
+proxy, disabled default headers and custom options) and the **date** it started.
 
-A target that is unreachable when the job starts makes it **FAILED** with the reason *Unreachable
-host*.
+The same table appears when you click a **Fuzzed** tag in Results or Tree, with one row per job that
+fuzzed that path.
 
-### The job's options panel (ⓘ)
+### Queue and concurrency
 
-A one-row table with what this job used:
-
-| Column | Content |
-|---|---|
-| **Wordlist** | The list used |
-| **Extensions** | The extensions |
-| **Headers** | The extra headers, and `query*` when the path had a query string |
-| **Options** | `threads`, `force-ext`, `AUTH`, `auto pause`, method, proxy, disabled default headers and custom options, in that order |
-| **Date** | When it started |
-
-The same table appears under the **Fuzzed** tag in RESULTS and TREE, with one row per job that fuzzed a
-path (adding the status and the number of results).
+A target runs at most as many jobs at once as its **Concurrent fuzzes** setting allows. The rest stay
+QUEUED and start as soon as a running job finishes, pauses or is stopped.
 
 ### Output files
 
-Each job keeps dirsearch's own raw output as a readable **`.txt`** in the target's `outputs` folder, named
-from a [template](#output-filenames) (default `dirsearch_{target}_{port}_{path}`) plus the job id, with
-`__AUTH` added when marked authenticated. OptiFuzz reads the results from dirsearch's JSON report beside
-it. Deleting the job deletes both.
+Each job keeps dirsearch's own raw output as a readable `.txt` file in the target's `outputs` folder
+(see [Where your data lives](#12-where-your-data-lives)). The name follows the pattern set in
+[Settings](#output-filenames), plus the job id, with `__AUTH` when the job is marked authenticated.
+OptiFuzz reads the results from dirsearch's JSON report next to it. Deleting the job deletes both.
 
 ---
 
-## 7. Auto-pause and early stops
+## 6. Auto-pause and early stops
 
 ### Auto-pause on status codes
 
-A target that starts answering `429` (rate limited) or `503` is telling you to slow down; a WAF that
-spots the fuzzing may start answering `403` to everything. List those codes in **Auto-pause on status
-codes** and the job pauses on the first one, with the reason in the `⚠ auto` tag (hover it to see which
-code).
+A target that starts answering `429` (too many requests) or `503` is asking you to slow down, and a
+firewall that notices the fuzzing may start answering `403` to everything. Put the codes you care about in
+**Auto-pause on status codes** and the job pauses on the first response with one of them. The `⚠ auto`
+tag shows which code did it when you hover it.
 
-| Detail | Behaviour |
-|---|---|
-| dirsearch's own `skip-on-status = 429` | Turned off. By default dirsearch silently ends the whole scan at the first `429`; OptiFuzz pauses instead |
-| Responses dirsearch hides | Detected too. dirsearch drops some responses from its output (for example the wildcard `403` page its auto-calibration filters out), but OptiFuzz reads them from dirsearch's request log while the job runs |
-| Default codes | `429,503`. Empty disables auto-pause |
-| After a pause | You decide when to resume, once you have checked whether the target is down or blocking you |
+- dirsearch normally ends the whole scan at the first `429`. OptiFuzz turns that off so the job pauses
+  instead.
+- It also catches responses dirsearch hides from its own output (for example the `403` page that its
+  wildcard detection filters out), by reading dirsearch's request log while the job runs.
+- After a pause, nothing resumes by itself: check whether the target is down or blocking you, then
+  resume when you are ready.
 
 ### Choosing what Resume does
 
-When a job auto-paused on a request, the **▶ Resume** button has a **gear** attached on its right.
-Click the gear to open the option:
+When a job auto-paused on a specific request, the **Resume** button has a gear attached on its right
+<img src="images/icons/gear.svg" width="16" alt="gear icon">. Click the gear to see one option:
 
-| Setting | Resume behaviour |
-|---|---|
-| ☑ **Repeat the word that paused it** (default) | The word that triggered the pause is requested again. Use it when you suspect the answer was a block |
-| ☐ unticked | The job continues past that word without repeating it. Use it when that word really answers `403` and you were not blocked |
+- **Repeat the word that paused it** (ticked by default): the word that triggered the pause is requested
+  again. Use it when you think the answer was a block.
+- **Unticked**: the job continues after that word without repeating it. Use it when that word really
+  answers `403` and you were not blocked.
 
-Unticked, the gear shows an orange dot and the Resume tooltip says the word is skipped. The choice is
-remembered for that job. The job keeps pausing on every code you armed either way, so you can check each
-one by hand. The gear only appears on jobs auto-paused with the version that introduced it (1.1.5 or
-newer); older paused jobs resume as before.
+The gear shows an orange dot while the option is unticked, and the Resume tooltip says the word will be
+skipped. The choice is remembered for that job. Either way the job keeps pausing on every code you chose,
+so you can check each one by hand. The gear only appears on jobs auto-paused with version 1.1.5 or later.
 
 ### Jobs that stop early
 
-A job is never reported as **COMPLETED** when dirsearch quit before the end of the wordlist. It is
-**PAUSED** at the position it really reached, tagged `⚠ stopped early`; click the **ⓘ** next to the tag
-to read why, then **Resume**.
+A job is never reported as COMPLETED when dirsearch quit before the end of its wordlist. It is PAUSED at
+the position it really reached and tagged `⚠ stopped early`. Click the information button next to the tag
+to read why, then resume. Typical reasons are:
 
-| Cause | Message you get |
-|---|---|
-| Too many request errors in a row (dirsearch gives up after 75) | The message, plus how many requests failed and the most common error (for example `7x ReadTimeout`) |
-| dirsearch's own time limit for the target | The message dirsearch printed |
-| Any other error that aborted the run (for example a connection reset while reading a response) | That error line |
-| Progress ended well short of its own total | `it ended at N of M without saying why` |
+- Too many request errors in a row (dirsearch gives up after 75). The message adds how many requests
+  failed and the most common error, for example `7x ReadTimeout`.
+- dirsearch's own time limit for the target.
+- Any other error that aborted the run, such as a connection reset while reading a response.
+- The job ended well short of its total without saying why.
 
 ---
 
-## 8. The RESULTS tab
+## 7. Results
 
-Everything dirsearch found for the target, grouped by directory like a tree and updated live while jobs
-run.
+The Results tab lists everything dirsearch found for the target, grouped by directory and updated live
+while jobs run.
 
-![Results grouped by directory, with status codes and NEW markers](images/results.png)
+### Reading the list
 
-### Columns
+Each row shows the **status** code, the **size** of the response, two action icons, the **path** and the
+**redirect** it points to. Paths are indented under their parent directory, and the arrow beside a
+directory folds or unfolds it (the state is remembered). Next to a directory, `(10)` is how many direct
+children it has, and `(10 · 3 hidden)` means three of them are hidden by your
+[hide rules](#hide-rules).
 
-| Column | Content |
-|---|---|
-| **Status** | HTTP status, colour-coded by class (table below) |
-| **Size** | Response size, as dirsearch reports it |
-| *(icons)* | ⚡ **Fuzz this path** and the tree icon, see [Row actions](#row-actions) |
-| **Path** | The path, indented under its parent directory with expand/collapse arrows. Next to a folder, `(10)` is how many direct children it has, and `(10 · 3 hidden)` how many of them your [hide rules](#hide-rules) hide |
-| **Redirect** | The redirect destination, plus the **NEW** badge |
+Status codes are coloured by class: purple for 1xx, green for 2xx, cyan for 3xx, yellow for 401 and
+403, grey for the other 4xx, orange for 429 and red for 5xx.
 
-| Status colour | Class |
-|---|---|
-| Purple | 1xx |
-| Green | 2xx |
-| Cyan | 3xx |
-| Yellow | 401 and 403 |
-| Grey | other 4xx |
-| Orange | 429 |
-| Red | 5xx |
+A redirect inside the same host shows only its path. A redirect to another host or port is shown as the
+full URL in orange, because it leaves the target and deserves a look. Hover a redirect to see its full
+address, or click it to open it.
 
-### Redirects
+### The NEW badge
 
-A redirect to the **same host** shows just its path. One that leaves the target (another host or port)
-is shown as the full URL in **orange**: worth a second look. Hover or click it for the full address; a
-long redirect wraps without hiding the **NEW** badge.
-
-### NEW badge
-
-**NEW** marks every finding you have not seen yet, so a re-run shows only what changed for you. A
-finding is marked as seen when it was actually shown on screen while you were on the tab: rows you
-scrolled past or left folded stay NEW. Findings arriving while you watch are highlighted until you leave.
+**NEW** marks the findings you have not seen yet, so after a new run you only look at what changed. A
+finding counts as seen once it was on screen while you were on the tab: rows you scrolled past, or left
+inside a folded directory, stay NEW.
 
 ### The Fuzzed tag
 
-A **Fuzzed** tag next to a path means it was already fuzzed from there. Click it to open the history:
-a table with one row per job (status, wordlist, extensions, headers, options, number of results, date).
-Click a result count to jump to those results. A path and the same path with a trailing slash count as
-one place; the tag goes on its main row.
+When a path has already been fuzzed, a **Fuzzed** tag appears next to it automatically, both in Results
+and in Tree. Click the tag to unfold the details of the jobs that fuzzed it: wordlist, extensions,
+headers, options, number of results and date. The number of results is a link to those results.
 
-### Row actions
+### Actions on a path
 
-| Action | How |
-|---|---|
-| Open in your browser | Click the path (or a redirect link). The browser is set in [Settings](#browser-for-opening-results) |
-| Copy the full path | Right-click the path (also in JOBS and TREE) |
-| Fuzz inside it | ⚡ opens the New Fuzz form under the row, pre-filled. Click it again to close |
-| Add to the TREE / remove | Tree icon. Removing asks first, because notes on that path are lost |
-| Fold or unfold a directory | The arrow beside it. The state is remembered |
+- **Open it**: click the path to open its URL in your browser (chosen in
+  [Settings](#browser-for-opening-results)).
+- **Copy it**: right-click any path to copy its full path, such as `/path/aaa/aa`, even though the row
+  only shows the last part. This works in Results, Tree and the job list.
+- **Fuzz inside it**: the fuzz icon <img src="images/icons/fuzz.svg" width="16" alt="fuzz icon"> opens
+  the [New Fuzz form](#where-to-start-one) under the row.
+- **Add it to the Tree**: the tree icon <img src="images/icons/tree.svg" width="16" alt="tree icon">
+  adds the path to the Tree, and removes it if it is already there (it asks first, since the notes of
+  that path would be lost).
 
 ### Search, filters and hide rules
 
-Everything here is remembered **per target**, including after a restart.
+All of these are remembered for each target, even after restarting the app.
 
-| Control | What it does |
-|---|---|
-| **Search path…** | Shows only paths containing the text |
-| **Filters ▾ → Fuzzed** | Only paths that have been fuzzed |
-| **Filters ▾ → Status** | Only these codes, comma-separated (`200,301`). Each code counts in the badge |
-| **Hide rules ▾** | Rules that permanently cut noise. The badge shows how many are active |
+- **Search path…** shows only the paths that contain the text.
+- **Filters** has two options: **Fuzzed**, to show only paths that were fuzzed, and **Status**, to show
+  only the codes you list, separated by commas (`200,301`).
+- **Hide rules** removes noise permanently.
 
 #### Hide rules
 
-A result is hidden when it matches **all** the fields of at least one rule. Fill at least one field and
-click **+ Hide**; remove a rule with its **✕**.
+A hide rule has up to four fields: **Status**, **Size**, **Parent path** and, next to it, a **depth**.
+Fill the fields you need and click **+ Hide**. A field you leave empty matches anything. A result is hidden
+when it matches every field you filled in.
 
-| Field | Matches | Example |
-|---|---|---|
-| **Status** | An exact status code | `404` |
-| **Size** | An exact size | `3KB` |
-| **Parent path** | Results below this directory | `/admin/` |
-| *(depth)* | How many levels below the parent the rule reaches: `1` (default) is direct children, `0` is every descendant | `0` |
+- Only **Status** `404`: hides every 404, whatever its size.
+- **Status** `404` and **Size** `3KB`: hides only the 404 responses of exactly 3KB.
+- Only **Parent path** `/static/`: hides everything under `/static/`, whatever its status.
+- **Parent path** `/admin/`, **Status** `403`: hides the 403 results under `/admin/`.
 
-Typical use: hide all `404` results of 190 KB that a custom error page produces, or everything under a
-noisy `/static/` directory. Exports carry the rules that are active when you export.
+The depth says how many levels below the parent path the rule reaches: `1` (default) means only its
+direct children, and `0` means everything under it, however deep. Remove a rule with the ✕ on its chip.
+The number on the **Hide rules** button shows how many rules are active.
 
 ---
 
-## 9. The TREE tab
+## 8. Tree
 
-The tree is **yours**: it is **not** filled automatically. It holds the paths you decided matter, so it
-stays small and readable. The root `/` is always there and cannot be removed.
-
-![The tree with notes and interesting markers](images/tree.png)
+The Tree is the short list of paths you decided matter. It is **not filled automatically**: only what you
+add appears, so it stays readable. The root `/` is always there and cannot be removed.
 
 ### Adding paths
 
-| How | Detail |
-|---|---|
-| **+ Add path** | Type a path (`/api/internal`) and press Enter or click the button |
-| Tree icon in RESULTS | Promotes a result, keeping its status and size |
+There are two ways to add a path:
 
-Parent directories that were never added appear as placeholders, so the structure is always visible.
+- **By hand**: type the path in the **Add path** field, for example `/api/internal`, and press Enter or
+  click **+ Add path**.
+- **From Results**: click the tree icon <img src="images/icons/tree.svg" width="16" alt="tree icon"> on
+  a result. It keeps that result's status and size.
+
+If you add a deep path, its parents appear as placeholder rows so the structure is always visible.
 Starring, noting or removing a placeholder turns it into a real node.
 
-### Columns and controls
+### Working with the tree
 
-| Element | What it does |
-|---|---|
-| **Status**, **Size** | From the result it was added from, empty for paths added by hand |
-| ★ **Mark interesting** | Toggles the star. Works on any path |
-| ⚡ **Fuzz this path** | Opens the New Fuzz form under the row |
-| **Path** | Click to open it in your browser. Folders fold and unfold, and the state is remembered |
-| **Fuzzed** tag | Shows the wordlist and extensions that were used; click for the full history table |
-| **Note** | Type in the row; it saves when you click away. It grows as you write |
-| 🗑 | Removes the path and the nodes under it (asks first). It never deletes jobs or results |
+- **Star** <img src="images/icons/star.svg" width="16" alt="star icon">: marks a path as interesting. It
+  turns yellow <img src="images/icons/star-filled.svg" width="16" alt="filled star icon"> when marked.
+- **Fuzz icon** <img src="images/icons/fuzz.svg" width="16" alt="fuzz icon">: opens the New Fuzz form
+  under the row, like in Results.
+- **Path**: click it to open it in your browser, right-click it to copy its full path. Directories fold
+  and unfold, and the state is remembered.
+- **Fuzzed tag**: appears automatically on paths that were fuzzed, with the wordlist and extensions
+  used. Click it to unfold the details of those jobs.
+- **Note**: write directly in the row; it saves when you click elsewhere and grows as you type.
+- **Trash icon** <img src="images/icons/trash.svg" width="16" alt="trash icon">: removes the path and any
+  paths under it, after asking. It never deletes jobs or results.
 
-### Search and filters
-
-| Control | What it does |
-|---|---|
-| **Search path…** | Shows only paths containing the text |
-| **Filters ▾ → Interesting** | Only starred paths |
-| **Filters ▾ → Fuzzed** | Only paths that were fuzzed |
-| **Export URLs (TXT)** | See [Exporting](#11-exporting) |
+**Search path…** and **Filters** work as in Results. Filters has **Interesting**, to show only starred
+paths, and **Fuzzed**. **Export URLs (TXT)** is described in [Exporting](#export-urls-txt).
 
 ---
 
-## 10. Fuzzing deeper
+## 9. Fuzzing deeper
 
-OptiFuzz is built for manual, step-by-step exploration: it **never recurses on its own**. When a result
-looks worth exploring, you start that fuzz yourself from the result or from the tree, so every request
-is a decision, and each exploration is its own job with its own options.
+OptiFuzz is made for manual, step-by-step exploration and **never recurses on its own**. When a result
+looks worth exploring, you start that fuzz yourself, from the result or from the tree, so every request
+is a decision. Each exploration is its own job with its own options.
 
-dirsearch has its own recursion flags (`-r`, `-R`, ...). You can pass them in **Custom options**, and the
-job records everything it finds, including nested paths. They are not officially supported: the progress
-counters and Pause/Resume are designed around a single pass over the wordlist, so with recursion the
-progress only reflects the first level and a resumed job cannot restore dirsearch's recursion queue.
-
----
-
-## 11. Exporting
-
-| Export | Where | What you get |
-|---|---|---|
-| **Export target (HTML)** | Top right of the workspace, every tab | One self-contained `.html` with the target's jobs, results and tree. It works offline with no backend and stays interactive: search, filters and hide rules keep working. The Results hide rules active at that moment are already applied |
-| **Export URLs (TXT)** | TREE tab, beside the button above | A plain `.txt` with the absolute URL of every path in the tree, one per line, ready for scanners and crawlers |
-| **Export all targets** | Targets page | Every target of the project. The small arrow chooses the format; the choice is remembered and the file is only downloaded when you click the main button: **separate reports (.zip)** (one HTML per target) or **combined report (.html)** (one page with navigation between targets). These exports show everything, unfiltered |
-| **Outputs mirror** | Targets page | Not a download: a folder that keeps a copy of every job's raw `.txt` as it finishes. See [Outputs mirror](#outputs-mirror) |
+dirsearch has its own recursion flags (`-r`, `-R` and others). You can write them in **Custom options**,
+and the job records everything it finds, nested paths included. They are not officially supported:
+progress and Pause/Resume are designed for a single pass over the wordlist, so with recursion the
+progress only reflects the first level, and a resumed job cannot restore dirsearch's recursion queue.
 
 ---
 
-## 12. Settings
+## 10. Exporting
 
-Open them with the gear in the header. Each entry has its own page; the arrow goes back.
+Exports let you hand your findings to someone else, or keep a snapshot, without needing OptiFuzz. The
+HTML reports are fully interactive: the search, the filters, the hide rules and the folding of
+directories all keep working inside the file, so whoever opens it can explore it the way you do. They
+need no internet and no backend.
 
-| Setting | What it does |
-|---|---|
-| [Browser for opening results](#browser-for-opening-results) | Which browser opens a URL when you click it |
-| [Output filenames](#output-filenames) | Naming pattern of each job's output file |
-| [Default extensions](#default-extensions-force-extensions) | What *Force extensions* uses when no extensions are typed |
-| [Wordlists folder](#wordlists-folder) | The folder the wordlist picker reads |
-| [Desktop app port](#desktop-app-port) | Local port the app listens on |
-| [Display zoom](#display-zoom-linux) | Makes the interface bigger or smaller (Linux) |
-| [Updates](#updates) | Check for a new version and update in place |
+### Export target (HTML)
 
-### Browser for opening results
+The **Export target (HTML)** button, at the top right of the target workspace, downloads one HTML file
+with that target's jobs, results and tree. The file opens with your hide rules, search and filters as
+they were when you exported, and the reader can change them. The same button is available on every tab.
 
-Detected browsers are listed; pick one, or type the path of an executable and click **Use**. If nothing
-is detected, set a custom path.
+### Export URLs (TXT)
 
-### Output filenames
+On the Tree tab, **Export URLs (TXT)** (next to the button above) downloads a plain text file with the
+absolute URL of every path in the tree, one per line. It is meant to be imported into other tools such as
+scanners and crawlers.
 
-The pattern of the raw output file of each job. Placeholders: `{target}` (target name), `{port}` and
-`{path}` (the fuzzed path, slashes become underscores). A live example is shown while you edit. It
-applies to jobs created from then on.
+### Export all targets
 
-### Default extensions (Force extensions)
+On the targets page, **Export all targets** downloads a report of every target in the project at once.
+The small arrow on its right chooses the format, and the choice is remembered. Choosing a format only
+changes the button: the file is downloaded when you click the button itself.
 
-With **Force extensions** on and an empty Extensions field, dirsearch silently falls back to a hidden
-default. This setting controls it.
+- **Separate reports (.zip)**: a zip file with one HTML report per target.
+- **Combined report (.html)**: one HTML page with every target, with navigation between them.
 
-| Choice | Result |
-|---|---|
-| Leave it blank | dirsearch's own default, like a plain dirsearch run |
-| Tick **Use no extensions instead** | None |
-| Type your own list | That list |
-
-### Wordlists folder
-
-The folder the wordlist picker browses. Empty means the `wordlists` folder of OptiFuzz. Type a path or
-use the folder button. Its subfolders show up as groups. OptiFuzz only reads from it.
-
-### Desktop app port
-
-The local port OptiFuzz listens on (on `127.0.0.1` only). Default **58947**; empty restores it. It
-takes effect the next time you start OptiFuzz.
-
-### Display zoom (Linux)
-
-Makes everything bigger or smaller, from **50** to **300** percent, applied immediately and remembered.
-Empty means automatic. On Windows the app follows the system display scaling by itself.
-
-### Updates
-
-**Check for updates** compares with the repository you installed from. If there is a newer version,
-**Update now** downloads it, refreshes the dependencies and **restarts the app by itself**. Running and
-queued jobs are paused first (resume them afterwards). Your projects, targets, jobs and wordlists are
-kept, since they live outside the program folder. It works on any copy installed with `git clone`; if
-you edited tracked files yourself it refuses to overwrite them.
+These exports show everything, without applying hide rules.
 
 ### Outputs mirror
 
-Not in the Settings menu: it is set per project, on its Targets page. See [Targets](#the-targets-page).
+The outputs mirror keeps a second copy of every job's raw `.txt` output in a folder you choose, outside
+OptiFuzz. It is set per project, in the **Outputs mirror** section at the top of the project's targets
+page: type the folder path or pick it with the folder button
+<img src="images/icons/folder.svg" width="16" alt="folder icon">.
+
+- Every job's output is copied there when the job finishes, in a subfolder named after its target.
+- When you set the folder, the outputs of jobs that already finished are copied too.
+- If you later change the folder, the files already mirrored move to the new one automatically.
+- Deleting a job also removes its mirrored copy.
+- Leave the field empty to turn the mirror off; files already copied stay where they are.
+
+The original files inside OptiFuzz are never moved or changed, whatever you do here.
 
 ---
 
-## 13. Where your data lives
+## 11. Settings
 
-| What | Where |
-|---|---|
-| Data root | `%APPDATA%\OptiFuzz` on Windows, `~/.local/share/OptiFuzz` on Linux (override with the `OPTIFUZZ_WORKSPACE_ROOT` environment variable) |
-| A target | `projects/<project>/targets/<target>/` under the data root |
-| Its jobs | `jobs/<job id>.json`, plus the job's working files |
-| Raw outputs | `outputs/` (the `.txt` and the JSON report of every job) |
-| Tree, hide rules, seen markers | `tree.json`, `hide_rules.json`, `results_seen.json` in the target folder |
+Click the gear icon at the top right to open the settings. Each entry opens its own page, and the back
+arrow returns to the list.
 
-Everything is plain JSON plus dirsearch's untouched output, written atomically, so it survives a crash.
+### Browser for opening results
 
-| Environment variable | Effect |
-|---|---|
-| `OPTIFUZZ_WORKSPACE_ROOT` | Use another data folder |
-| `OPTIFUZZ_UI_SCALE` | Linux: force a display zoom factor (for example `1.25`) |
+Chooses the browser that opens a URL when you click a path or a redirect. The browsers found on your
+computer are listed: pick one. If yours is not listed, type the path of its executable and click **Use**.
+
+### Output filenames
+
+The pattern that names each job's raw output file. You can use `{target}` (the target's name), `{port}`
+and `{path}` (the fuzzed path, with slashes turned into underscores). The default is
+`dirsearch_{target}_{port}_{path}`. An example of the result is shown as you type. It applies to jobs
+created after you save.
+
+### Default extensions (Force extensions)
+
+When **Force extensions** is on but a fuzz has no extensions typed, dirsearch does not use none: it falls
+back to its own built-in list (`php,asp,aspx,jsp,html,htm`). This setting decides what OptiFuzz does in
+that case.
+
+- Leave the field empty to keep dirsearch's built-in list, exactly like running dirsearch by hand.
+- Tick **Use no extensions instead** to use no extensions at all.
+- Type your own comma-separated list to use it instead.
+
+### Wordlists folder
+
+The folder the wordlist picker reads. Leave it empty to use the `wordlists` folder that comes with
+OptiFuzz, or type the path of a folder you already have (or choose it with the folder button). Its
+subfolders appear as groups in the picker. OptiFuzz only reads from it and never changes it.
+
+### Desktop app port
+
+The local port the app listens on, always on `127.0.0.1`. The default is 58947; leave the field empty to
+use it. A change takes effect the next time you start OptiFuzz.
+
+### Display zoom (Linux)
+
+Makes the whole interface bigger or smaller, from 50 to 300 percent. It applies immediately and is
+remembered. Leave it empty for automatic. On Windows the app follows the display scaling of the system.
+
+### Updates
+
+**Check for updates** compares your copy with the repository you installed it from. If a newer version
+exists, **Update now** downloads it, refreshes the dependencies and restarts OptiFuzz by itself. Running
+and queued jobs are paused first, so resume them afterwards. Your projects, targets, jobs and wordlists
+are kept, because they are stored outside the program folder. It works on any copy installed with
+`git clone`, and it refuses to overwrite files you modified yourself.
 
 ---
 
-## 14. Quick reference
+## 12. Where your data lives
 
-### Buttons and icons
+Your data is stored outside the program folder, so it survives updates. The data folder is:
 
-| Icon or button | Meaning |
-|---|---|
-| ⚡ | Fuzz this path |
-| Tree icon | Add to / remove from the TREE |
-| ★ | Mark interesting (TREE); default wordlist (picker) |
-| ⓘ | The options this job ran with, or the reason it stopped |
-| ⚙ on Resume | Choose whether Resume repeats the word that paused the job |
-| 🗑 | Delete |
-| ▸ / ▾ | Fold or unfold a directory |
-| Orange dot on a card | Something is fuzzing in it |
-| NEW | Not seen yet |
-| Fuzzed | Already fuzzed from here; click for history |
-| `⚠ auto` | Paused by auto-pause (or the app closed) |
-| `⚠ stopped early` | dirsearch quit before the end of the wordlist |
+- **Windows**: `%APPDATA%\OptiFuzz\workspace` (usually `C:\Users\<you>\AppData\Roaming\OptiFuzz\workspace`)
+- **Linux**: `~/.local/share/OptiFuzz/workspace`
 
-### Mouse and keyboard
+Everything below is inside that folder:
 
-| Action | Result |
-|---|---|
-| Click a path or redirect | Opens it in your browser |
-| Right-click a path (JOBS, RESULTS or TREE) | Copy the full path |
-| Enter in the TREE path field | Adds the path |
-| Click outside a menu or panel | Closes it |
+```text
+workspace/
+├── app_settings.json                      app-wide settings
+└── projects/
+    └── <project>/
+        ├── project.json
+        └── targets/
+            └── <target>/
+                ├── target.json
+                ├── tree.json              the Tree
+                ├── hide_rules.json        the Results hide rules
+                ├── results_seen.json      what you have already seen (NEW badge)
+                ├── outputs/               the raw .txt and JSON report of each job
+                └── jobs/                  one file per job, plus its working files
+```
 
-### Custom options examples
-
-| Goal | Flags |
-|---|---|
-| Limit the rate | `--max-rate 50` |
-| Longer timeout | `--timeout 10` |
-| Go through Burp or another proxy | `--proxy 127.0.0.1:8080` |
-| Different HTTP method | `-m POST` |
-
-Any dirsearch flag works; see its own documentation.
+Folder names for projects, targets and jobs are generated by OptiFuzz. Everything is stored as plain JSON
+and dirsearch's untouched output, written so that a crash cannot corrupt it.
 
 ---
 

@@ -36,27 +36,29 @@ The essentials. Every feature, option and screen is explained in the
 - **Fuzzing you control.** Start dirsearch jobs from a form with a wordlist, extensions, headers and any
   other dirsearch flag. **Pause, resume and stop** at any time; a paused job continues from where it
   stopped, and an app crash does not lose a long run.
-- **Auto-pause.** A job pauses when the target answers a status code you armed (for example `429` or a
-  `403` block), and you choose whether Resume repeats that word or moves on.
-- **Honest job states.** A job is never reported as complete when dirsearch quit early: it is paused at
-  the position it reached, with the reason one click away. Live progress, rate, errors and elapsed time.
+- **Auto-pause.** A job pauses when the target answers a status code you chose (for example `429` or a
+  `403` block), and you decide whether Resume repeats that word or moves on.
 - **Readable results.** Colour-coded status codes, a **NEW** badge on what you have not seen yet,
   search, filters and persistent hide rules to cut noise.
-
-![Jobs: queued, running, paused, stopped, failed and completed fuzzes for one target](docs/images/jobs.png)
-
-![Results grouped by directory, with status codes and NEW markers](docs/images/results.png)
-
 - **A tree you curate.** The FUZZ TREE is not filled automatically: you add the paths that matter, star
   the interesting ones, write notes, and fuzz any node deeper. OptiFuzz never recurses on its own.
-
-![The tree with notes and interesting markers](docs/images/tree.png)
-
 - **Reports you can share.** A self-contained, interactive HTML report per target (it works offline),
   every target of a project at once, a plain list of tree URLs for other tools, and an optional mirror
   of dirsearch's raw output.
 
-> ### 📖 Full documentation
+![Jobs screen](docs/images/jobs.png)
+
+*Jobs screen: every fuzz of a target with its status, live progress, rate and errors, and the buttons to pause, resume or stop it.*
+
+![Results screen](docs/images/results.png)
+
+*Results screen: what dirsearch found, grouped by directory, with colour-coded status codes, the NEW badge and the search, filter and hide-rule controls.*
+
+![Tree screen](docs/images/tree.png)
+
+*Tree screen: the paths you chose to keep, with interesting markers, notes and the wordlists already used on each one.*
+
+> ### Full documentation
 >
 > **[User guide: everything OptiFuzz does, screen by screen →](docs/USAGE.md)**
 >

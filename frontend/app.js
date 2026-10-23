@@ -212,10 +212,6 @@ const FOLDER_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="c
     + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
     + '<path d="M2 4.4a1 1 0 0 1 1-1h3.4a1 1 0 0 1 .8.4l1.3 1.7H13a1 1 0 0 1 1 1v6.1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.4z"/></svg>';
 
-// "Fuzz options" (JOBS row) -- an "i" in a circle, toggling the same
-// fuzz-history panel the "Fuzzed" tag opens elsewhere, just for this one
-// job. Outline while closed, blue (.job-info-btn.active, matching the
-// "Fuzzed" tag's own active color) once open.
 // Gear next to Resume (auto-paused jobs): opens the "repeat the word" option.
 const GEAR_ICON_SVG = (() => {
     // 8-tooth cog outline plus a hub hole (a ring of rays alone reads as a sun).
@@ -242,6 +238,10 @@ function setResumeRepeatsWord(jobId, repeat) {
     } catch (e) { /* storage unavailable: the choice just is not remembered */ }
 }
 
+// "Fuzz options" (JOBS row) -- an "i" in a circle, toggling the same
+// fuzz-history panel the "Fuzzed" tag opens elsewhere, just for this one
+// job. Outline while closed, blue (.job-info-btn.active, matching the
+// "Fuzzed" tag's own active color) once open.
 const INFO_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
     + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
     + '<circle cx="8" cy="8" r="6.3"/><line x1="8" y1="7.3" x2="8" y2="11.3"/><circle cx="8" cy="4.9" r="0.15" fill="currentColor"/></svg>';
