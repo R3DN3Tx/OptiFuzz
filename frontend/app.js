@@ -217,9 +217,18 @@ const FOLDER_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="c
 // job. Outline while closed, blue (.job-info-btn.active, matching the
 // "Fuzzed" tag's own active color) once open.
 // Gear next to Resume (auto-paused jobs): opens the "repeat the word" option.
-const GEAR_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
-    + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
-    + '<circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3"/></svg>';
+const GEAR_ICON_SVG = (() => {
+    // 8-tooth cog outline plus a hub hole (a ring of rays alone reads as a sun).
+    const points = [];
+    for (let i = 0; i < 32; i++) {
+        const angle = (Math.PI * i) / 16 - Math.PI / 32;
+        const radius = i % 4 < 2 ? 7 : 5.3;
+        points.push(`${(8 + radius * Math.cos(angle)).toFixed(2)},${(8 + radius * Math.sin(angle)).toFixed(2)}`);
+    }
+    return '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+        + 'stroke-width="1.2" stroke-linejoin="round"><polygon points="' + points.join(" ") + '"/>'
+        + '<circle cx="8" cy="8" r="2.2"/></svg>';
+})();
 
 // Whether Resume repeats the word that auto-paused a job, remembered per job (default: repeat).
 let openResumeMenuId = null;
@@ -2476,19 +2485,21 @@ async function renderWorkspace(projectId, targetId, tab) {
                 // Only an auto-pause that caught its trigger request can skip that word.
                 const canSkipWord = job.skip_completed_lines !== null && job.skip_completed_lines !== undefined;
                 const repeatWord = !canSkipWord || resumeRepeatsWord(job.id);
-                actions.appendChild(h("button", {
-                    class: "primary",
+                const resumeBtn = h("button", {
+                    class: "primary resume-main-btn",
                     text: "▶ Resume",
                     title: repeatWord ? "Resume" : "Resume, skipping the word that paused it",
                     onclick: async () => {
                         await api(`/api/jobs/${job.id}/resume?repeat_word=${repeatWord}`, { method: "POST" });
                         refreshJobs();
                     },
-                }));
-                if (canSkipWord) {
+                });
+                if (!canSkipWord) {
+                    actions.appendChild(resumeBtn);
+                } else {
                     const gearBtn = h("button", {
                         type: "button",
-                        class: `icon-btn resume-gear-btn${repeatWord ? "" : " resume-gear-skip"}`,
+                        class: `primary resume-gear-btn${repeatWord ? "" : " resume-gear-skip"}`,
                         title: repeatWord ? "Resume options" : "Resume options: the word that paused it will be skipped",
                         onclick: () => {
                             openResumeMenuId = openResumeMenuId === job.id ? null : job.id;
@@ -2496,7 +2507,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                         },
                     });
                     gearBtn.innerHTML = GEAR_ICON_SVG;
-                    const wrap = h("div", { class: "resume-gear-wrap" }, [gearBtn]);
+                    const group = h("div", { class: "resume-gear-wrap" }, [resumeBtn, gearBtn]);
                     if (openResumeMenuId === job.id) {
                         const check = h("input", { type: "checkbox" });
                         check.checked = repeatWord;
@@ -2504,11 +2515,11 @@ async function renderWorkspace(projectId, targetId, tab) {
                             setResumeRepeatsWord(job.id, check.checked);
                             refreshJobs();
                         });
-                        wrap.appendChild(h("label", { class: "resume-gear-menu" }, [
+                        group.appendChild(h("label", { class: "resume-gear-menu" }, [
                             check, h("span", { text: "Repeat the word that paused it" }),
                         ]));
                     }
-                    actions.appendChild(wrap);
+                    actions.appendChild(group);
                 }
             } else if (job.status === "QUEUED" || job.status === "RUNNING") {
                 actions.appendChild(h("button", {

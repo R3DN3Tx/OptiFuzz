@@ -420,7 +420,7 @@ button.danger { border-color: var(--red); color: var(--red); }
    -- just the one icon, centered so it doesn't read as glued to Actions
    right next to it. */
 .jobs-table > tbody > tr > td:nth-child(2), .jobs-table > thead > tr > th:nth-child(2) { width: 36px; text-align: center; }
-.jobs-table > tbody > tr > td:nth-child(3), .jobs-table > thead > tr > th:nth-child(3) { width: 150px; } /* Actions (Stop, + Resume/Pause) */
+.jobs-table > tbody > tr > td:nth-child(3), .jobs-table > thead > tr > th:nth-child(3) { width: 190px; white-space: nowrap; } /* Actions (Stop, + Resume/Pause) */
 /* Path (4th) -- unsized, gets whatever's left */
 .jobs-table > tbody > tr > td:nth-child(5), .jobs-table > thead > tr > th:nth-child(5) { width: 130px; } /* Progress */
 .jobs-table > tbody > tr > td:nth-child(6), .jobs-table > thead > tr > th:nth-child(6) { width: 70px; } /* Results */
@@ -1504,16 +1504,20 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
     user-select: text;
 }
 
-/* ---- Resume options (gear next to Resume on an auto-paused job) ---- */
-.resume-gear-wrap { position: relative; }
-.resume-gear-btn { padding: 4px 6px; }
-.resume-gear-btn.resume-gear-skip { color: var(--orange); position: relative; }
+/* ---- Resume split button: "Resume" + gear joined in one blue pill, like Export all targets ---- */
+.resume-gear-wrap { position: relative; display: inline-flex; white-space: nowrap; }
+.resume-main-btn { white-space: nowrap; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+button.resume-gear-btn.primary {
+    display: inline-flex; align-items: center; justify-content: center; position: relative;
+    border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 6px 7px;
+    border-left: 1px solid rgba(6, 16, 31, .45);
+}
 .resume-gear-btn.resume-gear-skip::after {
-    content: ""; position: absolute; top: 1px; right: 1px; width: 6px; height: 6px;
-    border-radius: 50%; background: var(--orange);
+    content: ""; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 1px #06101f;
 }
 .resume-gear-menu {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; display: flex; align-items: center; gap: 6px;
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; display: flex; align-items: center; gap: 6px;
     white-space: nowrap; padding: 6px 10px; background: var(--panel); border: 1px solid var(--border);
     border-radius: 6px; font-size: 12px; cursor: pointer;
 }
