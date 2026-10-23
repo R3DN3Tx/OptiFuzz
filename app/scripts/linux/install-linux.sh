@@ -49,7 +49,7 @@ python3 -m venv --system-site-packages .venv
 # pip reuses a system copy of a dependency instead of installing it here. Kali ships an old httpcore
 # that crashes on its newer Python ('typing.Union' object has no attribute '__module__') the moment a
 # fuzz starts. --no-warn-conflicts hides pip's complaints about unrelated system tools (mitmproxy...).
-.venv/bin/pip install --ignore-installed --no-warn-conflicts -r requirements.txt
+.venv/bin/pip install --ignore-installed --no-warn-conflicts -r app/requirements.txt
 
 if [ "${1:-}" = "--no-shortcut" ]; then
     echo
@@ -67,7 +67,7 @@ Name=OptiFuzz
 Comment=Web content discovery with dirsearch
 Exec="$PWD/app/scripts/linux/run-linux.sh"
 Path=$PWD
-Icon=$PWD/app/frontend/icon-dark.png
+Icon=$PWD/app/frontend/icon-tile.png
 Terminal=false
 Categories=Network;Security;
 EOF

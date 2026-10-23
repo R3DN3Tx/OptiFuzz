@@ -328,6 +328,8 @@ main { padding: 16px; max-width: 1100px; margin: 0 auto; }
    `element`, not the <input> itself) -- still just controls overall
    width, same as before. */
 .search-input { min-width: 220px; }
+/* Targets page: wide enough for the whole placeholder, "Search targets (name or URL)...". */
+.search-field.targets-search, .search-input.targets-search { min-width: 300px; }
 
 /* Every <input type="search"> in the app is built via buildSearchInput()
    (app.js), which pairs it with a custom "×" clear button

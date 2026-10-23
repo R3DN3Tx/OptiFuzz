@@ -36,7 +36,7 @@ def main() -> None:
     env = dict(os.environ, OPTIFUZZ_WORKSPACE_ROOT=tempfile.mkdtemp(prefix="optifuzz-smoke-"))
     with open("app.log", "w", encoding="utf-8") as log:
         app = subprocess.Popen(
-            [sys.executable, str(ROOT / "run_desktop.py")],
+            [sys.executable, str(ROOT / "app" / "run_desktop.py")],
             stdout=log, stderr=subprocess.STDOUT, env=env, cwd=ROOT,
         )
     try:

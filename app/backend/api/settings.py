@@ -24,7 +24,7 @@ router = APIRouter(tags=["settings"])
 # constant, so bumping it (v0.0.X per small change, v0.X.0 for a larger one) never needs touching any actual code. Read fresh on every
 # request (a local file, effectively free) rather than cached, so an
 # edit takes effect without restarting the app.
-_VERSION_FILE = Path(__file__).resolve().parents[3] / "VERSION"
+_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"  # <repo>/app/VERSION
 
 
 @router.get("/api/version")

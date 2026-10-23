@@ -1652,7 +1652,7 @@ _PROJECT_TEMPLATE = r"""
   <section id="targets-list-view">
     <div class="section-header-row"><h2>Targets</h2></div>
     <div class="toolbar">
-      <div class="search-field"><input type="search" id="targets-search" class="search-field-input" placeholder="Search targets (name or URL)…"></div>
+      <div class="search-field targets-search"><input type="search" id="targets-search" class="search-field-input" placeholder="Search targets (name or URL)…"></div>
     </div>
     <div class="card-grid" id="targets-grid"></div>
   </section>

@@ -180,13 +180,14 @@ resume, a failed job, the tree, the export), in
 
 ## Development and tests
 
-The repository root keeps what you use directly: this README, the launcher, `wordlists/` (where your
-own lists go) and the install files. Everything else the program needs, which you do not have to touch
-once it is installed, is inside `app/`: the backend, the frontend, the install and uninstall scripts
-(`app/scripts/`), the tests, the demo target and the documentation (`app/docs/`).
+The repository root only keeps this README, the license and `wordlists/` (where your own lists go).
+Everything else the program needs, which you do not have to touch once it is installed, is inside `app/`:
+the launcher (`app/run_desktop.py`), the backend, the frontend, the dependencies (`app/requirements.txt`),
+the version (`app/VERSION`), the install and uninstall scripts (`app/scripts/`), the tests, the demo target
+and the documentation (`app/docs/`).
 
 ```bash
-.venv/bin/python -m pytest          # Windows: .venv\Scripts\python -m pytest
+.venv/bin/python -m pytest app/tests          # Windows: .venv\Scripts\python -m pytest app\tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
@@ -214,7 +215,7 @@ CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:
   centred. Set a larger percentage in *Settings -> Display zoom*.
 - **"Open in browser" does nothing.** Pick a browser in *Settings -> Browser for opening results*.
 - **The window does not open.** Start it from a terminal to see errors:
-  `.venv/bin/python run_desktop.py`.
+  `.venv/bin/python app/run_desktop.py`.
 
 ## Credits
 

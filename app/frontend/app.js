@@ -1360,7 +1360,7 @@ function buildPathHierarchy(items, makeSynthetic) {
 
 // Shown to the left of the settings gear, muted -- purely informational,
 // no click behavior. This just displays whatever backend/api/settings.py's
-// /api/version endpoint reads from the repo-root VERSION file.
+// /api/version endpoint reads from app/VERSION.
 async function loadAppVersion() {
     try {
         const { version } = await api("/api/version");
@@ -2008,7 +2008,7 @@ async function renderTargets(projectId) {
     breadcrumb.append(` / ${project.name}`);
 
     const gridBox = h("div", {});
-    const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input", placeholder: "Search targets (name or URL)…" });
+    const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input targets-search", placeholder: "Search targets (name or URL)…" });
     let allTargets = [];
 
     function renderGrid() {

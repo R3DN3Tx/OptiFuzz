@@ -18,7 +18,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 & python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
-& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+& .\.venv\Scripts\python.exe -m pip install -r app\requirements.txt
 
 if ($NoShortcut) {
     Write-Host ""
@@ -31,9 +31,11 @@ $root = (Get-Location).Path
 $shortcutPath = Join-Path ([Environment]::GetFolderPath("Programs")) "OptiFuzz.lnk"
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $shortcut.TargetPath = Join-Path $root ".venv\Scripts\pythonw.exe"
-$shortcut.Arguments = "run_desktop.py"
+$shortcut.Arguments = "app\run_desktop.py"
 $shortcut.WorkingDirectory = $root
-$shortcut.IconLocation = Join-Path $root "app\frontend\icon-dark.ico"
+# A tile icon (dark square, light mark): the Start menu app list does not follow the light/dark theme of the
+# taskbar, so a one-colour mark would vanish on a light background.
+$shortcut.IconLocation = Join-Path $root "app\frontend\icon-tile.ico"
 $shortcut.Description = "OptiFuzz"
 $shortcut.Save()
 

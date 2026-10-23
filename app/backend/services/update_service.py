@@ -11,7 +11,7 @@ from typing import Any
 from backend.platform_compat import no_window_kwargs
 
 # In-app update (Settings -> Updates): `git pull --ff-only` on the checkout the app runs from, then
-# `pip install -r requirements.txt` so a changed dependency (e.g. the pinned dirsearch commit) comes
+# `pip install -r app/requirements.txt` so a changed dependency (e.g. the pinned dirsearch commit) comes
 # along. The user's data never lives in the checkout (workspace is under %APPDATA% / ~/.local/share),
 # so projects, targets and jobs are untouched. Nothing is contacted until the user clicks.
 REPO_ROOT = Path(__file__).resolve().parents[3]  # <repo>/app/backend/services/update_service.py
@@ -48,7 +48,7 @@ def _require_checkout() -> None:
 
 def current_version() -> str:
     try:
-        return (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        return (REPO_ROOT / "app" / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:
         return "0.0.0"
 
@@ -68,7 +68,7 @@ def check() -> dict[str, Any]:
     latest = current_version()
     if behind:
         try:
-            latest = _git("show", "@{u}:VERSION").strip()
+            latest = _git("show", "@{u}:app/VERSION").strip()
         except UpdateError:
             latest = "unknown"
     return {
@@ -157,7 +157,7 @@ def apply() -> dict[str, Any]:
         return {**status, "updated": False, "restart_required": False}
     _git("pull", "--ff-only", "--quiet", timeout=300)
     pip = subprocess.run(
-        [_pip_python(), "-m", "pip", "install", *_pip_install_flags(), "-r", str(REPO_ROOT / "requirements.txt")],
+        [_pip_python(), "-m", "pip", "install", *_pip_install_flags(), "-r", str(REPO_ROOT / "app" / "requirements.txt")],
         capture_output=True, text=True, timeout=900, env=_ENV, cwd=str(REPO_ROOT), **no_window_kwargs(),
     )
     if pip.returncode != 0:

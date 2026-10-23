@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Run from the repository root with: python -m pytest app/tests
+# This file lives in app/, next to the launcher and the packages the tests import (backend, ...).
+pythonpath = ["."]
+testpaths = ["tests"]

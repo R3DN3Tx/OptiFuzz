@@ -17,8 +17,9 @@ def clone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     origin = tmp_path / "origin"
     origin.mkdir()
     _git(origin, "init", "-b", "main")
-    (origin / "VERSION").write_text("1.0.0\n")
-    (origin / "requirements.txt").write_text("")
+    (origin / "app").mkdir()
+    (origin / "app" / "VERSION").write_text("1.0.0\n")
+    (origin / "app" / "requirements.txt").write_text("")
     _git(origin, "add", "-A")
     _git(origin, "commit", "-m", "v1.0.0")
     local = tmp_path / "local"
@@ -28,7 +29,7 @@ def clone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
 
 
 def _release(origin: Path, version: str) -> None:
-    (origin / "VERSION").write_text(version + "\n")
+    (origin / "app" / "VERSION").write_text(version + "\n")
     _git(origin, "commit", "-am", f"v{version}")
 
 
@@ -47,18 +48,18 @@ def test_check_and_apply_pull_a_newer_version(clone) -> None:
 
     result = update_service.apply()
     assert result["updated"] and result["current"] == "1.0.1" and result["restart_required"]
-    assert (local / "VERSION").read_text().strip() == "1.0.1"
+    assert (local / "app" / "VERSION").read_text().strip() == "1.0.1"
     assert (local / "my_wordlist.txt").exists()
 
 
 def test_apply_refuses_when_tracked_files_were_modified(clone) -> None:
     origin, local = clone
     _release(origin, "1.0.1")
-    (local / "requirements.txt").write_text("# edited\n")
+    (local / "app" / "requirements.txt").write_text("# edited\n")
     assert update_service.check()["can_update"] is False
     with pytest.raises(update_service.UpdateError):
         update_service.apply()
-    assert (local / "VERSION").read_text().strip() == "1.0.0"
+    assert (local / "app" / "VERSION").read_text().strip() == "1.0.0"
 
 
 def test_not_a_git_checkout_is_a_clear_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
