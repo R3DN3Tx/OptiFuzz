@@ -4,7 +4,7 @@
 
 Organise every engagement by project and target, control long fuzzes (pause, resume, and auto-pause when a target rate-limits or blocks you) and turn the raw output into something you can work with: results grouped by directory, a tree you curate with stars and notes, and interactive reports you can share offline.
 
-OptiFuzz runs on **Windows and Linux**. It is local-first: your data stays on your machine, with no telemetry and no cloud. It only goes online when you ask it to check for updates (see [Updating](#updating)).
+OptiFuzz runs on **Windows and Linux** and it is local-first: your data stays on your machine, with no telemetry and no cloud. It only goes online when you ask it to check for updates (see [Updating](#updating)).
 
 > **Legal notice.** OptiFuzz is provided for educational purposes and for security testing of
 > systems you own or have explicit authorisation to test. Using it against anything else may be
