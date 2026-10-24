@@ -1,4 +1,4 @@
-# OptiFuzz
+<h1><img src="app/docs/images/readme_banner.png" alt="OptiFuzz: desktop workspace for web content discovery. Organized. Faster." width="520"></h1>
 
 **A desktop workspace for web content discovery, built around [dirsearch](https://github.com/maurosoria/dirsearch).**
 
