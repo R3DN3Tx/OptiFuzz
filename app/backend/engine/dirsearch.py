@@ -194,7 +194,7 @@ class DirsearchEngine(FuzzingEngine):
         if config.force_extensions:
             argv.append("-f")
         if config.http_method != "GET":
-            argv += ["-X", config.http_method]
+            argv += ["--http-method", config.http_method]
         for name, value in config.headers.items():
             argv += ["-H", f"{name}: {value}"]
         if config.cookie:

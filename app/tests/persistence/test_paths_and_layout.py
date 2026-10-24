@@ -6,7 +6,7 @@ import pytest
 from backend.models.job import FuzzJob, JobStatus
 from backend.persistence import layout
 from backend.persistence.paths import workspace_root
-from backend.persistence.slug import make_id, slugify, validate_safe_id
+from backend.persistence.slug import clean_name, make_id, slugify, validate_safe_id
 
 
 def test_workspace_root_honors_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -56,9 +56,27 @@ def test_slugify_basic() -> None:
     assert slugify("  api.example.com  ") == "api-example-com"
 
 
-def test_slugify_rejects_empty_result() -> None:
-    with pytest.raises(ValueError):
-        slugify("***")
+def test_slugify_never_refuses_a_name_without_latin_letters() -> None:
+    # Hebrew, Chinese, Cyrillic... or only symbols: the name is stored as typed, the id gets a stable neutral slug.
+    for name in ("***", chr(0x5e9) + chr(0x5dc) + chr(0x5d5) + chr(0x5dd), chr(0x4e2d) + chr(0x6587)):
+        slug = slugify(name)
+        assert slug.startswith("x-") and len(slug) == 10
+        assert slugify(name) == slug  # stable: the same name always gives the same slug
+    assert slugify(chr(0x5e9)) != slugify(chr(0x5dc))
+
+
+def test_make_id_cuts_the_readable_part_so_long_names_cannot_overflow_a_path() -> None:
+    new_id = make_id("a" * 200)
+    assert len(new_id) <= 40 + 1 + 8
+    assert validate_safe_id(new_id) == new_id
+
+
+def test_clean_name_checks_length_control_characters_and_emptiness() -> None:
+    assert clean_name("  Client A  ", "Project") == "Client A"
+    assert clean_name(chr(0x5e9) + chr(0x5dc), "Project") == chr(0x5e9) + chr(0x5dc)
+    for bad in ("", "   ", "a" * 81, "a" + chr(0) + "b", "a" + chr(10) + "b"):
+        with pytest.raises(ValueError):
+            clean_name(bad, "Project")
 
 
 def test_make_id_is_slug_plus_unique_suffix() -> None:

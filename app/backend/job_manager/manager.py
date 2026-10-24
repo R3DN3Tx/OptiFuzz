@@ -170,6 +170,24 @@ PROGRESS_ENV_COLUMNS = "250"
 PROGRESS_ENV_LINES = "50"
 
 
+def _end_leftover_scan(pid: int | None) -> None:
+    """Ends the dirsearch process (and its children) a previous session left behind, but only when `pid`
+    really is a dirsearch process: a pid number can be reused by an unrelated program after a restart."""
+    if not pid:
+        return
+    try:
+        import psutil
+
+        process = psutil.Process(pid)
+        if "dirsearch" not in " ".join(process.cmdline()).lower():
+            return
+        for child in process.children(recursive=True):
+            child.kill()
+        process.kill()
+    except Exception:  # psutil.Error, or psutil not importable: nothing to end
+        return
+
+
 class JobNotFoundError(Exception):
     pass
 
@@ -249,6 +267,10 @@ class JobManager:
                     except (OSError, ValueError, KeyError):
                         continue
                     if job.status in (JobStatus.RUNNING, JobStatus.QUEUED):
+                        # The scan of the previous session may still be alive (when the backend ran inside a
+                        # console python.exe that ended, nothing stops its child). Two scans of the same job
+                        # would write the same report, so a leftover one is ended before the job is paused.
+                        _end_leftover_scan(job.pid)
                         job.status = JobStatus.PAUSED
                         job.pid = None
                         # Not a deliberate user Pause -- the app/process
@@ -1026,8 +1048,20 @@ class JobManager:
 
         error_reason = None
         if exit_code != 0:
-            error_reason = "\n".join(stderr_lines[-STDERR_TAIL_LINES:]) or None
+            error_reason = "\n".join(stderr_lines[-STDERR_TAIL_LINES:]) or self._last_output_line(progress_state["tail"])
         return exit_code, error_reason
+
+    @staticmethod
+    def _last_output_line(stdout_tail: str) -> str | None:
+        """dirsearch reports a bad option (an invalid timeout, status code...) as one last line on its
+        output, not on stderr; that line is the reason a job that never started failed."""
+        from backend.job_manager.pty_output import CONTROL_SEQUENCE_RE
+
+        for line in reversed(CONTROL_SEQUENCE_RE.sub("", stdout_tail).splitlines()):
+            line = line.strip()
+            if line and not _PROGRESS_TEXT_RE.search(line) and not _RESULT_LINE_RE.match(line):
+                return line[:500]
+        return None
 
     @staticmethod
     def _error_before_task_completed(stdout_tail: str) -> str | None:

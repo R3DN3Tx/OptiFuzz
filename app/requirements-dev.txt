@@ -1,0 +1,6 @@
+# Tools to run the test suite (python -m pytest app/tests). Not needed to use OptiFuzz.
+# Install with: pip install -r app/requirements-dev.txt   (it also installs requirements.txt)
+-r requirements.txt
+
+pytest==9.1.1
+pytest-asyncio==1.4.0

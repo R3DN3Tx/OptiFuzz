@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 from typing import Any
 
 from backend.models.discovery import Discovery
@@ -32,9 +33,28 @@ def normalize_path(path: str) -> str:
     path = path.strip()
     if not path:
         raise ValueError("path is required")
-    if not path.startswith("/"):
-        path = "/" + path
-    return path
+    if len(path) > 2000:
+        raise ValueError("The path must be 2000 characters or fewer")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
+        raise ValueError("The path cannot contain control characters")
+    if "://" in path:  # a whole URL was pasted: only its path part belongs in the tree
+        parts = urlsplit(path)
+        path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    cut = min((i for i in (path.find("?"), path.find("#")) if i != -1), default=len(path))
+    head, tail = path[:cut], path[cut:]
+    segments: list[str] = []
+    for segment in head.split("/"):
+        if segment in ("", "."):
+            continue
+        if segment == "..":
+            if segments:
+                segments.pop()  # "/a/../b" is "/b"; going above the root stays at the root
+            continue
+        segments.append(segment)
+    head = "/" + "/".join(segments)
+    if segments and path[:cut].endswith("/"):
+        head += "/"
+    return head + tail
 
 
 def _load_nodes(project_id: str, target_id: str) -> dict[str, TreeNode]:

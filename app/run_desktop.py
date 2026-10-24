@@ -430,6 +430,25 @@ class _Api:
         self._saved_paths.add(str(path))
         return {"path": str(path), "name": path.name}
 
+    def update_app(self) -> dict:
+        """Used by the "could not start" page: restores the program files to the official version and
+        updates, then restarts. Projects and settings live in another folder and are never touched."""
+        from backend.services import update_service
+
+        try:
+            update_service.restore_program_files(_damaged_program_file)
+            result = update_service.apply()
+        except update_service.UpdateError as exc:
+            return {"error": str(exc)}
+        if not result.get("updated"):
+            return {"message": "The program files were restored. Close and open OptiFuzz again."}
+        update_service.register_desktop_restart(self._window.destroy, [sys.executable, str(Path(__file__).resolve())])
+        try:
+            update_service.restart()
+        except update_service.UpdateError as exc:
+            return {"error": str(exc)}
+        return {"message": "Updated. OptiFuzz is restarting..."}
+
     def open_download(self, path: str) -> None:
         """Opens a file saved by save_download. An HTML report goes to the browser chosen in Settings, brought
         to the front like every other URL this app opens; anything else opens with the system's own program."""
@@ -500,15 +519,32 @@ body { display: flex; flex-direction: column; align-items: center; justify-conte
 <body><div class="spinner"></div><div>Loading OptiFuzz&hellip;</div></body></html>"""
 
 
-def _error_html(message: str) -> str:
+_damaged_program_file: str | None = None  # the program file named by the error the start page is showing
+
+
+def _error_html(message: str, *, offer_update: bool = False) -> str:
     import html as html_lib
 
-    return (
-        _LOADING_HTML.split("<body>")[0]
-        + "<body><div style='max-width:640px;padding:0 24px;text-align:center'>"
-        + "<div style='color:#ff6b6b;font-size:16px;margin-bottom:10px'>OptiFuzz could not start</div>"
-        + f"<div style='white-space:pre-wrap'>{html_lib.escape(message)}</div></div></body></html>"
+    body = (
+        "<div style='max-width:640px;padding:0 24px;text-align:center'>"
+        "<div style='color:#ff6b6b;font-size:16px;margin-bottom:10px'>OptiFuzz could not start</div>"
+        f"<div style='white-space:pre-wrap'>{html_lib.escape(message)}</div>"
     )
+    if offer_update:
+        body += (
+            "<div style='margin-top:18px;line-height:1.5'>One of the program's own files is damaged or missing. "
+            "Updating OptiFuzz restores the program files to the official version. "
+            "<b>Your projects, results and settings are not touched.</b></div>"
+            "<button id='fix' style='margin-top:16px;padding:8px 18px;border:0;border-radius:6px;"
+            "background:#4f8cff;color:#fff;font-size:14px;cursor:pointer'>Update OptiFuzz</button>"
+            "<div id='fixmsg' style='margin-top:12px;white-space:pre-wrap'></div>"
+            "<script>document.getElementById('fix').addEventListener('click', async function () {"
+            "var b = this, m = document.getElementById('fixmsg'); b.disabled = true; m.textContent = 'Updating...';"
+            "try { var r = await window.pywebview.api.update_app();"
+            "m.textContent = r.error || r.message || 'Done.'; if (r.error) b.disabled = false; }"
+            "catch (e) { m.textContent = String(e); b.disabled = false; } });</script>"
+        )
+    return _LOADING_HTML.split("<body>")[0] + "<body>" + body + "</div></body></html>"
 
 
 _auto_ui_scale: float | None = None
@@ -568,7 +604,12 @@ def _boot_backend(window: webview.Window) -> None:
                 lambda percent: _apply_page_zoom(window, _effective_zoom_scale(percent, _auto_scale()) or 1.0)
             )
 
-        port = _free_port(get_custom_port() or DEFAULT_PORT)
+        from backend.services import port_service
+
+        custom_port = get_custom_port()
+        # A busy port is never silently swapped for a random one: the fallback is chosen away from commonly
+        # used ports, and Settings shows a notice (red dot on the gear) saying which port is in use and why.
+        port = port_service.pick_port(custom_port or DEFAULT_PORT, chosen_by_user=bool(custom_port))
         config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
         server = uvicorn.Server(config)
         # daemon=True: this thread (and the server it runs) dies with the
@@ -578,7 +619,11 @@ def _boot_backend(window: webview.Window) -> None:
         _wait_until_listening(port)
     except Exception as exc:  # shown in the window itself -- pythonw has no console to print to
         _wait_for_first_page(window)
-        window.load_html(_error_html(f"{type(exc).__name__}: {exc}"))
+        global _damaged_program_file
+        damaged_file = getattr(exc, "filename", None) or getattr(exc, "path", None)
+        _damaged_program_file = str(damaged_file) if damaged_file else None
+        detail = f"{type(exc).__name__}: {exc}" + (f"\nFile: {damaged_file}" if damaged_file else "")
+        window.load_html(_error_html(detail, offer_update=isinstance(exc, (ImportError, SyntaxError, OSError))))
         return
     _wait_for_first_page(window)
     window.load_url(f"http://127.0.0.1:{port}")
@@ -778,6 +823,13 @@ def _keep_start_menu_icon_in_step(icon_path: Path | None) -> None:
 
 
 def main() -> None:
+    # One OptiFuzz per data folder: a second copy would load the same jobs as the first one and pause them
+    # on disk or scan them twice. It shows the window that is already open and ends.
+    from backend.services import instance_lock
+
+    if not instance_lock.acquire():
+        instance_lock.bring_owner_to_front()
+        return
     _claim_windows_app_identity()
     if not IS_WINDOWS:
         _prefer_dark_gtk_theme()

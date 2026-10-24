@@ -4,21 +4,32 @@ param([switch]$NoShortcut)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path (Split-Path (Split-Path $PSScriptRoot)))  # repository root (this script lives in app\scripts\windows)
 
+# PowerShell does not stop when a program it runs fails, even with $ErrorActionPreference = "Stop":
+# every step that can fail is checked, so a failed install never ends with a "Done" message.
+function Assert-Succeeded($step) {
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "$step failed (exit code $LASTEXITCODE). OptiFuzz is NOT installed correctly: fix the error above and run this again."
+    }
+}
+
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
     Write-Error "Python 3.11 or newer is required (python.org). Make sure 'python' is on PATH."
 }
 & python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Python 3.11 or newer is required (dirsearch needs it)."
+    Write-Error "Python 3.11 or newer is required (dirsearch needs it). If 'python' opens the Microsoft Store, install Python from python.org instead."
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Error "Git is required (dirsearch is installed from its GitHub repository)."
 }
 
 & python -m venv .venv
+Assert-Succeeded "Creating the virtual environment"
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { Write-Warning "Could not upgrade pip (continuing with the version that came with Python)." }
 & .\.venv\Scripts\python.exe -m pip install -r app\requirements.txt
+Assert-Succeeded "Installing the requirements"
 
 if ($NoShortcut) {
     Write-Host ""

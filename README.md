@@ -133,10 +133,13 @@ Create a target with base URL `http://127.0.0.1` and port `8910` (in the separat
 
 ## Development and tests
 
-The repository root only keeps this README, the license and `wordlists/` (where your own lists go). Everything else the program needs, which you do not have to touch once it is installed, is inside `app/`: the launcher (`app/run_desktop.py`), the backend, the frontend, the dependencies (`app/requirements.txt`), the version (`app/VERSION`), the install and uninstall scripts (`app/scripts/`), the tests, the demo target and the documentation (`app/docs/`).
+The repository root only keeps this README, the license and `wordlists/` (where your own lists go). Everything else the program needs, which you do not have to touch once it is installed, is inside `app/`: the launcher (`app/run_desktop.py`), the backend, the frontend, the dependencies (`app/requirements.txt`, and `app/requirements-dev.txt` for the tests), the version (`app/VERSION`), the install and uninstall scripts (`app/scripts/`), the tests, the demo target and the documentation (`app/docs/`).
+
+The test tools (`pytest`) are not installed with OptiFuzz: they are only needed to run the tests. Install them once, in the same virtual environment, and then run the suite:
 
 ```bash
-.venv/bin/python -m pytest app/tests          # Windows: .venv\Scripts\python -m pytest app\tests
+.venv/bin/pip install -r app/requirements-dev.txt        # Windows: .venv\Scripts\pip install -r app\requirements-dev.txt
+.venv/bin/python -m pytest app/tests                          # Windows: .venv\Scripts\python -m pytest app\tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs on every push, on Windows and Linux:

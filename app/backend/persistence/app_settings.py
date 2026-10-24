@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.persistence.atomic import read_json, write_json_atomic
+from backend.persistence.atomic import DamagedFileError, quarantine, read_json, restore_backup, write_json_atomic
 from backend.persistence.paths import workspace_root
 
 # Small app-wide UI preferences (currently just the browser override) --
@@ -19,9 +19,38 @@ def load_settings() -> dict[str, Any]:
     if not path.is_file():
         return {}
     try:
-        return read_json(path)
-    except (OSError, ValueError):
+        data = read_json(path)
+    except DamagedFileError as exc:
+        return _recover_settings(path, exc)
+    except OSError:
         return {}
+    return data if isinstance(data, dict) else _recover_settings(path, DamagedFileError(path, "not a JSON object"))
+
+
+def _recover_settings(path, exc: DamagedFileError) -> dict[str, Any]:
+    """A damaged settings file is never overwritten as if nothing had happened: the last good copy
+    (kept at every save) is restored when there is one; otherwise the damaged file is set aside and the
+    app starts from the defaults. Either way a notice is raised so Settings shows what happened."""
+    from backend.services import notice_service  # imported here: notice_service has no persistence deps
+
+    if restore_backup(path):
+        notice_service.set_notice(
+            "settings_file",
+            f"The settings file was damaged ({exc.reason}). It was restored from the last good copy; "
+            "the damaged file was kept next to it with the extension .damaged-<date>.",
+        )
+        try:
+            data = read_json(path)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            pass
+    kept = quarantine(path)
+    notice_service.set_notice(
+        "settings_file",
+        f"The settings file was damaged ({exc.reason}) and there was no good copy, so the settings were "
+        f"reset to their defaults. The damaged file was kept as {kept.name if kept else 'a .damaged file'}.",
+    )
+    return {}
 
 
 def save_settings(data: dict[str, Any]) -> None:

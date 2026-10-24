@@ -96,6 +96,8 @@ def test_concurrent_reads_during_writes_never_raise(tmp_path: Path) -> None:
         try:
             for n in range(40):
                 write_json_atomic(path, {"n": n})
+        except BaseException as error:  # a write that fails is a lost save: it must fail this test, not just a thread
+            errors.append(error)
         finally:
             stop.set()
 
@@ -103,7 +105,7 @@ def test_concurrent_reads_during_writes_never_raise(tmp_path: Path) -> None:
         while not stop.is_set():
             try:
                 read_json(path)
-            except OSError as error:
+            except (OSError, ValueError) as error:
                 errors.append(error)
             time.sleep(0.001)
 

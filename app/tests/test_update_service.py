@@ -168,3 +168,34 @@ def test_relaunch_helper_starts_the_command_once_the_old_process_is_gone(tmp_pat
     finally:
         old.kill()
         helper.wait(timeout=20)
+
+
+def test_restore_program_files_puts_back_only_the_damaged_file(clone) -> None:
+    origin, local = clone
+    (local / "app" / "VERSION").write_text("garbage")  # the "damaged program file"
+    (local / "app" / "requirements.txt").write_text("# an edit that must survive\n")
+
+    update_service.restore_program_files(str(local / "app" / "VERSION"))
+
+    assert (local / "app" / "VERSION").read_text().strip() == "1.0.0"
+    assert (local / "app" / "requirements.txt").read_text() == "# an edit that must survive\n"
+
+
+def test_restore_program_files_ignores_files_outside_the_copy(clone, tmp_path: Path) -> None:
+    outside = tmp_path / "elsewhere.txt"
+    outside.write_text("keep")
+    update_service.restore_program_files(str(outside))  # must not raise nor touch it
+    update_service.restore_program_files(None)
+    assert outside.read_text() == "keep"
+
+
+def test_a_damaged_file_then_update_ends_on_the_new_version(clone) -> None:
+    origin, local = clone
+    _release(origin, "1.0.1")
+    (local / "app" / "VERSION").write_text("garbage")  # damaged, so the copy looks modified and would not update
+
+    assert update_service.check()["can_update"] is False
+    update_service.restore_program_files(str(local / "app" / "VERSION"))
+    result = update_service.apply()
+
+    assert result["updated"] and (local / "app" / "VERSION").read_text().strip() == "1.0.1"

@@ -154,7 +154,7 @@ def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> No
         "-e", "php,html",
         "--config", str(_DEFAULT_EXTENSIONS_CONFIG_PATH),
         "-f",
-        "-X", "POST",
+        "--http-method", "POST",
         "-H", "Authorization: Bearer secret; rm -rf /",
         "--cookie", "session=abc",
         "--user-agent", "OptiFuzz/1.0",

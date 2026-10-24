@@ -58,17 +58,20 @@ def get_target(
 
 @router.get("/{target_id}/concurrency")
 def get_target_concurrency(
-    target_id: str, job_manager: JobManager = Depends(get_job_manager)
+    project_id: str, target_id: str, job_manager: JobManager = Depends(get_job_manager)
 ) -> dict:
+    target_service.get_target(project_id, target_id)
     return {"max_concurrent_jobs": job_manager.get_target_concurrency(target_id)}
 
 
 @router.put("/{target_id}/concurrency")
 def set_target_concurrency(
+    project_id: str,
     target_id: str,
     body: TargetConcurrencyRequest,
     job_manager: JobManager = Depends(get_job_manager),
 ) -> dict:
+    target_service.get_target(project_id, target_id)
     value = job_manager.set_target_concurrency(target_id, body.max_concurrent_jobs)
     return {"max_concurrent_jobs": value}
 
@@ -79,15 +82,17 @@ def rename_target(project_id: str, target_id: str, body: RenameRequest) -> dict:
 
 
 @router.get("/{target_id}/fuzz-defaults")
-def get_fuzz_defaults(target_id: str) -> dict:
+def get_fuzz_defaults(project_id: str, target_id: str) -> dict:
     """Whatever was last configured (never launched) in this target's own
     New Fuzz form -- {} if nothing's been saved yet, so the frontend can
     fall back to its own hardcoded defaults without a special-case."""
+    target_service.get_target(project_id, target_id)
     return app_settings.get_target_fuzz_defaults(target_id) or {}
 
 
 @router.put("/{target_id}/fuzz-defaults")
-def set_fuzz_defaults(target_id: str, body: TargetFuzzDefaultsRequest) -> dict:
+def set_fuzz_defaults(project_id: str, target_id: str, body: TargetFuzzDefaultsRequest) -> dict:
+    target_service.get_target(project_id, target_id)
     data = body.model_dump()
     app_settings.set_target_fuzz_defaults(target_id, data)
     return data

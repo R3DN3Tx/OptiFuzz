@@ -1550,3 +1550,110 @@ button.resume-gear-btn.primary {
     white-space: nowrap; padding: 6px 10px; background: var(--panel); border: 1px solid var(--border);
     border-radius: 6px; font-size: 12px; cursor: pointer;
 }
+
+/* ---- Field warnings: the field turns red and a small popover with a warning icon appears right below it.
+   It floats over the page (nothing moves) and goes away on the next click elsewhere. ---- */
+.input-invalid { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red); }
+.field-popover {
+    position: fixed;
+    z-index: 300;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 360px;
+    padding: 8px 12px;
+    background: var(--panel);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .55);
+    color: var(--red);
+    font-size: 12.5px;
+    line-height: 1.4;
+    animation: field-popover-in .12s ease-out;
+}
+.field-popover svg { flex: none; margin-top: 2px; }
+@keyframes field-popover-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+/* ---- Notices (Settings): red dot on the gear, banners in the menu ---- */
+.settings-btn { position: relative; }
+.settings-btn.has-notice::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 0 2px var(--bg);
+}
+.notice-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-left: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    vertical-align: middle;
+}
+.notice-banner {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    color: var(--red);
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+.notice-banner svg { flex: none; margin-top: 2px; }
+
+/* ---- Damaged data files: red cards, banner and the repair dialog ---- */
+.card.damaged { border-color: var(--red); }
+.card.damaged:hover { border-color: var(--red); background: rgba(224, 85, 75, .08); }
+.card.damaged p { color: var(--red); }
+.damaged-badge {
+    display: inline-block;
+    margin-right: 8px;
+    padding: 1px 6px;
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+.damaged-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    /* The tab bar right below it is pulled up over this box (negative margin, higher z-index) and would hide its
+       bottom edge: the banner has to be painted above it. */
+    position: relative;
+    z-index: 16;
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    color: var(--red);
+    font-size: 12.5px;
+}
+.damaged-banner svg { flex: none; }
+.damaged-banner-btn { border-color: var(--red); color: var(--red); background: transparent; padding: 3px 9px; }
+.damaged-box { max-width: 600px; }
+.damaged-body { padding: 14px; font-size: 13px; line-height: 1.5; overflow-y: auto; }
+.damaged-body p { margin: 0 0 10px; }
+.damaged-body .muted { color: var(--muted); }
+.damaged-url-input { width: 100%; margin: 4px 0 10px; }
+.damaged-url-input[hidden] { display: none; }
+.damaged-result { margin: 0 0 12px; }
+.damaged-result.error { color: var(--red); }
+.damaged-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* "Show more" row at the end of a long list of results (exported reports draw long lists a page at a time) */
+.show-more-row td { padding: 6px 6px; }
+.show-more-btn { padding: 3px 12px; }

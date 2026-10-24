@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import re
 import shutil
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from backend.models.target import Target
 from backend.models.timestamps import now_iso
 from backend.persistence import layout
-from backend.persistence.atomic import read_json, write_json_atomic
-from backend.persistence.slug import make_id
+from backend.persistence.atomic import DamagedFileError, load_model, write_json_atomic
+from backend.persistence.slug import clean_name, make_id
 from backend.services.project_service import get_project
 
 
@@ -19,15 +20,41 @@ class DuplicateTargetNameError(Exception):
     pass
 
 
+_URL_FORBIDDEN_CHARS = re.compile(r"[\s\x00-\x1f\x7f]")
+MAX_URL_LENGTH = 2000
+
+
+def validate_base_url(base_url: str) -> str:
+    """The base URL as it is stored: http or https, a host, and a port inside 1-65535. Anything else
+    (no scheme, ftp:, javascript:, spaces, control characters) is refused when the target is added, not
+    later when a job fails to start."""
+    base_url = base_url.strip()
+    if not base_url:
+        raise ValueError("Base URL is required")
+    if len(base_url) > MAX_URL_LENGTH:
+        raise ValueError(f"Base URL must be {MAX_URL_LENGTH} characters or fewer")
+    if _URL_FORBIDDEN_CHARS.search(base_url):
+        raise ValueError("Base URL cannot contain spaces or control characters")
+    parts = urlsplit(base_url)  # never raises for these inputs except on a malformed bracketed host
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https") or "://" not in base_url:
+        raise ValueError("Base URL must start with http:// or https:// (for example https://example.com)")
+    try:
+        port = parts.port
+    except ValueError:
+        raise ValueError("The port in the Base URL must be a number between 1 and 65535") from None
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("The port in the Base URL must be a number between 1 and 65535")
+    if not parts.hostname:
+        raise ValueError("Base URL needs a host name or address (for example https://example.com)")
+    return base_url
+
+
 def create_target(project_id: str, name: str, base_url: str) -> Target:
     get_project(project_id)  # raises ProjectNotFoundError if the project is missing
 
-    name = name.strip()
-    base_url = base_url.strip()
-    if not name:
-        raise ValueError("Target name is required")
-    if not base_url:
-        raise ValueError("Target base_url is required")
+    name = clean_name(name, "Target")
+    base_url = validate_base_url(base_url)
 
     if any(existing.name.strip().lower() == name.lower() for existing in list_targets(project_id)):
         raise DuplicateTargetNameError(f"A target named {name!r} already exists in this project")
@@ -59,7 +86,10 @@ def list_targets(project_id: str) -> list[Target]:
     for entry in sorted(targets_dir.iterdir()):
         target_file = entry / "target.json"
         if target_file.is_file():
-            targets.append(Target.from_dict(read_json(target_file)))
+            try:
+                targets.append(load_model(target_file, Target.from_dict))
+            except DamagedFileError:
+                continue  # listed by damage_service instead, so one bad file never hides the others
     return targets
 
 
@@ -67,13 +97,11 @@ def get_target(project_id: str, target_id: str) -> Target:
     path = layout.target_file(project_id, target_id)
     if not path.is_file():
         raise TargetNotFoundError(target_id)
-    return Target.from_dict(read_json(path))
+    return load_model(path, Target.from_dict)
 
 
 def rename_target(project_id: str, target_id: str, new_name: str) -> Target:
-    new_name = new_name.strip()
-    if not new_name:
-        raise ValueError("Target name is required")
+    new_name = clean_name(new_name, "Target")
 
     target = get_target(project_id, target_id)
     if any(

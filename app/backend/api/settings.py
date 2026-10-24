@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from backend.api.schemas import (
     BrowserSettingsRequest,
@@ -15,7 +16,7 @@ from backend.api.schemas import (
     WordlistsDirRequest,
 )
 from backend.persistence import app_settings
-from backend.services import browser_service, display_service, output_naming, wordlist_service
+from backend.services import browser_service, display_service, output_naming, port_service, wordlist_service
 
 router = APIRouter(tags=["settings"])
 
@@ -82,11 +83,24 @@ def set_browser_settings(body: BrowserSettingsRequest) -> dict:
 
 
 @router.get("/api/settings/port")
-def get_port_settings() -> dict:
+def get_port_settings(request: Request) -> dict:
     return {
         "configured_port": app_settings.get_custom_port(),
         "default_port": app_settings.DEFAULT_PORT,
+        # The port this copy is really listening on (it differs from the wanted one when that one was busy).
+        "running_port": request.url.port,
     }
+
+
+@router.get("/api/settings/port/check")
+def check_port(port: int, request: Request) -> dict:
+    """Is `port` free to use at the next start? The port this running copy already uses counts as free
+    (it is ours); a busy one comes with the port that would be used instead."""
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=400, detail="The port must be a number between 1 and 65535")
+    running = request.url.port
+    free = port == running or port_service.is_free(port)
+    return {"port": port, "free": free, "alternative": None if free else port_service.alternative_for(port)}
 
 
 @router.put("/api/settings/port")
@@ -169,6 +183,10 @@ def get_ui_prefs() -> dict:
 
 @router.put("/api/settings/ui-prefs")
 def set_ui_pref(body: UiPrefRequest) -> dict:
+    if not body.key.strip() or len(body.key) > 100:
+        raise HTTPException(status_code=400, detail="The preference name must be 1 to 100 characters")
+    if len(json.dumps(body.value, ensure_ascii=False)) > 65536:
+        raise HTTPException(status_code=400, detail="The preference value is too large (64 KB at most)")
     app_settings.set_ui_pref(body.key, body.value)
     return {"ok": True}
 

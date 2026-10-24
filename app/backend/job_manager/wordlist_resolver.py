@@ -44,6 +44,10 @@ def resolve_wordlist(
     lines = list(_iter_source_lines(source_files))
     if not lines:
         raise ValueError("resolved wordlist is empty")
+    # Blank lines and "#" comments stay in the file (the line numbers must keep lining up for a resume) and
+    # dirsearch never requests them, but a list made only of them has nothing to fuzz.
+    if not any(line.strip() and not line.strip().startswith("#") for line in lines):
+        raise ValueError("The wordlist has no words: it only contains blank lines or comments")
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     extensions = list(extensions or [])

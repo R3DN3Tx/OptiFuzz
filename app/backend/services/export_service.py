@@ -4,6 +4,7 @@ import base64
 import html as html_module
 import io
 import json
+import re
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,9 @@ from urllib.parse import urljoin
 from backend.job_manager.manager import JobManager
 from backend.models.timestamps import now_iso
 from backend.persistence import app_settings
+from backend.persistence.atomic import DamagedFileError
 from backend.persistence.slug import slugify
-from backend.services import project_service, results_service, target_service, tree_service
+from backend.services import damage_service, project_service, results_service, target_service, tree_service
 
 # A single, self-contained HTML snapshot of one
 # Target -- Tree (interactive expand/collapse), Results, fuzz
@@ -26,9 +28,9 @@ from backend.services import project_service, results_service, target_service, t
 # redaction -- the export is the same trust boundary as the local
 # workspace, not a separate one.
 #
-# Pixel-parity pass (2026-09-23/24, two rounds of explicit follow-up: "no
-# me gusta nada... quiero que sea exactamente igual en todos los sentidos a
-# la app"). The page's own <style> embeds frontend/styles.css verbatim
+# Pixel-parity pass (2026-09-23/24, two rounds of explicit follow-up: "I
+# do not like it at all... I want it to be exactly the same in every way as
+# the app"). The page's own <style> embeds frontend/styles.css verbatim
 # (read from disk at export time) -- every color, font, and layout rule
 # (including the header/#scroll-area/#app structure and the .workspace-tabs
 # sticky-gap trick) is the SAME CSS the live app uses, not a lookalike.
@@ -68,10 +70,17 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
     jobs = job_manager.list_jobs(target_id)
 
     results = results_service.list_results(project_id, target_id, jobs, live_results=job_manager.live_results())
-    tree_view = tree_service.tree_views(project_id, target_id, jobs, results)
+    try:
+        tree_view = tree_service.tree_views(project_id, target_id, jobs, results)
+    except DamagedFileError:
+        tree_view = []  # a damaged tree must not stop the export: it is left out and the report says so
     results_view = [r.to_dict() for r in results]
 
     jobs_view = [job.to_dict() for job in sorted(jobs, key=lambda j: j.created_at, reverse=True)]
+    # Reports are shared: no path of this computer (wordlists, custom options) goes into one.
+    for job_view in jobs_view:
+        _scrub_job_paths(job_view)
+    _scrub_tree_paths(tree_view)
 
     return {
         "project": {"id": project.id, "name": project.name},
@@ -81,7 +90,58 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
         "results": results_view,
         "jobs": jobs_view,
         "view": _saved_results_view(project_id, target_id),
+        "damaged": _damaged_for_export(project_id, target_id),
     }
+
+
+def _damaged_for_export(project_id: str, target_id: str | None = None) -> list[dict[str, str]]:
+    """The damaged data files that are NOT in a report, so the report can say so. Only kind, name, file name and
+    reason: a report is shared, so it never carries a path of this computer."""
+    return [
+        {"kind": d["kind"], "name": d["name"], "file": d["file"], "reason": d["reason"]}
+        for d in damage_service.scan(project_id, target_id)
+    ]
+
+
+# A path of this computer: a drive letter or network share on Windows, or a folder that only exists on a
+# Linux/macOS machine. A report is shared, so none of these may travel inside it.
+_LOCAL_PATH = re.compile(
+    r"(?:[A-Za-z]:[\\/]|\\\\)[^\s\"',;]+"
+    r"|/(?:home|Users|root|tmp|mnt|var|opt|usr|etc|media|srv|private)/[^\s\"',;]+"
+)
+
+
+def _file_name_only(path: str) -> str:
+    return re.split(r"[\\/]", path.rstrip("\\/"))[-1] or path
+
+
+def _without_local_paths(text: str) -> str:
+    return _LOCAL_PATH.sub(lambda m: _file_name_only(m.group(0)), text)
+
+
+def _scrub_job_paths(entry: dict[str, Any]) -> None:
+    """Replaces every path of this computer in a job (or in a tree node's fuzz-history entry) with just the file
+    name: the wordlists it used, custom options and the reason it failed. Works on the copy made for the report."""
+    if isinstance(entry.get("wordlist_sources"), list):
+        entry["wordlist_sources"] = [_file_name_only(str(p)) for p in entry["wordlist_sources"]]
+    if isinstance(entry.get("error_reason"), str):
+        entry["error_reason"] = _without_local_paths(entry["error_reason"])
+    config = entry.get("config")
+    if isinstance(config, dict):
+        config = dict(config)
+        for key in ("extra_args", "default_extensions"):
+            if isinstance(config.get(key), list):
+                config[key] = [_without_local_paths(str(a)) for a in config[key]]
+        entry["config"] = config
+
+
+def _scrub_tree_paths(tree_view: list[dict[str, Any]]) -> None:
+    for node in tree_view:
+        history = node.get("fuzz_history")
+        if isinstance(history, list):
+            for entry in history:
+                if isinstance(entry, dict):
+                    _scrub_job_paths(entry)
 
 
 def _saved_results_view(project_id: str, target_id: str) -> dict[str, Any]:
@@ -124,6 +184,17 @@ def _sanitize_hide_rules(raw: str | None) -> list[dict[str, Any]]:
     ]
 
 
+def _embeddable_json(value: object) -> str:
+    """JSON that is safe inside a <script type="application/json"> block whatever the data holds. Every
+    "<", ">" and "&" becomes a unicode escape (still valid JSON, read back as the same text), so no text can
+    close the block ("</script>"), open a comment ("<!--") or start a nested script ("<script"), which a
+    hostile server could otherwise put in a redirect or a path to break the exported page."""
+    text = json.dumps(value)
+    for char in ("<", ">", "&", chr(0x2028), chr(0x2029)):
+        text = text.replace(char, "%su%04x" % (chr(92), ord(char)))
+    return text
+
+
 def export_target_html(
     project_id: str, target_id: str, job_manager: JobManager, *, hide_rules_json: str | None = None
 ) -> str:
@@ -132,8 +203,8 @@ def export_target_html(
     # header value could legitimately contain either literal substring)
     # would otherwise close that block early and break the page -- the
     # standard escape, applied to both embedded blobs.
-    embedded_json = json.dumps(data).replace("</", "<\\/")
-    embedded_hide_rules = json.dumps(_sanitize_hide_rules(hide_rules_json)).replace("</", "<\\/")
+    embedded_json = _embeddable_json(data)
+    embedded_hide_rules = _embeddable_json(_sanitize_hide_rules(hide_rules_json))
     try:
         live_css = _STYLES_CSS_PATH.read_text(encoding="utf-8").replace("</style>", "<\\/style>")
     except OSError:
@@ -224,12 +295,13 @@ def build_project_export_data(project_id: str, job_manager: JobManager) -> dict[
         "project": {"id": project.id, "name": project.name},
         "generated_at": now_iso(),
         "targets": targets_data,
+        "damaged": _damaged_for_export(project_id),
     }
 
 
 def export_project_html(project_id: str, job_manager: JobManager) -> str:
     data = build_project_export_data(project_id, job_manager)
-    embedded_json = json.dumps(data).replace("</", "<\\/")
+    embedded_json = _embeddable_json(data)
     try:
         live_css = _STYLES_CSS_PATH.read_text(encoding="utf-8").replace("</style>", "<\\/style>")
     except OSError:
@@ -625,6 +697,20 @@ function formatErrorsCellText(job) {
 document.getElementById("export-breadcrumb").textContent =
     DATA.project.name + " / " + DATA.target.name + " (" + DATA.target.base_url + ")";
 document.getElementById("export-meta").textContent = "Exported at: " + formatJobDate(DATA.generated_at);
+// Files that were damaged when this report was made are left out of it; say so at the top.
+function showExportDamagedNotice(items) {
+    if (!items || !items.length) return;
+    var banner = h("div", { class: "damaged-banner", role: "alert" });
+    banner.appendChild(h("span", { text: items.length + (items.length === 1 ? " file was" : " files were")
+        + " damaged when this report was created and " + (items.length === 1 ? "is" : "are") + " not included: "
+        + items.map(function (i) {
+            var what = i.kind === "tree" ? "the tree" : i.kind + " \"" + i.name + "\"";
+            return what + " (" + i.reason + ")";
+        }).join("; ") + "." }));
+    var main = document.getElementById("app");
+    main.insertBefore(banner, main.firstChild);
+}
+showExportDamagedNotice(DATA.damaged);
 
 // ---- Tabs: same JOBS/RESULTS/TREE navigation as the live app's own
 // .workspace-tabs/.workspace-tab. Nothing here ever launches/pauses/stops
@@ -766,8 +852,8 @@ function appendConnectorUnits(pathPrefix, connector) {
 // items can normalize to the same key -- the classic dirsearch redirect
 // pair, "/admin" (301 stub) and "/admin/" (the real 200 hit), are separate,
 // genuinely distinct results. This used to overwrite `node.item` with
-// whichever item was seen LAST, silently discarding the other -- "la tool
-// necesita mostrar TODOS los resultados". `node.items` (plural, every
+// whichever item was seen LAST, silently discarding the other -- "the tool
+// must show ALL the results". `node.items` (plural, every
 // distinct item at that key, in encounter order) replaces it; both row
 // builders below render one row per item sharing a position instead of
 // picking a single winner.
@@ -1135,13 +1221,59 @@ function passesResultsFilters(r) {
     return true;
 }
 
-function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVisible) {
+// A report can hold tens of thousands of results. Drawing every row at once made the page slow and heavy
+// (two million elements for 120,000 results), so rows are drawn only when they are needed: a folder's
+// children are built the first time it is expanded, and a parent with many children shows them
+// RESULT_PAGE_SIZE at a time behind a "Show more" row. While a search shows everything expanded, at most
+// SEARCH_ROW_LIMIT rows are drawn.
+var RESULT_PAGE_SIZE = 500;
+var SEARCH_ROW_LIMIT = 3000;
+var resultRowBudget = Infinity;
+var resultsTruncated = false;
+
+function buildShowMoreRow(remaining, onClick) {
+    var button = h("button", {
+        type: "button", class: "show-more-btn",
+        text: "Show " + Math.min(remaining, RESULT_PAGE_SIZE) + " more (" + remaining + " not shown yet)",
+    });
+    button.addEventListener("click", function (e) { e.stopPropagation(); onClick(); });
+    return h("tr", { class: "show-more-row" }, [h("td", { colspan: "4" }, [button])]);
+}
+
+// Draws children[start...] under one parent, a page at a time. `handlesOut` receives the row handles, so a
+// collapse of the parent hides them too, "Show more" row included.
+function appendChildrenPaged(container, children, start, depth, parentKey, prefix, forceVisible, rowsVisible, handlesOut) {
+    var end = Math.min(children.length, start + RESULT_PAGE_SIZE);
+    for (var i = start; i < end; i++) {
+        if (resultRowBudget <= 0) { resultsTruncated = true; return; }
+        appendResultRows(container, children[i], depth, parentKey, prefix, i === children.length - 1, forceVisible, rowsVisible)
+            .forEach(function (handle) { handlesOut.push(handle); });
+    }
+    if (end < children.length) {
+        var moreHandle = { row: null, detailRow: null, expandBtn: null, childHandles: [] };
+        moreHandle.row = buildShowMoreRow(children.length - end, function () {
+            var next = document.createDocumentFragment();
+            appendChildrenPaged(next, children, end, depth, parentKey, prefix, forceVisible, true, handlesOut);
+            moreHandle.row.parentNode.insertBefore(next, moreHandle.row);
+            moreHandle.row.remove();
+            handlesOut.splice(handlesOut.indexOf(moreHandle), 1);
+        });
+        if (depth > 0 && !rowsVisible) moreHandle.row.classList.add("hidden");
+        container.appendChild(moreHandle.row);
+        handlesOut.push(moreHandle);
+    }
+}
+
+function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVisible, rowsVisible) {
+    if (rowsVisible === undefined) rowsVisible = forceVisible;
+    if (resultRowBudget <= 0) { resultsTruncated = true; return []; }
     var childCount = node.children.length;
     // Every distinct item at this position gets its own row (2026-09-25 --
     // see buildHierarchy's own comment); an empty `items` (a synthetic
     // ancestor) still renders exactly one placeholder row, same as before.
     // Only the LAST row in the group carries the expand arrow/children.
     var itemsToRender = node.items.length ? node.items : [null];
+    resultRowBudget -= itemsToRender.length;
     var handles = itemsToRender.map(function (item, idx) {
         var isLastItem = idx === itemsToRender.length - 1;
         var connector = treeConnectorFor(depth, prefix, isLastItem ? isLast : false);
@@ -1206,29 +1338,38 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         tbody.appendChild(row);
         if (detailRow) tbody.appendChild(detailRow);
         // depth > 0 -- a top-level (depth 0) row is always visible regardless
-        // of forceVisible/collapse state; only its DESCENDANTS start hidden
-        // when collapsed by default. Real bug fixed here: applying this
+        // of the collapse state; only its DESCENDANTS start hidden when
+        // collapsed by default. Real bug fixed here: applying this
         // unconditionally hid every row, including top-level ones, leaving
         // Results completely empty whenever it wasn't in "searching" mode.
-        if (depth > 0 && !forceVisible) row.classList.add("hidden");
+        if (depth > 0 && !rowsVisible) row.classList.add("hidden");
 
         return { row: row, detailRow: detailRow, expandBtn: expandBtn, childHandles: [] };
     });
 
     var lastHandle = handles[handles.length - 1];
+    var childHandles = lastHandle.childHandles;
+    var childPrefix = treeChildPrefixFor(depth, prefix, isLast);
+    var childrenBuilt = false;
+    // Draws this node's children right below its own row(s), once. Called when it is first expanded (or
+    // at once while a search shows everything expanded).
+    function buildChildren(visible) {
+        if (childrenBuilt || !childCount) return;
+        childrenBuilt = true;
+        var fragment = document.createDocumentFragment();
+        appendChildrenPaged(fragment, node.children, 0, depth + 1, node.key, childPrefix, forceVisible, visible, childHandles);
+        var anchor = lastHandle.detailRow || lastHandle.row;
+        anchor.parentNode.insertBefore(fragment, anchor.nextSibling);
+    }
     // Registered by exact key so goToResultsAndReveal (below) can find this
     // node's own row(s) and children again later, from a click made in a
     // totally different tab/panel -- same lookup the live app's own
     // resultsPlanKeys.indexOf(key) does against its virtualized plan.
-    resultNodesByKey[node.key] = { handles: handles, lastHandle: lastHandle };
-    var childHandles = [];
-    var childPrefix = treeChildPrefixFor(depth, prefix, isLast);
-    node.children.forEach(function (child, i) {
-        childHandles = childHandles.concat(
-            appendResultRows(tbody, child, depth + 1, node.key, childPrefix, i === node.children.length - 1, forceVisible)
-        );
-    });
-    lastHandle.childHandles = childHandles;
+    resultNodesByKey[node.key] = {
+        handles: handles, lastHandle: lastHandle,
+        ensureBuilt: function () { buildChildren(true); },
+    };
+    if (forceVisible) buildChildren(true);
 
     function setVisible(hs, visible) {
         hs.forEach(function (handle) {
@@ -1250,7 +1391,17 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
             e.stopPropagation();
             var expanding = lastHandle.expandBtn.textContent !== "▾";
             lastHandle.expandBtn.textContent = expanding ? "▾" : "▸";
-            setVisible(childHandles, expanding);
+            if (expanding) {
+                // Opens one level: the children appear, each one folded.
+                buildChildren(true);
+                childHandles.forEach(function (child) {
+                    child.row.classList.remove("hidden");
+                    if (child.expandBtn) child.expandBtn.textContent = "▸";
+                    collapseSubtree(child.childHandles);
+                });
+            } else {
+                setVisible(childHandles, false);
+            }
         });
     }
 
@@ -1261,6 +1412,7 @@ var resultNodesByKey = {};
 function renderResults() {
     resultsBody.innerHTML = "";
     resultNodesByKey = {};
+    resultsTruncated = false;
     if (!DATA.results.length) {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results." })]));
         return;
@@ -1277,24 +1429,26 @@ function renderResults() {
     // instant the search box is cleared, since this is a full rebuild
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
+    resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
     var hierarchy = buildHierarchy(filtered);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a
     // job fuzzed right at the target's base URL) and still correctly
     // re-collapse its own grandchildren, same contract as every other path.
-    var rootTopHandles;
+    var rootTopHandles = [];
     if (hierarchy.items.length) {
         rootTopHandles = appendResultRows(resultsBody, hierarchy, 0, null, "", true, searching);
     } else {
-        rootTopHandles = [];
-        hierarchy.children.forEach(function (child, i) {
-            rootTopHandles = rootTopHandles.concat(
-                appendResultRows(resultsBody, child, 0, null, "", i === hierarchy.children.length - 1, searching)
-            );
-        });
+        appendChildrenPaged(resultsBody, hierarchy.children, 0, 0, null, "", searching, searching, rootTopHandles);
     }
-    resultNodesByKey["/"] = { handles: [], lastHandle: { row: null, expandBtn: null, childHandles: rootTopHandles } };
+    resultNodesByKey["/"] = { handles: [], lastHandle: { row: null, expandBtn: null, childHandles: rootTopHandles }, ensureBuilt: function () {} };
+    if (resultsTruncated) {
+        resultsBody.appendChild(h("tr", {}, [h("td", {
+            colspan: "4", class: "empty",
+            text: "Showing the first " + SEARCH_ROW_LIMIT + " matching rows. Narrow the search to see the rest.",
+        })]));
+    }
 }
 resultsSearchInput.addEventListener("input", renderResults);
 resultsFuzzedBtn.addEventListener("click", function () {
@@ -1341,7 +1495,27 @@ hideForm.addEventListener("submit", function (e) {
         status: statusInput.value.trim(), size: sizeInput.value.trim(), parentPath: parentInput.value.trim(),
         depth: depthRaw ? Number(depthRaw) : 1,
     };
-    if (!f.status && !f.size && !f.parentPath) return;
+    if (!f.status && !f.size && !f.parentPath) {
+        // Same short warning as the live app: red fields plus a message with an icon next to the button.
+        var fields = [statusInput, sizeInput, parentInput];
+        var addButton = hideForm.querySelector("button[type=submit]");
+        var previous = hideForm.querySelector(".field-warning");
+        if (previous) previous.remove();
+        fields.forEach(function (field) { field.classList.add("input-invalid"); });
+        var warning = h("span", { class: "field-warning", role: "alert" });
+        warning.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" '
+            + 'stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2 14.3 13H1.7L8 2.2z"/><line x1="8" y1="6.3" x2="8" y2="9.3"/>'
+            + '<circle cx="8" cy="11.2" r="0.15" fill="currentColor"/></svg>';
+        warning.appendChild(h("span", { text: "Fill in at least one of Status, Size or Parent path." }));
+        addButton.insertAdjacentElement("afterend", warning);
+        var clearWarning = function () {
+            warning.remove();
+            fields.forEach(function (field) { field.classList.remove("input-invalid"); });
+        };
+        setTimeout(clearWarning, 5000);
+        fields.forEach(function (field) { field.addEventListener("input", clearWarning, { once: true }); });
+        return;
+    }
     resultsHideFilters.push(f);
     statusInput.value = ""; sizeInput.value = ""; parentInput.value = ""; depthInput.value = "";
     renderHideChips();
@@ -1386,11 +1560,13 @@ function goToResultsAndReveal(path) {
     chain.forEach(function (ancKey) {
         var entry = resultNodesByKey[ancKey];
         if (!entry) return;
+        entry.ensureBuilt();  // children are drawn on demand: the next link of the chain may not exist yet
         entry.handles.forEach(function (handle) { handle.row.classList.remove("hidden"); });
         if (entry.lastHandle.expandBtn) entry.lastHandle.expandBtn.textContent = "▾";
     });
     var targetEntry = resultNodesByKey[key];
     if (!targetEntry) return; // filtered/hidden out of the current view -- nothing to reveal
+    targetEntry.ensureBuilt();
     targetEntry.lastHandle.childHandles.forEach(function (child) {
         child.row.classList.remove("hidden");
         if (child.expandBtn) child.expandBtn.textContent = "▸";
@@ -1887,6 +2063,20 @@ function formatErrorsCellText(job) {
 }
 
 document.getElementById("export-meta").textContent = "Exported at: " + formatJobDate(PROJECT_DATA.generated_at);
+// Files that were damaged when this report was made are left out of it; say so at the top.
+function showExportDamagedNotice(items) {
+    if (!items || !items.length) return;
+    var banner = h("div", { class: "damaged-banner", role: "alert" });
+    banner.appendChild(h("span", { text: items.length + (items.length === 1 ? " file was" : " files were")
+        + " damaged when this report was created and " + (items.length === 1 ? "is" : "are") + " not included: "
+        + items.map(function (i) {
+            var what = i.kind === "tree" ? "a target's tree" : i.kind + " \"" + i.name + "\"";
+            return what + " (" + i.reason + ")";
+        }).join("; ") + "." }));
+    var main = document.getElementById("app");
+    main.insertBefore(banner, main.firstChild);
+}
+showExportDamagedNotice(PROJECT_DATA.damaged);
 var breadcrumbEl = document.getElementById("export-breadcrumb");
 // Plain project name at the Targets list (nothing above it to link to in a
 // single-project export); once a target is open, the project name becomes
@@ -2047,8 +2237,8 @@ function appendConnectorUnits(pathPrefix, connector) {
 // items can normalize to the same key -- the classic dirsearch redirect
 // pair, "/admin" (301 stub) and "/admin/" (the real 200 hit), are separate,
 // genuinely distinct results. This used to overwrite `node.item` with
-// whichever item was seen LAST, silently discarding the other -- "la tool
-// necesita mostrar TODOS los resultados". `node.items` (plural, every
+// whichever item was seen LAST, silently discarding the other -- "the tool
+// must show ALL the results". `node.items` (plural, every
 // distinct item at that key, in encounter order) replaces it; both row
 // builders below render one row per item sharing a position instead of
 // picking a single winner.
@@ -2412,13 +2602,59 @@ function passesResultsFilters(r) {
     return true;
 }
 
-function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVisible) {
+// A report can hold tens of thousands of results. Drawing every row at once made the page slow and heavy
+// (two million elements for 120,000 results), so rows are drawn only when they are needed: a folder's
+// children are built the first time it is expanded, and a parent with many children shows them
+// RESULT_PAGE_SIZE at a time behind a "Show more" row. While a search shows everything expanded, at most
+// SEARCH_ROW_LIMIT rows are drawn.
+var RESULT_PAGE_SIZE = 500;
+var SEARCH_ROW_LIMIT = 3000;
+var resultRowBudget = Infinity;
+var resultsTruncated = false;
+
+function buildShowMoreRow(remaining, onClick) {
+    var button = h("button", {
+        type: "button", class: "show-more-btn",
+        text: "Show " + Math.min(remaining, RESULT_PAGE_SIZE) + " more (" + remaining + " not shown yet)",
+    });
+    button.addEventListener("click", function (e) { e.stopPropagation(); onClick(); });
+    return h("tr", { class: "show-more-row" }, [h("td", { colspan: "4" }, [button])]);
+}
+
+// Draws children[start...] under one parent, a page at a time. `handlesOut` receives the row handles, so a
+// collapse of the parent hides them too, "Show more" row included.
+function appendChildrenPaged(container, children, start, depth, parentKey, prefix, forceVisible, rowsVisible, handlesOut) {
+    var end = Math.min(children.length, start + RESULT_PAGE_SIZE);
+    for (var i = start; i < end; i++) {
+        if (resultRowBudget <= 0) { resultsTruncated = true; return; }
+        appendResultRows(container, children[i], depth, parentKey, prefix, i === children.length - 1, forceVisible, rowsVisible)
+            .forEach(function (handle) { handlesOut.push(handle); });
+    }
+    if (end < children.length) {
+        var moreHandle = { row: null, detailRow: null, expandBtn: null, childHandles: [] };
+        moreHandle.row = buildShowMoreRow(children.length - end, function () {
+            var next = document.createDocumentFragment();
+            appendChildrenPaged(next, children, end, depth, parentKey, prefix, forceVisible, true, handlesOut);
+            moreHandle.row.parentNode.insertBefore(next, moreHandle.row);
+            moreHandle.row.remove();
+            handlesOut.splice(handlesOut.indexOf(moreHandle), 1);
+        });
+        if (depth > 0 && !rowsVisible) moreHandle.row.classList.add("hidden");
+        container.appendChild(moreHandle.row);
+        handlesOut.push(moreHandle);
+    }
+}
+
+function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVisible, rowsVisible) {
+    if (rowsVisible === undefined) rowsVisible = forceVisible;
+    if (resultRowBudget <= 0) { resultsTruncated = true; return []; }
     var childCount = node.children.length;
     // Every distinct item at this position gets its own row (2026-09-25 --
     // see buildHierarchy's own comment); an empty `items` (a synthetic
     // ancestor) still renders exactly one placeholder row, same as before.
     // Only the LAST row in the group carries the expand arrow/children.
     var itemsToRender = node.items.length ? node.items : [null];
+    resultRowBudget -= itemsToRender.length;
     var handles = itemsToRender.map(function (item, idx) {
         var isLastItem = idx === itemsToRender.length - 1;
         var connector = treeConnectorFor(depth, prefix, isLastItem ? isLast : false);
@@ -2483,29 +2719,38 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         tbody.appendChild(row);
         if (detailRow) tbody.appendChild(detailRow);
         // depth > 0 -- a top-level (depth 0) row is always visible regardless
-        // of forceVisible/collapse state; only its DESCENDANTS start hidden
-        // when collapsed by default. Real bug fixed here: applying this
+        // of the collapse state; only its DESCENDANTS start hidden when
+        // collapsed by default. Real bug fixed here: applying this
         // unconditionally hid every row, including top-level ones, leaving
         // Results completely empty whenever it wasn't in "searching" mode.
-        if (depth > 0 && !forceVisible) row.classList.add("hidden");
+        if (depth > 0 && !rowsVisible) row.classList.add("hidden");
 
         return { row: row, detailRow: detailRow, expandBtn: expandBtn, childHandles: [] };
     });
 
     var lastHandle = handles[handles.length - 1];
+    var childHandles = lastHandle.childHandles;
+    var childPrefix = treeChildPrefixFor(depth, prefix, isLast);
+    var childrenBuilt = false;
+    // Draws this node's children right below its own row(s), once. Called when it is first expanded (or
+    // at once while a search shows everything expanded).
+    function buildChildren(visible) {
+        if (childrenBuilt || !childCount) return;
+        childrenBuilt = true;
+        var fragment = document.createDocumentFragment();
+        appendChildrenPaged(fragment, node.children, 0, depth + 1, node.key, childPrefix, forceVisible, visible, childHandles);
+        var anchor = lastHandle.detailRow || lastHandle.row;
+        anchor.parentNode.insertBefore(fragment, anchor.nextSibling);
+    }
     // Registered by exact key so goToResultsAndReveal (below) can find this
     // node's own row(s) and children again later, from a click made in a
     // totally different tab/panel -- same lookup the live app's own
     // resultsPlanKeys.indexOf(key) does against its virtualized plan.
-    resultNodesByKey[node.key] = { handles: handles, lastHandle: lastHandle };
-    var childHandles = [];
-    var childPrefix = treeChildPrefixFor(depth, prefix, isLast);
-    node.children.forEach(function (child, i) {
-        childHandles = childHandles.concat(
-            appendResultRows(tbody, child, depth + 1, node.key, childPrefix, i === node.children.length - 1, forceVisible)
-        );
-    });
-    lastHandle.childHandles = childHandles;
+    resultNodesByKey[node.key] = {
+        handles: handles, lastHandle: lastHandle,
+        ensureBuilt: function () { buildChildren(true); },
+    };
+    if (forceVisible) buildChildren(true);
 
     function setVisible(hs, visible) {
         hs.forEach(function (handle) {
@@ -2527,7 +2772,17 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
             e.stopPropagation();
             var expanding = lastHandle.expandBtn.textContent !== "▾";
             lastHandle.expandBtn.textContent = expanding ? "▾" : "▸";
-            setVisible(childHandles, expanding);
+            if (expanding) {
+                // Opens one level: the children appear, each one folded.
+                buildChildren(true);
+                childHandles.forEach(function (child) {
+                    child.row.classList.remove("hidden");
+                    if (child.expandBtn) child.expandBtn.textContent = "▸";
+                    collapseSubtree(child.childHandles);
+                });
+            } else {
+                setVisible(childHandles, false);
+            }
         });
     }
 
@@ -2538,6 +2793,7 @@ var resultNodesByKey = {};
 function renderResults() {
     resultsBody.innerHTML = "";
     resultNodesByKey = {};
+    resultsTruncated = false;
     if (!DATA.results.length) {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results." })]));
         return;
@@ -2554,24 +2810,26 @@ function renderResults() {
     // instant the search box is cleared, since this is a full rebuild
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
+    resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
     var hierarchy = buildHierarchy(filtered);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a
     // job fuzzed right at the target's base URL) and still correctly
     // re-collapse its own grandchildren, same contract as every other path.
-    var rootTopHandles;
+    var rootTopHandles = [];
     if (hierarchy.items.length) {
         rootTopHandles = appendResultRows(resultsBody, hierarchy, 0, null, "", true, searching);
     } else {
-        rootTopHandles = [];
-        hierarchy.children.forEach(function (child, i) {
-            rootTopHandles = rootTopHandles.concat(
-                appendResultRows(resultsBody, child, 0, null, "", i === hierarchy.children.length - 1, searching)
-            );
-        });
+        appendChildrenPaged(resultsBody, hierarchy.children, 0, 0, null, "", searching, searching, rootTopHandles);
     }
-    resultNodesByKey["/"] = { handles: [], lastHandle: { row: null, expandBtn: null, childHandles: rootTopHandles } };
+    resultNodesByKey["/"] = { handles: [], lastHandle: { row: null, expandBtn: null, childHandles: rootTopHandles }, ensureBuilt: function () {} };
+    if (resultsTruncated) {
+        resultsBody.appendChild(h("tr", {}, [h("td", {
+            colspan: "4", class: "empty",
+            text: "Showing the first " + SEARCH_ROW_LIMIT + " matching rows. Narrow the search to see the rest.",
+        })]));
+    }
 }
 resultsSearchInput.addEventListener("input", renderResults);
 resultsFuzzedBtn.addEventListener("click", function () {
@@ -2618,7 +2876,27 @@ hideForm.addEventListener("submit", function (e) {
         status: statusInput.value.trim(), size: sizeInput.value.trim(), parentPath: parentInput.value.trim(),
         depth: depthRaw ? Number(depthRaw) : 1,
     };
-    if (!f.status && !f.size && !f.parentPath) return;
+    if (!f.status && !f.size && !f.parentPath) {
+        // Same short warning as the live app: red fields plus a message with an icon next to the button.
+        var fields = [statusInput, sizeInput, parentInput];
+        var addButton = hideForm.querySelector("button[type=submit]");
+        var previous = hideForm.querySelector(".field-warning");
+        if (previous) previous.remove();
+        fields.forEach(function (field) { field.classList.add("input-invalid"); });
+        var warning = h("span", { class: "field-warning", role: "alert" });
+        warning.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" '
+            + 'stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2 14.3 13H1.7L8 2.2z"/><line x1="8" y1="6.3" x2="8" y2="9.3"/>'
+            + '<circle cx="8" cy="11.2" r="0.15" fill="currentColor"/></svg>';
+        warning.appendChild(h("span", { text: "Fill in at least one of Status, Size or Parent path." }));
+        addButton.insertAdjacentElement("afterend", warning);
+        var clearWarning = function () {
+            warning.remove();
+            fields.forEach(function (field) { field.classList.remove("input-invalid"); });
+        };
+        setTimeout(clearWarning, 5000);
+        fields.forEach(function (field) { field.addEventListener("input", clearWarning, { once: true }); });
+        return;
+    }
     resultsHideFilters.push(f);
     statusInput.value = ""; sizeInput.value = ""; parentInput.value = ""; depthInput.value = "";
     renderHideChips();
@@ -2649,11 +2927,13 @@ function goToResultsAndReveal(path) {
     chain.forEach(function (ancKey) {
         var entry = resultNodesByKey[ancKey];
         if (!entry) return;
+        entry.ensureBuilt();  // children are drawn on demand: the next link of the chain may not exist yet
         entry.handles.forEach(function (handle) { handle.row.classList.remove("hidden"); });
         if (entry.lastHandle.expandBtn) entry.lastHandle.expandBtn.textContent = "▾";
     });
     var targetEntry = resultNodesByKey[key];
     if (!targetEntry) return; // filtered/hidden out of the current view -- nothing to reveal
+    targetEntry.ensureBuilt();
     targetEntry.lastHandle.childHandles.forEach(function (child) {
         child.row.classList.remove("hidden");
         if (child.expandBtn) child.expandBtn.textContent = "▸";

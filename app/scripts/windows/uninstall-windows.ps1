@@ -14,8 +14,14 @@ if ($running) {
 
 $shortcutPath = Join-Path ([Environment]::GetFolderPath("Programs")) "OptiFuzz.lnk"
 if (Test-Path $shortcutPath) {
-    Remove-Item $shortcutPath -Force
-    Write-Host "Removed the Start menu shortcut."
+    # The shortcut has a fixed name, shared by every copy of OptiFuzz on this PC: only remove it if it launches THIS copy.
+    $target = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath).TargetPath
+    if ($target -and $target.StartsWith($venv, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item $shortcutPath -Force
+        Write-Host "Removed the Start menu shortcut."
+    } else {
+        Write-Host "Kept the Start menu shortcut: it belongs to another copy of OptiFuzz ($target)."
+    }
 }
 if (Test-Path $venv) {
     Remove-Item $venv -Recurse -Force

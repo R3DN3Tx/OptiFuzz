@@ -5,8 +5,8 @@ import shutil
 from backend.models.project import Project
 from backend.models.timestamps import now_iso
 from backend.persistence import layout
-from backend.persistence.atomic import read_json, write_json_atomic
-from backend.persistence.slug import make_id
+from backend.persistence.atomic import DamagedFileError, load_model, write_json_atomic
+from backend.persistence.slug import clean_name, make_id
 
 
 class ProjectNotFoundError(Exception):
@@ -18,9 +18,7 @@ class DuplicateProjectNameError(Exception):
 
 
 def create_project(name: str, notes: str = "") -> Project:
-    name = name.strip()
-    if not name:
-        raise ValueError("Project name is required")
+    name = clean_name(name, "Project")
 
     if any(existing.name.strip().lower() == name.lower() for existing in list_projects()):
         raise DuplicateProjectNameError(f"A project named {name!r} already exists")
@@ -39,7 +37,10 @@ def list_projects() -> list[Project]:
     for entry in sorted(projects_dir.iterdir()):
         project_file = entry / "project.json"
         if project_file.is_file():
-            projects.append(Project.from_dict(read_json(project_file)))
+            try:
+                projects.append(load_model(project_file, Project.from_dict))
+            except DamagedFileError:
+                continue  # listed by damage_service instead, so one bad file never hides the others
     return projects
 
 
@@ -47,13 +48,11 @@ def get_project(project_id: str) -> Project:
     path = layout.project_file(project_id)
     if not path.is_file():
         raise ProjectNotFoundError(project_id)
-    return Project.from_dict(read_json(path))
+    return load_model(path, Project.from_dict)
 
 
 def rename_project(project_id: str, new_name: str) -> Project:
-    new_name = new_name.strip()
-    if not new_name:
-        raise ValueError("Project name is required")
+    new_name = clean_name(new_name, "Project")
 
     project = get_project(project_id)
     if any(

@@ -26,6 +26,7 @@ Use OptiFuzz only against systems you own or have explicit permission to test (s
   - [Pause, Resume, Stop and Delete](#pause-resume-stop-and-delete)
   - [Details a job was started with](#details-a-job-was-started-with)
     - [The Raw column](#the-raw-column)
+  - [Why a job failed](#why-a-job-failed)
   - [Queue and concurrency](#queue-and-concurrency)
   - [Output files](#output-files)
 - [6. Auto-pause and early stops](#6-auto-pause-and-early-stops)
@@ -45,6 +46,7 @@ Use OptiFuzz only against systems you own or have explicit permission to test (s
   - [Outputs mirror](#outputs-mirror)
 - [11. Settings](#11-settings)
 - [12. Where your data lives](#12-where-your-data-lives)
+- [13. When something is damaged or wrong](#13-when-something-is-damaged-or-wrong)
 
 ---
 
@@ -94,7 +96,7 @@ Each page remembers its scroll position, so you can switch between JOBS, RESULTS
 
 ### Projects
 
-Type a name and click **+ New Project** to create one. Click a project card to open it, and use the search box above the cards to filter them by name.
+Type a name and click **+ New Project** to create one. A name can be written in any language and has up to 80 characters; if you click the button with the field empty, the field turns red and a small message appears right below it. Every wrong value in the app is shown the same way: the field turns red with a short message under it (it floats over the page, nothing moves), and both go away when you click anywhere else, press Esc or edit the field. Click a project card to open it, and use the search box above the cards to filter them by name.
 
 To rename or delete a project, click the three dots (⋯) in the top-right corner of its card and choose **Rename** or **Delete**. After choosing Rename, type the new name where the old one was and press Enter. Deleting removes the project together with its targets, jobs and results.
 
@@ -104,8 +106,8 @@ A small orange dot on a card means something is fuzzing inside it right now. Hov
 
 Opening a project shows its targets page. To add a target, fill in:
 
-- **Target name**: a label of your choice, for example `api.example.com`. It is used in file names and reports.
-- **Base URL**: the scheme and host, for example `https://api.example.com/`.
+- **Target name**: a label of your choice, in any language and up to 80 characters, for example `api.example.com`. It is used in file names and reports.
+- **Base URL**: the scheme and host, for example `https://api.example.com/`. It must start with `http://` or `https://`, have a host, and contain no spaces; the port, when you give one, must be between 1 and 65535. If something is wrong, the field turns red with a message below it when you click **+ New Target**.
 - **Port** (optional): leave it empty to use the default of the scheme, 443 for `https` and 80 for `http`. The port is added to the URL for you, and omitted when it is the default one.
 
 Then click **+ New Target**. Target cards work like project cards: click one to open its workspace, use the search box to filter by name or URL, use the three-dot menu to rename or delete it, and watch for the orange dot.
@@ -127,7 +129,7 @@ You can also start a fuzz from a path you already found. In RESULTS and in TREE,
 - **Path**: where to fuzz. `/` fuzzes the whole site, `/api/` fuzzes inside `/api/`. A path typed without a trailing slash is saved with one, because dirsearch always fuzzes a directory. A query string is kept and sent with every request. Type it after the path: with `/search/?lang=en`, each word of the wordlist goes before the query, so dirsearch requests `/search/word?lang=en`.
 - **Wordlist**: the list of words to try. See the picker below.
 - **Extensions**: comma-separated, for example `php,html`. If you leave it empty, dirsearch does not use none: it falls back to its own default extensions (`php,asp,aspx,jsp,html,htm`), and the field says *Default extensions activated*. Hover it, or click inside it, to see the list in use. You can change that default in [Default extensions (Force extensions)](#default-extensions-force-extensions).
-- **Threads**: how many requests run in parallel (default 5).
+- **Threads**: how many requests run in parallel (default 5, at most 500: every thread uses memory, so more would risk exhausting the computer). If you type a larger number, the field turns red and says so.
 - **Fuzz**: starts the job. If the target is already running as many jobs as it is allowed, the new one waits in the queue.
 
 ### The wordlist picker
@@ -143,8 +145,8 @@ Click **Advanced options** under the form to see them.
 - **Force extensions (-f)**: for every word, also tries `word/` and `word.<extension>` for each extension. Without it, extensions are only added to wordlist lines that contain `%EXT%`. On by default.
 - **Authenticated**: adds `__AUTH` to the name of the job's output file so authenticated runs are easy to tell apart. It does not change any request. Off by default.
 - **Auto-pause on status codes**: the status codes that make the job pause. You can list any codes you want, separated by commas (default `429,503`). Leave it empty to turn auto-pause off. See [Auto-pause and early stops](#6-auto-pause-and-early-stops).
-- **Concurrent fuzzes**: how many jobs of this target run at the same time (default 2). It applies immediately and only to this target.
-- **Extra headers (-H)**: one header per row, written as `Name: value`. The value can contain colons, as in `Authorization: Bearer abc:def`. **+ Add header** adds a row and **×** removes it.
+- **Concurrent fuzzes**: how many jobs of this target run at the same time (default 2, at most 10). It applies immediately and only to this target.
+- **Extra headers (-H)**: one header per row, written as `Name: value`. The value can contain colons, as in `Authorization: Bearer abc:def`. **+ Add header** adds a row and **×** removes it. A header is a single line: if a row has line breaks when you leave it, it turns red with a message below it saying why, and the fuzz will not start until it is fixed. This also prevents injecting an extra header through a value.
 - **Custom options**: any other dirsearch flag, written exactly as on the dirsearch command line, for example `--max-rate 50 --timeout 10 --proxy 127.0.0.1:8080`. It is added after everything else. This includes dirsearch's recursion flags, which OptiFuzz does not officially support: read [Fuzzing deeper](#9-fuzzing-deeper) before using them.
 - **Default headers**: dirsearch adds `User-Agent`, `Accept`, `Accept-Encoding`, `Keep-Alive` and `Cache-Control` to every request, and `-H` can only override them. Untick a header to stop sending it (for example `Keep-Alive`, which servers answering over HTTP/2 reject). The title shows how many are turned off.
 
@@ -208,6 +210,10 @@ It opens the **copy kept in the [Outputs mirror](#outputs-mirror)**, not the ori
 - **Right-click** the arrow and choose **Copy path** to copy the full path of the copy, file name included. The hover text disappears while the menu is open, so it never covers it, and it shows again the next time you hover the arrow.
 
 This works the same in every details table: the Jobs list, and the **Fuzzed** tags in Results and Tree.
+
+### Why a job failed
+
+A failed job shows a red information icon next to its status. Click it to read the reason: the error dirsearch itself reported (for example an invalid timeout or status-code filter written in **Custom options**), the unreachable host, or the details of the crash. OptiFuzz refuses most invalid values before the job exists (negative timeouts, delays or rates, malformed proxies, status codes that are not numbers, line breaks in a cookie or header), so these messages are rare.
 
 ### Queue and concurrency
 
@@ -352,6 +358,8 @@ The notice closes by itself after a few seconds, or with its ×. (Before this, t
 
 The **Export target (HTML)** button, at the top right of the target workspace, downloads one HTML file with that target's jobs, results and tree. The file opens with that target's saved hide rules, search and filters, and the reader can change them. The same button is available on every tab.
 
+A report with very many results stays light: its Results list opens folded, a folder draws its contents only when you expand it, and a folder with hundreds of entries shows them 500 at a time behind a **Show more** row. While a search is active, at most 3,000 matching rows are drawn, with a note asking you to narrow the search.
+
 ### Export URLs (TXT)
 
 On the Tree tab, **Export URLs (TXT)** (next to the button above) downloads a plain text file with the absolute URL of every path in the tree, one per line. It is meant to be imported into other tools such as scanners and crawlers.
@@ -369,7 +377,7 @@ In every export, the job details have the **Raw** column too. A report is meant 
 
 ### Outputs mirror
 
-The outputs mirror keeps a second copy of every job's raw `.txt` output in a folder you choose, outside OptiFuzz. It is set per project, in the **Outputs mirror** section at the top of the project's targets page: type the folder path or pick it with the folder button <img src="images/icons/folder.svg" width="16" alt="folder icon">.
+The outputs mirror keeps a second copy of every job's raw `.txt` output in a folder you choose, outside OptiFuzz. It is set per project, in the **Outputs mirror** section at the top of the project's targets page: type the folder path or pick it with the folder button <img src="images/icons/folder.svg" width="16" alt="folder icon">. The path must be a full path (not relative); when you leave the field with a path that cannot work (relative, with characters Windows does not allow), the field turns red with a message below it and nothing is saved.
 
 - Every job's output is copied there when the job finishes, in a subfolder named after its target.
 - When you set the folder, the outputs of jobs that already finished are copied too.
@@ -417,7 +425,7 @@ The folder the wordlist picker reads. Leave it empty to use the `wordlists` fold
 
 ### Desktop app port
 
-The local port the app listens on, always on `127.0.0.1`. The default is 58947; leave the field empty to use it. A change takes effect the next time you start OptiFuzz.
+The local port the app listens on, always on `127.0.0.1`. The default is 58947; leave the field empty to use it. A change takes effect the next time you start OptiFuzz. As you type a port, the field turns red when something else is already using it and says which port would be used instead. If, when OptiFuzz starts, the port you chose (or the default one) is busy, it uses the closest free port that is not one commonly used by other programs, a red dot appears on the settings gear and on this entry, and the page explains which port is in use and why (the field's placeholder shows the port really in use). The dot goes away once you have seen the explanation. Your saved choice is kept.
 
 ### Display zoom (Linux)
 
@@ -454,7 +462,27 @@ workspace/
                 └── jobs/                  one file per job, plus its working files
 ```
 
-Folder names for projects, targets and jobs are generated by OptiFuzz. Everything is stored as plain JSON and dirsearch's untouched output, written so that a crash cannot corrupt it.
+Folder names for projects, targets and jobs are generated by OptiFuzz. Everything is stored as plain JSON and dirsearch's untouched output, written so that a crash cannot corrupt it. Every time a data file is saved, the previous good copy is kept next to it as `<name>.json.bak`, and a file that turns out to be damaged is never deleted: it is renamed `<name>.json.damaged-<date>`. The file `.optifuzz.lock` only marks which copy of OptiFuzz is using the folder.
+
+---
+
+## 13. When something is damaged or wrong
+
+**Only one OptiFuzz per data folder.** If you start OptiFuzz while it is already open, the second launch shows the window that is open and ends. Two copies sharing one folder would pause each other's jobs or scan the same job twice.
+
+**A damaged project, target, tree or job.** If a data file cannot be read (a disk problem, an interrupted copy, a manual edit), OptiFuzz does not stop working. The affected project or target appears as a red card marked **Damaged**, and a damaged tree or job is listed in a red banner at the top of its target. Click it to see the file, what is wrong and the ways to fix it:
+
+- **Restore the backup**: puts back the copy made the last time the file was saved correctly. The damaged file is kept aside.
+- **Rebuild it**: for a project, creates a new project file from its folder (targets, jobs and results are kept; its notes and outputs-mirror folder must be set again). For a target, asks you for the base URL again. For a tree, starts an empty one.
+- **Remove it from the list**: for a job or a tree, sets the damaged file aside (it is renamed, never deleted).
+
+Your results and outputs on disk are never touched by any of these options.
+
+An exported report is made from what can be read: a damaged tree, job or target is left out, and the report says so in a red banner at the top (with its name and why, never a path of your computer). In general a report never carries a path of your computer: the wordlists a job used appear by file name only, and any disk path inside custom options or an error message is cut down to the file name.
+
+**A damaged settings file.** OptiFuzz restores it from its last good copy, or starts from the defaults if there is none, and keeps the damaged file next to it. A red dot appears on the settings gear and a message at the top of the Settings menu says what happened; both go away once you have opened the menu.
+
+**OptiFuzz does not start because a program file is damaged.** The start page shows the error and the file, and an **Update OptiFuzz** button that restores that file to the official version and updates. Your projects, results and settings are not touched.
 
 ---
 

@@ -195,3 +195,17 @@ def test_first_line_requesting_finds_the_line_behind_a_requested_path() -> None:
     assert first_line_requesting(lines, "admin.php", ["php"], True) == 0
     assert first_line_requesting(lines, "login.php", [], False) == 3
     assert first_line_requesting(lines, "nothing", [], True) is None
+
+
+def test_blank_lines_and_comments_are_not_counted_as_requests(tmp_path: Path) -> None:
+    # 20 lines in the file, but only 17 words: the progress shown to the user counts requests, so it must say 17.
+    lines = [f"word{i}" for i in range(17)]
+    lines.insert(3, "")
+    lines.insert(9, "   ")
+    lines.insert(12, "# not a word")
+    source = _write(tmp_path / "words.txt", lines)
+
+    result = resolve_wordlist([source], tmp_path / "full.txt")
+
+    assert result.total_lines == 20
+    assert result.total_requests == 17

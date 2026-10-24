@@ -147,6 +147,22 @@ def _pip_install_flags() -> list[str]:
     return [] if sys.platform == "win32" else ["--ignore-installed", "--no-warn-conflicts"]
 
 
+def restore_program_files(damaged_file: str | None) -> None:
+    """Puts the one damaged program file back as it is in the installed version. Only that file, and only
+    when it is a file git tracks inside this copy: nothing else (other edits, the data folder) is touched."""
+    _require_checkout()
+    if not damaged_file:
+        return
+    try:
+        relative = Path(damaged_file).resolve().relative_to(REPO_ROOT.resolve())
+    except (ValueError, OSError):
+        return
+    try:
+        _git("checkout", "--", relative.as_posix())
+    except UpdateError:
+        pass  # not tracked, or already fine: the update below decides what else is needed
+
+
 def apply() -> dict[str, Any]:
     status = check()
     if status["dirty"]:

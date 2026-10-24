@@ -1,13 +1,10 @@
 # Every version is pinned to the exact release the test suite passes on (Windows and Linux),
 # so an install today and an install next year run the same code. Update deliberately, not via
-# `pip install -U`, and run the tests after changing one.
+# `pip install -U`, and run the tests after changing one. The test tools are in requirements-dev.txt:
+# they are not installed for normal use.
 
 # Fuzzing engine (V1). Pinned to a specific commit so the integration is reproducible.
 dirsearch @ git+https://github.com/maurosoria/dirsearch.git@b1e08a1acd58de256b1a71e042e470c29b0c6538
-
-# Testing (parser, models, persistence, engine tests)
-pytest==9.1.1
-pytest-asyncio==1.4.0
 
 # Backend
 fastapi==0.141.1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import os
 from pathlib import Path
 
 from backend.models.project import Project
@@ -97,6 +98,32 @@ def default_mirror_dir_placeholder(project_id: str) -> str:
     return str(layout.project_dir(project_id))
 
 
+_WINDOWS_INVALID_CHARS = set('<>"|?*')
+
+
+def validate_mirror_dir(new_dir: str) -> str:
+    """The folder as it will be stored. "" clears it. Anything else must be a full path (not relative to
+    wherever the app happens to run), with no control characters and, on Windows, none of < > " | ? *."""
+    new_dir = new_dir.strip()
+    if not new_dir:
+        return ""
+    if len(new_dir) > 240:
+        raise ValueError("The folder path must be 240 characters or fewer")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in new_dir):
+        raise ValueError("The folder path cannot contain control characters")
+    if os.name == "nt":
+        # A drive letter's colon is the only colon a Windows path may have.
+        body = new_dir[2:] if len(new_dir) > 1 and new_dir[1] == ":" else new_dir
+        bad = sorted(ch for ch in body if ch in _WINDOWS_INVALID_CHARS or ch == ":")
+        if bad:
+            raise ValueError(f"The folder path cannot contain these characters: {' '.join(bad)}")
+    if not Path(new_dir).is_absolute():
+        raise ValueError("Use a full folder path (for example C:/data/outputs or /data/outputs)")
+    if Path(new_dir).is_file():
+        raise ValueError("That path is a file, not a folder")
+    return new_dir
+
+
 def set_mirror_dir(project_id: str, new_dir: str) -> Project:
     """Updates the project's mirror directory.
 
@@ -115,7 +142,7 @@ def set_mirror_dir(project_id: str, new_dir: str) -> Project:
     identical copy) -- safe to run on every call, not just the first.
     """
     project = project_service.get_project(project_id)
-    new_dir = new_dir.strip()
+    new_dir = validate_mirror_dir(new_dir)
     old_dir = project.outputs_mirror_dir
 
     if new_dir == old_dir:

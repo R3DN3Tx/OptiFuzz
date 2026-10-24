@@ -250,6 +250,66 @@ const INFO_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="non
     + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
     + '<circle cx="8" cy="8" r="6.3"/><line x1="8" y1="7.3" x2="8" y2="11.3"/><circle cx="8" cy="4.9" r="0.15" fill="currentColor"/></svg>';
 
+// Warning triangle for the short messages shown next to a field that was filled in wrong.
+const WARNING_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M8 2.2 14.3 13H1.7L8 2.2z"/><line x1="8" y1="6.3" x2="8" y2="9.3"/>'
+    + '<circle cx="8" cy="11.2" r="0.15" fill="currentColor"/></svg>';
+
+// Field warnings: when a field was filled in wrong, the field turns red and a small popover with a warning icon
+// and a short message appears right below it (it floats over the page, so nothing moves). Only one is open at
+// a time. It goes away, together with the red outline, on the next click anywhere else, on Escape, when the
+// field is edited, or when the page is scrolled or resized.
+let activeFieldWarning = null;
+
+// Closes the open warning. With `owner` only if it was opened for that field (a field that became valid
+// must not close the message of another one).
+function clearFieldWarning(owner) {
+    const active = activeFieldWarning;
+    if (!active || (owner && active.owner !== owner)) return;
+    activeFieldWarning = null;
+    for (const field of active.marked) field.classList.remove("input-invalid");
+    active.popover.remove();
+    document.removeEventListener("pointerdown", active.onPointerDown, true);
+    document.removeEventListener("keydown", active.onKeyDown, true);
+    window.removeEventListener("resize", active.close);
+    document.removeEventListener("scroll", active.close, true);
+    for (const field of active.marked) field.removeEventListener("input", active.close);
+}
+
+// `input`: the field the message is about (it is outlined in red); `also`: other fields outlined with it;
+// `outline: false` keeps `input` itself (a button, say) un-outlined; `anchor`: the element the popover sits
+// under, when it is not `input`.
+function setFieldWarning(input, message, { also = [], outline = true, anchor = null } = {}) {
+    clearFieldWarning();
+    const marked = outline ? [input, ...also] : also;
+    for (const field of marked) field.classList.add("input-invalid");
+    const popover = h("div", { class: "field-popover", role: "alert" });
+    popover.innerHTML = WARNING_ICON_SVG;
+    popover.appendChild(h("span", { text: message }));
+    document.body.appendChild(popover);
+    const box = (anchor || input).getBoundingClientRect();
+    const left = Math.max(8, Math.min(box.left, window.innerWidth - popover.offsetWidth - 8));
+    popover.style.left = `${left}px`;
+    popover.style.top = `${box.bottom + 6}px`;
+
+    const active = { owner: input, marked, popover };
+    active.close = () => clearFieldWarning();
+    active.onPointerDown = (event) => { if (!popover.contains(event.target)) clearFieldWarning(); };
+    active.onKeyDown = (event) => { if (event.key === "Escape") clearFieldWarning(); };
+    activeFieldWarning = active;
+    // Listening starts on the next tick so the click that opened the message does not close it at once.
+    setTimeout(() => {
+        if (activeFieldWarning !== active) return;
+        document.addEventListener("pointerdown", active.onPointerDown, true);
+        document.addEventListener("keydown", active.onKeyDown, true);
+        window.addEventListener("resize", active.close);
+        document.addEventListener("scroll", active.close, true);
+        for (const field of marked) field.addEventListener("input", active.close);
+    }, 0);
+    return popover;
+}
+
 // A labeled button with one of the inline SVG icons above in front of its
 // text, instead of a leading emoji character. `.icon-text-btn` (flex,
 // centered) is what actually keeps the icon+text centered as a unit inside
@@ -293,18 +353,42 @@ function buildSearchInput(attrs) {
     return { element: h("div", { class: wrapClass }, [input, clearBtn]), input };
 }
 
+const MAX_THREADS = 500;  // per job; each thread costs memory (the server refuses more)
+const MAX_CONCURRENT_JOBS = 10;  // jobs running at once per target
+const MAX_NAME_LENGTH = 80;  // project and target names (the server refuses longer ones)
+
+// The text of an API error. FastAPI answers a rejected value (422) with a LIST of {loc, msg}; turning that
+// list into text gave "[object Object]" on screen, so each entry becomes "field: reason".
+function describeApiError(body, fallback) {
+    const detail = body && body.detail;
+    if (Array.isArray(detail)) {
+        const parts = detail.map((entry) => {
+            const field = Array.isArray(entry.loc) ? entry.loc.filter((x) => x !== "body").join(" ") : "";
+            const reason = String(entry.msg || "Invalid value").replace(/^Value error, /, "");
+            return field ? `${field}: ${reason}` : reason;
+        });
+        return parts.join("; ") || fallback;
+    }
+    if (typeof detail === "string" && detail) return detail;
+    return body && Object.keys(body).length ? JSON.stringify(body) : fallback;
+}
+
 async function api(path, opts) {
     const res = await fetch(path, {
         headers: { "Content-Type": "application/json" },
         ...opts,
     });
     if (!res.ok) {
-        let detail = res.statusText;
+        let message = res.statusText;
+        let body = null;
         try {
-            const body = await res.json();
-            detail = body.detail || JSON.stringify(body);
+            body = await res.json();
+            message = describeApiError(body, res.statusText);
         } catch (e) { /* body wasn't JSON */ }
-        throw new Error(detail);
+        const error = new Error(message);
+        error.status = res.status;
+        error.damaged = body && body.damaged ? body.damaged : null;  // set when a data file could not be read
+        throw error;
     }
     if (res.status === 204) return null;
     return res.json();
@@ -349,6 +433,144 @@ function showModal(title, bodyText) {
         h("div", { class: "modal-body", text: bodyText }),
     ]));
     document.body.appendChild(overlay);
+}
+
+// ---- Damaged data files ---------------------------------------------------
+// A project, target, tree or job whose file on disk cannot be read is listed in red instead of breaking the
+// app. Clicking it explains what is wrong and offers the ways to put it right; the results and outputs
+// stored on disk are never touched by a repair.
+const DAMAGED_KIND_LABEL = { project: "Project", target: "Target", tree: "Tree", job: "Job" };
+
+async function fetchDamaged(projectId, targetId) {
+    const query = new URLSearchParams();
+    if (projectId) query.set("project_id", projectId);
+    if (targetId) query.set("target_id", targetId);
+    try { return await api(`/api/damaged?${query}`); } catch (e) { return []; }
+}
+
+function showDamagedDialog(item, onChanged) {
+    const overlay = h("div", { class: "modal-overlay" });
+    function close() { overlay.remove(); document.removeEventListener("keydown", onKeydown); }
+    function onKeydown(e) { if (e.key === "Escape") close(); }
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", onKeydown);
+
+    const label = DAMAGED_KIND_LABEL[item.kind] || "Item";
+    const result = h("div", { class: "damaged-result" });
+    const buttons = h("div", { class: "damaged-actions" });
+    const urlInput = h("input", { class: "damaged-url-input", placeholder: "Target base URL (e.g. https://api.example.com/)" });
+    urlInput.hidden = true;  // only a target rebuild asks for the URL, and only after "Rebuild it" is pressed
+
+    async function run(action, button) {
+        buttons.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+        result.textContent = "";
+        result.classList.remove("error");
+        try {
+            const answer = await api("/api/damaged/repair", {
+                method: "POST",
+                body: JSON.stringify({
+                    kind: item.kind, project_id: item.project_id, target_id: item.target_id, job_id: item.job_id,
+                    action, base_url: urlInput.value.trim() || null,
+                }),
+            });
+            result.textContent = answer.message;
+            if (onChanged) await onChanged();
+            buttons.replaceChildren(h("button", { type: "button", class: "primary", text: "Close", onclick: close }));
+        } catch (err) {
+            result.textContent = err.message;
+            result.classList.add("error");
+            buttons.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+            if (button) button.focus();
+        }
+    }
+
+    if (item.can_restore) {
+        buttons.appendChild(h("button", {
+            type: "button", class: "primary", text: "Restore the backup",
+            title: "Put back the copy OptiFuzz made the last time this file was saved correctly.",
+            onclick: (e) => run("restore", e.currentTarget),
+        }));
+    }
+    if (item.can_rebuild) {
+        const rebuildBtn = h("button", { type: "button", text: item.kind === "tree" ? "Start an empty tree" : "Rebuild it" });
+        rebuildBtn.addEventListener("click", () => {
+            if (item.needs_base_url && urlInput.hidden) {
+                urlInput.hidden = false;
+                urlInput.focus();
+                result.textContent = "Type the target's base URL again, then press Rebuild it once more.";
+                return;
+            }
+            run("rebuild", rebuildBtn);
+        });
+        buttons.appendChild(rebuildBtn);
+    }
+    if (item.can_remove) {
+        buttons.appendChild(h("button", {
+            type: "button", text: item.kind === "tree" ? "Set the file aside" : "Remove it from the list",
+            title: "The damaged file is renamed (never deleted). Raw results on disk are not touched.",
+            onclick: (e) => run("remove", e.currentTarget),
+        }));
+    }
+    buttons.appendChild(h("button", { type: "button", text: "Close", onclick: close }));
+
+    const how = {
+        project: "Restoring the backup gets the project back as it was at its last good save. Without a backup, "
+            + "Rebuild creates a new project file from the project's folder: its targets, jobs and results are "
+            + "kept, but its notes and outputs-mirror folder must be set again.",
+        target: "Restoring the backup gets the target back as it was at its last good save. Without a backup, "
+            + "Rebuild asks for the base URL again; its jobs, results and tree are kept.",
+        tree: "Restoring the backup gets the tree back as it was at its last good save. Otherwise you can start "
+            + "an empty tree (the damaged file is kept aside, not deleted).",
+        job: "Restoring the backup gets the job back as it was at its last good save. A job file cannot be "
+            + "rebuilt, so otherwise it can only be taken off the list; the raw output files stay on disk.",
+    }[item.kind] || "";
+    overlay.appendChild(h("div", { class: "modal-box damaged-box" }, [
+        h("div", { class: "modal-header" }, [
+            h("h3", { text: item.kind === "tree" ? "The tree of this target is damaged" : `${label} "${item.name}" is damaged` }),
+            h("button", { type: "button", class: "modal-close-btn", text: "✕", onclick: close }),
+        ]),
+        h("div", { class: "damaged-body" }, [
+            h("p", {}, [h("strong", { text: "File: " }), document.createTextNode(item.path || item.file)]),
+            h("p", {}, [h("strong", { text: "What is wrong: " }), document.createTextNode(item.reason)]),
+            h("p", { text: how }),
+            item.can_restore ? null : h("p", { class: "muted", text: "There is no backup copy of this file." }),
+            h("p", { class: "muted", text: "Your results and outputs on disk are not touched by any of these options." }),
+            urlInput,
+            result,
+            buttons,
+        ]),
+    ]));
+    document.body.appendChild(overlay);
+}
+
+// A red card for a damaged project / target, shown among the normal ones.
+function buildDamagedCard(item, onChanged) {
+    const card = h("div", { class: "card damaged", title: "This item is damaged. Click to see why and how to fix it." }, [
+        h("h3", {}, [h("span", { class: "damaged-badge", text: "Damaged" }), document.createTextNode(item.name)]),
+        h("p", { text: item.reason }),
+    ]);
+    card.addEventListener("click", () => showDamagedDialog(item, onChanged));
+    return card;
+}
+
+// A red banner for the damaged jobs / tree of the target being shown.
+function buildDamagedBanner(items, onChanged) {
+    if (!items.length) return null;
+    const banner = h("div", { class: "damaged-banner", role: "alert" });
+    banner.innerHTML = WARNING_ICON_SVG;
+    banner.appendChild(h("span", {
+        text: items.length === 1
+            ? "1 file of this target is damaged and is not shown."
+            : `${items.length} files of this target are damaged and are not shown.`,
+    }));
+    for (const item of items) {
+        banner.appendChild(h("button", {
+            type: "button", class: "damaged-banner-btn",
+            text: `${DAMAGED_KIND_LABEL[item.kind]} ${item.kind === "tree" ? "" : item.name}`.trim() + " — see why",
+            onclick: () => showDamagedDialog(item, onChanged),
+        }));
+    }
+    return banner;
 }
 
 // ---- "Already fuzzed" history panel (shared by Results and TREE) --------
@@ -1294,8 +1516,8 @@ function buildPathHierarchy(items, makeSynthetic) {
     // (the actual 200 hit) are separate, genuinely distinct results. Real,
     // reported data-loss bug this fixes (2026-09-25): this used to keep
     // only ONE of them (preferring the non-redirect), silently discarding
-    // whichever lost that tie-break forever -- "la tool necesita mostrar
-    // TODOS los resultados". Every item reaching this function survives now
+    // whichever lost that tie-break forever -- "the tool must show
+    // ALL the results". Every item reaching this function survives now
     // (callers are responsible for their own exact-duplicate dedup before
     // calling this -- see addResults' own comment), grouped into `items`
     // (plural) per node instead of picking a single winner. `primary` (the
@@ -1438,15 +1660,42 @@ function setupSettingsMenu() {
     let zoomSupported = false;
     api("/api/settings/ui-zoom").then((d) => { zoomSupported = !!d.supported; }).catch(() => {});
 
+    // Things found at start-up (a settings file that had to be restored, a busy port): the gear shows a
+    // red dot while there is any, and the menu / the port page say what happened.
+    // A notice stops being listed once it has been shown: the dot on the gear goes away when everything pending
+    // has been seen (the menu shows the general ones, the port page shows the port one).
+    let notices = [];
+    async function refreshNotices() {
+        try { notices = await api("/api/notices"); } catch (e) { notices = []; }
+        btn.classList.toggle("has-notice", notices.length > 0);
+    }
+    async function markNoticeSeen(id) {
+        try { await api(`/api/notices/${id}/seen`, { method: "POST" }); } catch (e) { /* shown again next time */ }
+        notices = notices.filter((n) => n.id !== id);
+        btn.classList.toggle("has-notice", notices.length > 0);
+    }
+    refreshNotices();
+    const noticeFor = (id) => notices.find((n) => n.id === id);
+
     function renderMenu() {
         panel.innerHTML = "";
         panel.appendChild(h("h3", { text: "Settings" }));
+        for (const notice of notices) {
+            if (notice.id === "port") continue;  // shown on the port page itself, with a dot on its entry
+            const banner = h("div", { class: "notice-banner", role: "alert" });
+            banner.innerHTML = WARNING_ICON_SVG;
+            banner.appendChild(h("span", { text: notice.message }));
+            panel.appendChild(banner);
+        }
         const list = h("div", { class: "settings-menu-list" });
         for (const page of SETTINGS_PAGES) {
             if (page.onlyWhenZoomSupported && !zoomSupported) continue;
             const item = h("button", { type: "button", class: "settings-menu-item" }, [
                 h("span", { class: "label-group" }, [
-                    h("span", { class: "title", text: page.title }),
+                    h("span", { class: "title" }, [
+                        document.createTextNode(page.title),
+                        page.id === "port" && noticeFor("port") ? h("span", { class: "notice-dot", title: "The port is busy" }) : null,
+                    ]),
                     h("span", { class: "desc", text: page.desc }),
                 ]),
                 h("span", { class: "chevron", text: "›" }),
@@ -1686,15 +1935,53 @@ function setupSettingsMenu() {
                 + "Takes effect the next time you restart OptiFuzz.",
         }));
 
+        // This copy could not start on the port that was wanted: say which one it uses instead.
+        const portNotice = noticeFor("port");
+        if (portNotice) {
+            const banner = h("div", { class: "notice-banner", role: "alert" });
+            banner.innerHTML = WARNING_ICON_SVG;
+            // Built from the port this window is really connected to, so the message and the placeholder below
+            // can never name different ports.
+            const inUse = data.running_port || portNotice.using;
+            const which = portNotice.chosen_by_user ? "The port you chose" : "The default port";
+            const text = portNotice.wanted
+                ? `${which} (${portNotice.wanted}) is busy, so OptiFuzz is using ${inUse} instead. `
+                    + "Close the program that uses it, or choose another port in Settings."
+                : portNotice.message;
+            banner.appendChild(h("span", { text }));
+            panel.appendChild(banner);
+            markNoticeSeen("port");  // shown: the dot on the gear and on this entry go away
+        }
+
         const input = h("input", {
             type: "number",
             min: "1",
             max: "65535",
-            placeholder: String(data.default_port),
+            placeholder: String(data.running_port || data.default_port),  // the port really in use
             value: data.configured_port ? String(data.configured_port) : "",
         });
         const fieldError = h("div", { class: "field-error", hidden: "hidden" });
         const saveBtn = h("button", { type: "button", class: "primary", text: "Save" });
+        // As soon as a port is typed, check whether it is free: if not, the field turns red and says which
+        // port would be used instead (the app never silently picks another one).
+        let checkTimer = null;
+        async function checkPort() {
+            const raw = input.value.trim();
+            if (!raw) { clearFieldWarning(input); return; }
+            const port = Number(raw);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                setFieldWarning(input, "Use a port between 1 and 65535.");
+                return;
+            }
+            try {
+                const check = await api(`/api/settings/port/check?port=${port}`);
+                if (input.value.trim() !== raw) return;  // edited again while waiting
+                if (check.free) clearFieldWarning(input);
+                else setFieldWarning(input, `Port ${port} is busy; ${check.alternative} will be used instead.`);
+            } catch (err) { /* the check is a hint: saving still validates */ }
+        }
+        input.addEventListener("input", () => { clearTimeout(checkTimer); checkTimer = setTimeout(checkPort, 350); });
+        checkPort();
         saveBtn.addEventListener("click", async () => {
             const raw = input.value.trim();
             const port = raw ? Number(raw) : null;
@@ -1850,7 +2137,13 @@ function setupSettingsMenu() {
         e.stopPropagation();
         const wasHidden = panel.hidden;
         panel.hidden = !panel.hidden;
-        if (wasHidden) renderMenu();
+        if (wasHidden) {
+            refreshNotices().then(() => {
+                renderMenu();
+                // Everything except the port notice is shown in the menu itself, so it counts as seen now.
+                for (const notice of [...notices]) if (notice.id !== "port") markNoticeSeen(notice.id);
+            });
+        }
     });
 
     document.addEventListener("click", (e) => {
@@ -1863,6 +2156,7 @@ function setupSettingsMenu() {
 async function renderProjects() {
     breadcrumb.textContent = "";
     let projects = await api("/api/projects");
+    const damagedProjects = (await fetchDamaged()).filter((d) => d.kind === "project");
 
     // novalidate: the submit handler already does its own manual empty
     // check below -- without this, the browser's own constraint-validation
@@ -1871,12 +2165,21 @@ async function renderProjects() {
     // match the rest of the app's always-English UI.
     const form = h("form", { class: "inline-form", novalidate: "novalidate", onsubmit: async (e) => {
         e.preventDefault();
-        const name = form.querySelector("input").value.trim();
-        if (!name) return;
-        await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+        const input = form.querySelector("input");
+        const name = input.value.trim();
+        if (!name) {
+            setFieldWarning(input, "Enter a name for the project.");
+            return;
+        }
+        try {
+            await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+        } catch (err) {
+            setFieldWarning(input, err.message);
+            return;
+        }
         render();
     } }, [
-        h("input", { placeholder: "New project name", required: "required" }),
+        h("input", { placeholder: "New project name", maxlength: String(MAX_NAME_LENGTH) }),
         h("button", { class: "primary", type: "submit", text: "+ New Project" }),
     ]);
 
@@ -1886,18 +2189,20 @@ async function renderProjects() {
     function renderGrid() {
         const query = searchInput.value.trim().toLowerCase();
         const visible = query ? projects.filter((p) => p.name.toLowerCase().includes(query)) : projects;
+        const visibleDamaged = query ? damagedProjects.filter((d) => d.name.toLowerCase().includes(query)) : damagedProjects;
 
         gridBox.innerHTML = "";
-        if (!projects.length) {
+        if (!projects.length && !damagedProjects.length) {
             gridBox.appendChild(h("div", { class: "empty", text: "No projects yet." }));
             return;
         }
-        if (!visible.length) {
+        if (!visible.length && !visibleDamaged.length) {
             gridBox.appendChild(h("div", { class: "empty", text: "No projects match your search." }));
             return;
         }
-        gridBox.appendChild(h("div", { class: "card-grid" },
-            visible.map((p) => {
+        gridBox.appendChild(h("div", { class: "card-grid" }, [
+            ...visibleDamaged.map((d) => buildDamagedCard(d, async () => render())),
+            ...visible.map((p) => {
                 const { element: nameEl, startEdit } = buildEditableName("span", p.name, async (newName) => {
                     await api(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
                     p.name = newName;
@@ -1927,8 +2232,8 @@ async function renderProjects() {
                     menuBtn,
                     menu,
                 ]);
-            })
-        ));
+            }),
+        ]));
     }
     searchInput.addEventListener("input", renderGrid);
     renderGrid();
@@ -1973,9 +2278,11 @@ async function buildOutputsMirrorSection(projectId) {
             const result = await api(`/api/projects/${projectId}/outputs-mirror`, {
                 method: "PUT", body: JSON.stringify({ dir: newDir }),
             });
+            clearFieldWarning(dirInput);
             dirInput.value = result.dir || "";
         } catch (err) {
-            alert(`Could not update the outputs mirror folder: ${err.message}`);
+            // Stays red until the folder is corrected, so a wrong path cannot be missed.
+            setFieldWarning(dirInput, err.message, { anchor: dirInput.parentElement });
         }
     }
     dirInput.addEventListener("change", () => save(dirInput.value.trim()));
@@ -2017,24 +2324,27 @@ async function renderTargets(projectId) {
     const gridBox = h("div", {});
     const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input targets-search", placeholder: "Search targets (name or URL)…" });
     let allTargets = [];
+    let damagedTargets = [];
 
     function renderGrid() {
         const query = searchInput.value.trim().toLowerCase();
         const visible = query
             ? allTargets.filter((t) => t.name.toLowerCase().includes(query) || t.base_url.toLowerCase().includes(query))
             : allTargets;
+        const visibleDamaged = query ? damagedTargets.filter((d) => d.name.toLowerCase().includes(query)) : damagedTargets;
 
         gridBox.innerHTML = "";
-        if (!allTargets.length) {
+        if (!allTargets.length && !damagedTargets.length) {
             gridBox.appendChild(h("div", { class: "empty", text: "No targets yet." }));
             return;
         }
-        if (!visible.length) {
+        if (!visible.length && !visibleDamaged.length) {
             gridBox.appendChild(h("div", { class: "empty", text: "No targets match your search." }));
             return;
         }
-        const grid = h("div", { class: "card-grid" },
-            visible.map((t) => {
+        const grid = h("div", { class: "card-grid" }, [
+            ...visibleDamaged.map((d) => buildDamagedCard(d, refreshTargets)),
+            ...visible.map((t) => {
                 const { element: nameEl, startEdit } = buildEditableName("span", t.name, async (newName) => {
                     await api(`/api/projects/${projectId}/targets/${t.id}`, {
                         method: "PATCH", body: JSON.stringify({ name: newName }),
@@ -2066,14 +2376,15 @@ async function renderTargets(projectId) {
                     menuBtn,
                     menu,
                 ]);
-            })
-        );
+            }),
+        ]);
         gridBox.appendChild(grid);
     }
     searchInput.addEventListener("input", renderGrid);
 
     async function refreshTargets() {
         allTargets = await api(`/api/projects/${projectId}/targets`);
+        damagedTargets = (await fetchDamaged(projectId)).filter((d) => d.kind === "target");
         renderGrid();
     }
 
@@ -2087,8 +2398,8 @@ async function renderTargets(projectId) {
     function inferDefaultPort(url) {
         return url.trim().toLowerCase().startsWith("https://") ? "443" : "80";
     }
-    const nameInput = h("input", { class: "target-name-input", placeholder: "Target name (e.g. api.example.com)", required: "required" });
-    const urlInput = h("input", { class: "target-url-input", placeholder: "Base URL (e.g. https://api.example.com/)", required: "required" });
+    const nameInput = h("input", { class: "target-name-input", placeholder: "Target name (e.g. api.example.com)", maxlength: String(MAX_NAME_LENGTH) });
+    const urlInput = h("input", { class: "target-url-input", placeholder: "Base URL (e.g. https://api.example.com/)", maxlength: "2000" });
     const portInput = h("input", {
         type: "number", min: "1", max: "65535", class: "port-input", placeholder: "Default",
     });
@@ -2101,7 +2412,8 @@ async function renderTargets(projectId) {
         e.preventDefault();
         const name = nameInput.value.trim();
         let baseUrl = urlInput.value.trim();
-        if (!name || !baseUrl) return;
+        if (!name) { setFieldWarning(nameInput, "Enter a name for the target."); return; }
+        if (!baseUrl) { setFieldWarning(urlInput, "Enter the target's base URL."); return; }
         const effectivePort = portInput.value.trim() || inferDefaultPort(baseUrl);
         try {
             const parsed = new URL(baseUrl);
@@ -2119,10 +2431,18 @@ async function renderTargets(projectId) {
             const portSuffix = isDefaultPort ? "" : `:${effectivePort}`;
             baseUrl = `${parsed.protocol}//${parsed.hostname}${portSuffix}${parsed.pathname}${parsed.search}${parsed.hash}`;
         } catch (err) { /* malformed URL -- let the backend's own validation reject it */ }
-        await api(`/api/projects/${projectId}/targets`, {
-            method: "POST",
-            body: JSON.stringify({ name, base_url: baseUrl }),
-        });
+        try {
+            await api(`/api/projects/${projectId}/targets`, {
+                method: "POST",
+                body: JSON.stringify({ name, base_url: baseUrl }),
+            });
+        } catch (err) {
+            // The server says which part is wrong; the warning goes next to that field.
+            const text = err.message.toLowerCase();
+            const field = text.includes("port") ? portInput : text.includes("url") ? urlInput : nameInput;
+            setFieldWarning(field, err.message);
+            return;
+        }
         await refreshTargets();
         form.reset();
     } }, [
@@ -2362,6 +2682,12 @@ async function renderWorkspace(projectId, targetId, tab) {
         exportBtn,
     ]);
     app.appendChild(tabs);
+    // A job or the tree whose file cannot be read is not shown; say so, and offer the repair.
+    const damagedBanner = buildDamagedBanner(
+        (await fetchDamaged(projectId, targetId)).filter((d) => d.kind === "job" || d.kind === "tree"),
+        async () => render(),
+    );
+    if (damagedBanner) app.appendChild(damagedBanner);
     // Results/TREE's own toolbar row (search + filters + add-path) sticks
     // right below the workspace tabs while scrolling too (explicit
     // request) -- its sticky `top` needs to land exactly at the tabs bar's
@@ -2936,7 +3262,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // dirsearch's own well-known "/admin" 301 stub + "/admin/" 200 real
         // hit pair), and the path-only key silently discarded every one of
         // those after the first, forever -- a genuine, reported data-loss
-        // bug ("la tool necesita mostrar TODOS los resultados"), not
+        // bug ("the tool must show ALL the results"), not
         // acceptable dedup behavior. The key now folds in every field that
         // makes two entries the SAME finding (status/size/redirect/url) --
         // two results only ever collapse into one when they'd render
@@ -3060,8 +3386,8 @@ async function renderWorkspace(projectId, targetId, tab) {
             }));
         }
 
-        // NEW lives here now (2026-09-26, explicit request: "a la derecha
-        // del todo"), not the Status cell -- the inner div (not the <td>
+        // NEW lives here now (2026-09-26, explicit request: "on the far
+        // right"), not the Status cell -- the inner div (not the <td>
         // itself, same reasoning as .tree-note-cell-inner) lets the badge
         // sit flush at the row's own right edge via margin-left: auto,
         // whether or not a redirect link is also present in this same cell.
@@ -3610,9 +3936,9 @@ async function renderWorkspace(projectId, targetId, tab) {
                 + "children only. Set to 0 to hide every descendant, no matter how deep.",
             280,
         );
+        const addHideButton = h("button", { type: "submit", text: "+ Hide" });
         const addForm = h("form", { class: "filter-add-form" }, [
-            statusInput, sizeInput, parentInput, depthInput,
-            h("button", { type: "submit", text: "+ Hide" }),
+            statusInput, sizeInput, parentInput, depthInput, addHideButton,
         ]);
         addForm.addEventListener("submit", (e) => {
             e.preventDefault();
@@ -3626,7 +3952,11 @@ async function renderWorkspace(projectId, targetId, tab) {
                 // hiding less than before).
                 depth: depthRaw ? Number(depthRaw) : 1,
             };
-            if (!f.status && !f.size && !f.parentPath) return;
+            if (!f.status && !f.size && !f.parentPath) {
+                setFieldWarning(addHideButton, "Fill in at least one of Status, Size or Parent path.",
+                    { also: [statusInput, sizeInput, parentInput], outline: false });
+                return;
+            }
             withResultsFilterScrollMemory(() => {
                 resultsHideFilters.push(f);
                 saveHideRules();
@@ -4360,7 +4690,15 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     }
     window.addEventListener("optifuzz:default-extensions", onDefaultExtensionsChanged);
     const threadsInput = h("input", {
-        type: "number", value: String(hasSavedDefaults ? fuzzDefaults.threads || 5 : 5), min: "1", style: "width:70px",
+        type: "number", value: String(hasSavedDefaults ? fuzzDefaults.threads || 5 : 5), min: "1", max: String(MAX_THREADS), style: "width:70px",
+    });
+    // Too many threads can exhaust the computer's memory: the field says so as soon as the number is too big,
+    // and the value is brought back to the maximum when it is left.
+    threadsInput.addEventListener("input", () => {
+        if (Number(threadsInput.value) > MAX_THREADS) setFieldWarning(threadsInput, `At most ${MAX_THREADS} threads.`);
+    });
+    threadsInput.addEventListener("change", () => {
+        if (Number(threadsInput.value) > MAX_THREADS) threadsInput.value = String(MAX_THREADS);
     });
     const wordlistPicker = buildWordlistPicker(
         wordlistTree,
@@ -4391,13 +4729,22 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     });
     const headersRows = h("div", { class: "headers-rows" });
     const concurrencyInput = h("input", {
-        type: "number", min: "1", value: String(currentConcurrency), style: "width:60px",
+        type: "number", min: "1", max: String(MAX_CONCURRENT_JOBS), value: String(currentConcurrency), style: "width:60px",
+    });
+    concurrencyInput.addEventListener("input", () => {
+        if (Number(concurrencyInput.value) > MAX_CONCURRENT_JOBS) {
+            setFieldWarning(concurrencyInput, `At most ${MAX_CONCURRENT_JOBS} jobs can run at once.`);
+        }
     });
     concurrencyInput.addEventListener("change", async () => {
-        const value = Number(concurrencyInput.value);
+        let value = Number(concurrencyInput.value);
         if (!value || value < 1) {
             concurrencyInput.value = String(currentConcurrency);
             return;
+        }
+        if (value > MAX_CONCURRENT_JOBS) {
+            value = MAX_CONCURRENT_JOBS;
+            concurrencyInput.value = String(value);
         }
         try {
             const result = await api(`/api/projects/${projectId}/targets/${targetId}/concurrency`, {
@@ -4441,9 +4788,25 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         combinedInput.addEventListener("input", () => {
             if (combinedInput.classList.contains("expanded")) autoGrow();
         });
+        // A header is one line. Line breaks (or other control characters) would let a value smuggle in a
+        // second header, so the row turns red and says why (like every other field) when it is left with
+        // one, and the fuzz does not start until it is fixed.
+        function validateHeader(showWarning) {
+            const bad = [...combinedInput.value.replace(/\s+$/, "")].some((ch) => {
+                const code = ch.charCodeAt(0);
+                return code < 9 || (code > 9 && code < 32) || code === 127;
+            });
+            if (bad && showWarning) {
+                setFieldWarning(combinedInput, "This header has line breaks or control characters. A header must be a single "
+                    + "line: remove the line breaks.");
+            }
+            return !bad;
+        }
+        combinedInput._validate = () => validateHeader(true);
         combinedInput.addEventListener("blur", () => {
             combinedInput.classList.remove("expanded");
             combinedInput.style.height = "";
+            validateHeader(true);
         });
 
         const row = h("div", { class: "header-row" }, [
@@ -4594,7 +4957,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                 body: JSON.stringify({
                     wordlist_files: wordlistPicker.getValue() ? [wordlistPicker.getValue()] : [],
                     extensions: collectExtensions(),
-                    threads: Number(threadsInput.value) || 5,
+                    threads: Math.min(Number(threadsInput.value) || 5, MAX_THREADS),
                     force_extensions: forceExtCheckbox.checked,
                     authenticated: authenticatedCheckbox.checked,
                     pause_on_status: collectPauseOnStatus(),
@@ -4626,6 +4989,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         if (e.target.closest("button")) saveFuzzDefaultsNow(); // the row's own "×" remove button
     });
 
+    const fuzzButton = buildIconTextButton("button", LIGHTNING_FILLED_ICON_SVG, "Fuzz", { class: "primary", type: "submit" });
     const form = h("form", { class: "fuzz-form" }, [
         h("div", { class: "inline-form" }, [
             pathInput,
@@ -4633,7 +4997,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
             extInput,
             h("label", { text: "Threads" }),
             threadsInput,
-            buildIconTextButton("button", LIGHTNING_FILLED_ICON_SVG, "Fuzz", { class: "primary", type: "submit" }),
+            fuzzButton,
         ]),
         advanced,
     ]);
@@ -4645,7 +5009,12 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         const headers = collectHeaders();
         const wordlistPath = wordlistPicker.getValue();
         if (!wordlistPath) {
-            alert("Select a wordlist first.");
+            setFieldWarning(fuzzButton, "Select a wordlist first.", { outline: false, also: [wordlistPicker.element.querySelector("button")] });
+            return;
+        }
+        const badRows = [...headersRows.querySelectorAll(".header-row")].filter((row) => !row._combinedInput._validate());
+        if (badRows.length) {
+            badRows[0]._combinedInput.focus();
             return;
         }
 
@@ -4656,7 +5025,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                     path: pathInput.value || "/",
                     wordlist_files: [wordlistPath],
                     extensions,
-                    threads: Number(threadsInput.value) || 5,
+                    threads: Math.min(Number(threadsInput.value) || 5, MAX_THREADS),
                     force_extensions: forceExtCheckbox.checked,
                     authenticated: authenticatedCheckbox.checked,
                     pause_on_status: pauseOnStatus,
@@ -4667,7 +5036,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
             });
             await onSubmitted();
         } catch (err) {
-            alert(`Could not start fuzz: ${err.message}`);
+            setFieldWarning(fuzzButton, err.message, { outline: false });
         }
     });
 
