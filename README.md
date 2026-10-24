@@ -1,4 +1,4 @@
-<h1><picture><source media="(prefers-color-scheme: dark)" srcset="app/docs/images/readme_banner.png"><source media="(prefers-color-scheme: light)" srcset="app/docs/images/readme_banner_light.png"><img src="app/docs/images/readme_banner.png" alt="OptiFuzz: desktop workspace for web content discovery. Organized. Faster." width="520"></picture></h1>
+<h1><img src="app/docs/images/readme_banner.png#gh-dark-mode-only" alt="OptiFuzz: desktop workspace for web content discovery. Organized. Faster." width="520"><img src="app/docs/images/readme_banner_light.png#gh-light-mode-only" alt="OptiFuzz: desktop workspace for web content discovery. Organized. Faster." width="520"></h1>
 
 **A desktop workspace for web content discovery, built around [dirsearch](https://github.com/maurosoria/dirsearch).**
 
