@@ -329,7 +329,7 @@ main { padding: 16px; max-width: 1100px; margin: 0 auto; }
    width, same as before. */
 .search-input { min-width: 220px; }
 /* Targets page: wide enough for the whole placeholder, "Search targets (name or URL)...". */
-.search-field.targets-search, .search-input.targets-search { min-width: 300px; }
+.search-field.targets-search, .search-input.targets-search { min-width: 230px; }
 
 /* Every <input type="search"> in the app is built via buildSearchInput()
    (app.js), which pairs it with a custom "×" clear button
@@ -477,10 +477,10 @@ button.danger { border-color: var(--red); color: var(--red); }
 .port-input { width: 80px; }
 /* Wide enough that their own placeholder text is fully visible, not
    scrolled/cut off inside the default (browser-sized) input box. */
-.target-name-input { min-width: 290px; }
-.target-url-input { min-width: 350px; }
+.target-name-input { min-width: 240px; }
+.target-url-input { min-width: 275px; }
 /* The Extensions field of New Fuzz: wide enough for "Extensions (e.g. php,html)" and "Default extensions activated". */
-.extensions-input { min-width: 270px; }
+.extensions-input { min-width: 205px; }
 
 .fuzz-form { margin-bottom: 4px; }
 .fuzz-form .inline-form { margin-bottom: 10px; }
