@@ -1,12 +1,10 @@
 # OptiFuzz
 
-**A local workspace for web content discovery.** OptiFuzz wraps [dirsearch](https://github.com/maurosoria/dirsearch)
-in a desktop app that organises fuzzing by project and target, lets you pause and resume long runs,
-and turns the raw output into a browsable, annotated map of what you have found.
+**A desktop workspace for web content discovery, built around [dirsearch](https://github.com/maurosoria/dirsearch).**
 
-It runs entirely on your machine, on **Windows and Linux**. Nothing is sent anywhere: no telemetry,
-no cloud, and the app only listens on `127.0.0.1`. It only goes online when you ask it to check for
-updates (see [Updating](#updating)).
+Organise every engagement by project and target, control long fuzzes (pause, resume, and auto-pause when a target rate-limits or blocks you) and turn the raw output into something you can work with: results grouped by directory, a tree you curate with stars and notes, and interactive reports you can share offline.
+
+OptiFuzz runs on **Windows and Linux**. It is local-first: your data stays on your machine, with no telemetry and no cloud. It only goes online when you ask it to check for updates (see [Updating](#updating)).
 
 > **Legal notice.** OptiFuzz is provided for educational purposes and for security testing of
 > systems you own or have explicit authorisation to test. Using it against anything else may be
