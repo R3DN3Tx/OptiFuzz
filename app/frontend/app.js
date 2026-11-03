@@ -5115,7 +5115,7 @@ function buildWordlistPicker(tree, targetDefaultPath) {
 
     function select(file, label) {
         selectedPath = file.path;
-        btnLabel.textContent = label;
+        btnLabel.textContent = wordlistBaseName(label);
         popup.hidden = true;
         refreshTree();
         savePref("lastWordlist", { path: file.path, label });
@@ -5140,7 +5140,9 @@ function buildWordlistPicker(tree, targetDefaultPath) {
             refreshTree();
         });
 
-        const row = h("div", { class: "wl-file" }, [starBtn, document.createTextNode(label)]);
+        // Only the file name, however deep the folder is (the folders above it are the tree itself);
+        // in search results the folder path stays available as the hover text.
+        const row = h("div", { class: "wl-file", title: label }, [starBtn, document.createTextNode(file.name)]);
         if (file.path === selectedPath) row.classList.add("selected");
         row.addEventListener("click", () => select(file, label));
         return row;
@@ -5229,10 +5231,10 @@ function buildWordlistPicker(tree, targetDefaultPath) {
     const initialFile = targetDefaultFile || starredFile || rememberedFile || bundledFallback;
     if (initialFile) {
         selectedPath = initialFile.file.path;
-        btnLabel.textContent = targetDefaultFile ? targetDefaultFile.label
+        btnLabel.textContent = wordlistBaseName(targetDefaultFile ? targetDefaultFile.label
             : starredFile ? defaultWordlist.label
             : rememberedFile ? remembered.label
-            : initialFile.label;
+            : initialFile.label);
     }
     refreshTree();
 
