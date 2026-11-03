@@ -632,7 +632,8 @@ function positionFloatingBox(anchor, box, maxWidth) {
         maxHeight = Math.max(60, spaceBelow - 4);
     } else {
         maxHeight = Math.max(60, spaceAbove - 4);
-        top = Math.max(margin, rect.top - 4 - maxHeight);
+        // Sits right above the anchor at the box's REAL height (not the whole free space).
+        top = Math.max(margin, rect.top - 4 - Math.min(box.offsetHeight, maxHeight));
     }
 
     box.style.left = `${left}px`;
@@ -1270,7 +1271,31 @@ function parseRoute() {
     return { view: "projects" };
 }
 
+// Only one render builds at a time (they share `app`, `currentStream` and the
+// timers). A navigation that arrives meanwhile (Back, a breadcrumb link) only
+// marks the running render as stale: it finishes without painting, and the
+// newest route is built right after -- never an old page swapped in over the
+// one just asked for.
+let renderRunning = false;
+let renderStale = false;
+
 async function render() {
+    if (renderRunning) {
+        renderStale = true;
+        return;
+    }
+    renderRunning = true;
+    try {
+        do {
+            renderStale = false;
+            await renderOnce();
+        } while (renderStale);
+    } finally {
+        renderRunning = false;
+    }
+}
+
+async function renderOnce() {
     // Explicitly save the OUTGOING route's scroll position before touching
     // the DOM at all, then switch tracking to the new route immediately --
     // swapping #app's children further below can itself fire a scroll
@@ -1338,6 +1363,13 @@ async function render() {
         else await renderWorkspace(route.projectId, route.targetId, route.tab);
     } catch (err) {
         app.appendChild(h("div", { class: "error-banner", text: err.message }));
+    }
+    if (renderStale) {
+        // Another navigation came in while this page was loading: drop it.
+        scratch.remove();
+        app = liveApp;
+        closeStream();
+        return;
     }
     // currentRouteKey switches to the new route BEFORE the swap below, for
     // the same "a spurious clamp-scroll event must land on the new route,

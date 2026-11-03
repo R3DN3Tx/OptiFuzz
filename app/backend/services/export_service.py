@@ -607,7 +607,8 @@ function positionFloatingBox(anchor, box, maxWidth) {
         maxHeight = Math.max(60, spaceBelow - 4);
     } else {
         maxHeight = Math.max(60, spaceAbove - 4);
-        top = Math.max(margin, rect.top - 4 - maxHeight);
+        // Sits right above the anchor at the box's REAL height (not the whole free space).
+        top = Math.max(margin, rect.top - 4 - Math.min(box.offsetHeight, maxHeight));
     }
     box.style.left = left + "px";
     box.style.top = top + "px";
@@ -1975,7 +1976,8 @@ function positionFloatingBox(anchor, box, maxWidth) {
         maxHeight = Math.max(60, spaceBelow - 4);
     } else {
         maxHeight = Math.max(60, spaceAbove - 4);
-        top = Math.max(margin, rect.top - 4 - maxHeight);
+        // Sits right above the anchor at the box's REAL height (not the whole free space).
+        top = Math.max(margin, rect.top - 4 - Math.min(box.offsetHeight, maxHeight));
     }
     box.style.left = left + "px";
     box.style.top = top + "px";
