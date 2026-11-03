@@ -157,6 +157,19 @@ def test_delete_leaf_node_does_not_touch_unrelated_siblings(workspace_root) -> N
     assert trs.get_node(project_id, target_id, sibling.id) is not None
 
 
+def test_delete_node_keeps_the_same_path_with_the_other_trailing_slash(workspace_root) -> None:
+    # "/es" and "/es/" are two nodes (each with its own answer): removing one must not remove the other.
+    project_id, target_id = _setup(workspace_root)
+    bare = trs.add_path(project_id, target_id, "/es")
+    slashed = trs.add_path(project_id, target_id, "/es/")
+    assert bare.id != slashed.id
+
+    deleted_ids = trs.delete_node(project_id, target_id, bare.id)
+
+    assert deleted_ids == [bare.id]
+    assert trs.get_node(project_id, target_id, slashed.id) is not None
+
+
 def test_delete_subtree_cascades_a_synthetic_ancestor_by_path(workspace_root) -> None:
     # Real, reported follow-up: delete_node()'s own cascade only helps when
     # the parent itself has a real node/id -- a purely SYNTHETIC ancestor

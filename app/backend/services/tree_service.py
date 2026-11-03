@@ -234,13 +234,17 @@ def _key_for_comparison(path: str) -> str:
     return path[:-1] if path != "/" and path.endswith("/") else path
 
 
-def _self_and_descendants(nodes: dict[str, TreeNode], path: str) -> list[str]:
+def _self_and_descendants(nodes: dict[str, TreeNode], path: str, exact_self: bool = False) -> list[str]:
+    """`exact_self`: the node itself only matches with its own spelling -- "/es" and "/es/" are two
+    different nodes (each its own answer), so removing one must leave the other. Everything under
+    the place goes either way."""
     target_key = _key_for_comparison(path)
     prefix = f"{target_key}/"  # never "/" itself -- callers reject root before this runs
     return [
         node_id
         for node_id, node in nodes.items()
-        if _key_for_comparison(node.path) == target_key or _key_for_comparison(node.path).startswith(prefix)
+        if (node.path == path if exact_self else _key_for_comparison(node.path) == target_key)
+        or _key_for_comparison(node.path).startswith(prefix)
     ]
 
 
@@ -267,7 +271,7 @@ def delete_node(project_id: str, target_id: str, node_id: str) -> list[str]:
     if node.path == "/":
         raise ValueError('The tree root ("/") cannot be removed.')
 
-    to_delete = _self_and_descendants(nodes, node.path)
+    to_delete = _self_and_descendants(nodes, node.path, exact_self=True)
     for did in to_delete:
         del nodes[did]
     _save_nodes(project_id, target_id, nodes)
