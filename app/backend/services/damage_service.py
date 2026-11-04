@@ -28,6 +28,26 @@ from backend.services import target_service
 
 _HASH_SUFFIX = re.compile(r"-[0-9a-f]{8}$")
 
+# Files that already read fine, with the (mtime, size) they had. Opening Projects or Targets scans every
+# data file, and parsing all of them each time made the view wait (over a thousand job files): a file that
+# has not changed since it last read fine is not parsed again. A damaged file is never remembered.
+_verified: dict[str, tuple[int, int]] = {}
+
+
+def _verify(path: Path, check) -> None:
+    """Runs `check()` (which raises DamagedFileError for a bad file) unless `path` is unchanged since it last passed."""
+    try:
+        stat = path.stat()
+    except OSError:
+        check()
+        return
+    signature = (stat.st_mtime_ns, stat.st_size)
+    key = str(path)
+    if _verified.get(key) == signature:
+        return
+    check()
+    _verified[key] = signature
+
 
 def _name_from_id(identifier: str) -> str:
     return _HASH_SUFFIX.sub("", identifier).replace("-", " ").strip() or identifier
@@ -83,7 +103,7 @@ def scan(project_id: str | None = None, target_id: str | None = None) -> list[di
         project_file = project_dir / "project.json"
         if project_file.is_file() and not target_id:
             try:
-                load_model(project_file, Project.from_dict)
+                _verify(project_file, lambda: load_model(project_file, Project.from_dict))
             except DamagedFileError as exc:
                 found.append(_entry("project", project_file, exc, project_id=pid))
         targets_root = project_dir / "targets"
@@ -96,20 +116,20 @@ def scan(project_id: str | None = None, target_id: str | None = None) -> list[di
             target_file = target_dir / "target.json"
             if target_file.is_file():
                 try:
-                    load_model(target_file, Target.from_dict)
+                    _verify(target_file, lambda: load_model(target_file, Target.from_dict))
                 except DamagedFileError as exc:
                     found.append(_entry("target", target_file, exc, project_id=pid, target_id=tid))
             tree_file = target_dir / "tree.json"
             if tree_file.is_file():
                 try:
-                    _check_tree(tree_file)
+                    _verify(tree_file, lambda: _check_tree(tree_file))
                 except DamagedFileError as exc:
                     found.append(_entry("tree", tree_file, exc, project_id=pid, target_id=tid))
             jobs_root = target_dir / "jobs"
             if jobs_root.is_dir():
                 for job_file in sorted(jobs_root.glob("*.json")):
                     try:
-                        load_model(job_file, FuzzJob.from_dict)
+                        _verify(job_file, lambda job_file=job_file: load_model(job_file, FuzzJob.from_dict))
                     except DamagedFileError as exc:
                         found.append(_entry("job", job_file, exc, project_id=pid, target_id=tid, job_id=job_file.stem))
     return found

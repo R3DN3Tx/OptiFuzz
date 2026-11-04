@@ -34,6 +34,24 @@ async def _no_cache_frontend(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store"
     return response
 
+def _warm_damage_scan() -> None:
+    """Reads every data file once in the background at start-up, so the first time Projects or Targets
+    opens it does not wait for the whole workspace to be read (see damage_service._verified)."""
+    import threading
+
+    from backend.services import damage_service
+
+    def work() -> None:
+        try:
+            damage_service.scan()
+        except Exception:  # best effort: the real scan runs again when a view asks for it
+            pass
+
+    threading.Thread(target=work, name="damage-scan-warmup", daemon=True).start()
+
+
+app.router.on_startup.append(_warm_damage_scan)
+
 app.include_router(projects.router)
 app.include_router(targets.router)
 app.include_router(jobs.router)

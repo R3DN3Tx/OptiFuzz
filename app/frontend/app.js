@@ -2187,8 +2187,10 @@ function setupSettingsMenu() {
 
 async function renderProjects() {
     breadcrumb.textContent = "";
-    let projects = await api("/api/projects");
-    const damagedProjects = (await fetchDamaged()).filter((d) => d.kind === "project");
+    // In parallel: the view is only as slow as the slower of the two requests, not their sum.
+    const [projectsList, damagedAll] = await Promise.all([api("/api/projects"), fetchDamaged()]);
+    let projects = projectsList;
+    const damagedProjects = damagedAll.filter((d) => d.kind === "project");
 
     // novalidate: the submit handler already does its own manual empty
     // check below -- without this, the browser's own constraint-validation

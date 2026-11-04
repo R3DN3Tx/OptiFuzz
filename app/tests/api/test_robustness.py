@@ -214,6 +214,19 @@ def test_one_damaged_project_does_not_hide_the_others(client: TestClient) -> Non
     assert damaged[0]["file"] == "project.json" and "not valid JSON" in damaged[0]["reason"]
 
 
+def test_a_file_that_was_fine_and_gets_damaged_later_is_still_found(client: TestClient) -> None:
+    # The scan remembers files that read fine (it does not parse thousands of jobs each time the
+    # Projects view opens); a file that changes afterwards must be looked at again.
+    project = _project(client, "Later")
+    assert client.get("/api/damaged").json() == []
+    assert client.get("/api/damaged").json() == []  # second scan: served from what it remembers
+
+    layout.project_file(project["id"]).write_text("{ not json", encoding="utf-8")
+
+    damaged = client.get("/api/damaged").json()
+    assert [(d["kind"], d["project_id"]) for d in damaged] == [("project", project["id"])]
+
+
 def test_reading_a_damaged_project_answers_409_with_what_is_needed_to_repair_it(client: TestClient) -> None:
     project = _project(client)
     layout.project_file(project["id"]).write_text("", encoding="utf-8")
