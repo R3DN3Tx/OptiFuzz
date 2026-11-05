@@ -699,15 +699,17 @@ th { color: var(--muted); font-weight: 500; }
    column, per explicit request. */
 .results-table { table-layout: fixed; }
 .results-table > thead > tr > th, .results-table > tbody > tr > td { padding-top: 4px; padding-bottom: 4px; }
-.results-table > thead > tr > th:nth-child(1), .results-table > tbody > tr > td:nth-child(1) { width: 7%; padding-left: 6px; padding-right: 1px; white-space: nowrap; }
+.results-table > thead > tr > th:nth-child(1), .results-table > tbody > tr > td:nth-child(1) { width: 64px; white-space: nowrap; }
 /* Half its old 9% -- explicit request: at 9%, most of the column was dead
    space past the short "512B"-style text, well before padding-right (the
    actual Size→icons gap) ever kicked in, so that gap read as much bigger
    than the icons→Path one. The 4.5% freed up goes to Path (6). */
-.results-table > thead > tr > th:nth-child(2), .results-table > tbody > tr > td:nth-child(2) { width: 4.5%; padding-left: 1px; padding-right: 6px; white-space: nowrap; }
-.results-table > thead > tr > th:nth-child(3), .results-table > tbody > tr > td:nth-child(3) { width: 10%; }
-.results-table > thead > tr > th:nth-child(4), .results-table > tbody > tr > td:nth-child(4) { width: 35.5%; padding-left: 2px; padding-right: 2px; }
-.results-table > thead > tr > th:nth-child(5), .results-table > tbody > tr > td:nth-child(5) { width: 43%; padding-left: 2px; padding-right: 6px; }
+/* Status / Size / icons / Path use the very same fixed widths and paddings as .tree-table below, so the
+   headers stay exactly where they are when switching between the Results and Tree tabs. Redirect takes the rest. */
+.results-table > thead > tr > th:nth-child(2), .results-table > tbody > tr > td:nth-child(2) { width: 50px; padding-right: 6px; white-space: nowrap; }
+.results-table > thead > tr > th:nth-child(3), .results-table > tbody > tr > td:nth-child(3) { width: 70px; }
+.results-table > thead > tr > th:nth-child(4), .results-table > tbody > tr > td:nth-child(4) { width: 480px; }
+.results-table > thead > tr > th:nth-child(5), .results-table > tbody > tr > td:nth-child(5) { padding-left: 8px; }
 tr.new-row { animation: flash 1.4s ease-out; }
 
 /* Path column: nesting is shown with real `tree`-command-style connector
@@ -1710,6 +1712,6 @@ button.resume-gear-btn.primary {
 .show-more-btn { padding: 3px 12px; }
 
 /* Sortable Status / Size headers (Results and TREE, also in the exported reports) */
-th.sortable { cursor: pointer; user-select: none; }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--text, inherit); }
-.sort-arrow { color: var(--muted); font-size: .8em; margin-left: 5px; }
+.sort-arrow { color: var(--muted); font-size: .8em; margin-left: 3px; }

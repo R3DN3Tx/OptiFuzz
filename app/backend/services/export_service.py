@@ -370,9 +370,9 @@ _TEMPLATE = r"""<!doctype html>
    exactly .exp-tree's OWN 2nd/3rd-column widths, not that table's real
    18%/12% -- before this fix. */
 .exp-results > tbody > tr > td:nth-child(1), .exp-results > thead > tr > th:nth-child(1) { width: 7%; padding-left: 6px; }
-.exp-results > tbody > tr > td:nth-child(2), .exp-results > thead > tr > th:nth-child(2) { width: 7%; }
-.exp-results > tbody > tr > td:nth-child(3), .exp-results > thead > tr > th:nth-child(3) { width: 45%; padding-left: 6px; overflow-wrap: anywhere; word-break: break-word; }
-.exp-results > tbody > tr > td:nth-child(4), .exp-results > thead > tr > th:nth-child(4) { width: 41%; overflow-wrap: anywhere; word-break: break-word; }
+.exp-results > tbody > tr > td:nth-child(2), .exp-results > thead > tr > th:nth-child(2) { width: 7%; padding-left: 1px; padding-right: 6px; }
+.exp-results > tbody > tr > td:nth-child(3), .exp-results > thead > tr > th:nth-child(3) { width: 410px; padding-left: 6px; overflow-wrap: anywhere; word-break: break-word; }
+.exp-results > tbody > tr > td:nth-child(4), .exp-results > thead > tr > th:nth-child(4) { padding-left: 8px; overflow-wrap: anywhere; word-break: break-word; }
 /* Same 7%/7% as .exp-results' own Status/Size above (2026-09-24, explicit
    request), not their own previous fixed 64px each -- Note (nth-child(4)
    below) has no width of its own, so in this fixed-layout table it
@@ -1841,9 +1841,9 @@ _PROJECT_TEMPLATE = r"""
    exactly .exp-tree's OWN 2nd/3rd-column widths, not that table's real
    18%/12% -- before this fix. */
 .exp-results > tbody > tr > td:nth-child(1), .exp-results > thead > tr > th:nth-child(1) { width: 7%; padding-left: 6px; }
-.exp-results > tbody > tr > td:nth-child(2), .exp-results > thead > tr > th:nth-child(2) { width: 7%; }
-.exp-results > tbody > tr > td:nth-child(3), .exp-results > thead > tr > th:nth-child(3) { width: 45%; padding-left: 6px; overflow-wrap: anywhere; word-break: break-word; }
-.exp-results > tbody > tr > td:nth-child(4), .exp-results > thead > tr > th:nth-child(4) { width: 41%; overflow-wrap: anywhere; word-break: break-word; }
+.exp-results > tbody > tr > td:nth-child(2), .exp-results > thead > tr > th:nth-child(2) { width: 7%; padding-left: 1px; padding-right: 6px; }
+.exp-results > tbody > tr > td:nth-child(3), .exp-results > thead > tr > th:nth-child(3) { width: 410px; padding-left: 6px; overflow-wrap: anywhere; word-break: break-word; }
+.exp-results > tbody > tr > td:nth-child(4), .exp-results > thead > tr > th:nth-child(4) { padding-left: 8px; overflow-wrap: anywhere; word-break: break-word; }
 /* Same 7%/7% as .exp-results' own Status/Size above (2026-09-24, explicit
    request), not their own previous fixed 64px each -- Note (nth-child(4)
    below) has no width of its own, so in this fixed-layout table it

@@ -386,7 +386,17 @@ class _Api:
     def pick_folder(self, initial_dir: str = "") -> str | None:
         if self._window is None:
             return None
-        result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=initial_dir or "")
+        # The dialog only opens at a folder that exists and is written the way the OS writes it
+        # (backslashes on Windows); otherwise it silently falls back to Downloads. A folder that is
+        # not there yet (the mirror creates its subfolders later) opens at the closest one that is.
+        start = ""
+        if initial_dir.strip():
+            candidate = Path(os.path.normpath(os.path.expanduser(initial_dir.strip())))
+            while not candidate.is_dir() and candidate != candidate.parent:
+                candidate = candidate.parent
+            if candidate.is_dir():
+                start = str(candidate)
+        result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=start)
         return result[0] if result else None
 
     # Files this app saved: the only ones open_download / show_download will act on.
