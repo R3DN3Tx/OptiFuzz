@@ -1368,6 +1368,7 @@ async function renderOnce() {
 
     const route = parseRoute();
     const routeKey = routeKeyFor(route);
+    pendingBreadcrumb = null;
     try {
         if (route.view === "projects") await renderProjects(route.folderId || "");
         else if (route.view === "targets") await renderTargets(route.projectId);
@@ -1386,6 +1387,8 @@ async function renderOnce() {
     // the same "a spurious clamp-scroll event must land on the new route,
     // not overwrite the old one's saved position" reason explained above.
     currentRouteKey = routeKey;
+    if (pendingBreadcrumb) paintBreadcrumb(pendingBreadcrumb);
+    pendingBreadcrumb = null;
     liveApp.replaceChildren(...scratch.childNodes);
     scratch.remove();
     app = liveApp;
@@ -2227,12 +2230,20 @@ function setBreadcrumb(folders, folderId, rest) {
         ...folderChain(folders, folderId).map((f) => ({ text: f.name, href: `#/folders/${f.id}` })),
         ...rest,
     ];
-    breadcrumb.innerHTML = "";
+    pendingBreadcrumb = parts;
+}
+
+// The path in the top bar changes in ONE step, together with the page it belongs to (render() paints
+// it at the swap): it is never emptied or half-built while the new view is still loading.
+let pendingBreadcrumb = null;
+
+function paintBreadcrumb(parts) {
+    const nodes = [];
     parts.forEach((part, i) => {
-        if (i) breadcrumb.append(" / ");
-        if (part.href && i < parts.length - 1) breadcrumb.appendChild(h("a", { href: part.href, text: part.text }));
-        else breadcrumb.append(part.text);
+        if (i) nodes.push(" / ");
+        nodes.push(part.href && i < parts.length - 1 ? h("a", { href: part.href, text: part.text }) : part.text);
     });
+    breadcrumb.replaceChildren(...nodes);
 }
 
 // Only one "Move to..." dropdown open at a time.
@@ -2342,7 +2353,7 @@ function buildMovePicker({ folders, projects, blockedFolderIds, currentFolderId,
 // ---- Projects -------------------------------------------------------
 
 async function renderProjects(folderId = "") {
-    breadcrumb.textContent = "";
+    pendingBreadcrumb = []; // the top level has no path (a folder sets its own below)
     // In parallel: the view is only as slow as the slowest request, not their sum.
     const [projectsList, damagedAll, folders] = await Promise.all([api("/api/projects"), fetchDamaged(), fetchFolders()]);
     let projects = projectsList;
