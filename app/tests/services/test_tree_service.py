@@ -157,6 +157,65 @@ def test_delete_leaf_node_does_not_touch_unrelated_siblings(workspace_root) -> N
     assert trs.get_node(project_id, target_id, sibling.id) is not None
 
 
+def test_removing_one_spelling_keeps_what_hangs_from_the_place(workspace_root) -> None:
+    # Reported case: "/es" and "/es/" are two nodes of one place; removing "/es" took every note under
+    # "/es/..." with it even though "/es/" was still in the tree.
+    project_id, target_id = _setup(workspace_root)
+    bare = trs.add_path(project_id, target_id, "/es")
+    slashed = trs.add_path(project_id, target_id, "/es/")
+    child = trs.add_path(project_id, target_id, "/es/endpoint")
+    trs.set_note(project_id, target_id, child.id, "keep me")
+
+    assert trs.delete_node(project_id, target_id, bare.id) == [bare.id]
+
+    remaining = {n.path for n in trs.list_nodes(project_id, target_id)}
+    assert {"/es/", "/es/endpoint"} <= remaining and "/es" not in remaining
+    assert trs.get_node(project_id, target_id, child.id).note == "keep me"
+    assert trs.get_node(project_id, target_id, slashed.id) is not None
+    # and the other way round: removing "/es/" while "/es" stays keeps the children too
+    trs.add_path(project_id, target_id, "/es")
+    assert trs.delete_node(project_id, target_id, slashed.id) == [slashed.id]
+    assert trs.get_node(project_id, target_id, child.id).note == "keep me"
+
+
+def test_a_hit_at_the_other_spelling_updates_the_tracked_node(workspace_root) -> None:
+    # Reported case: "/es" was tracked with the 302 the fuzz found; the same fuzz later found "/es/" as a 200,
+    # and the tree kept showing the 302.
+    project_id, target_id = _setup(workspace_root)
+    node = trs.add_path(project_id, target_id, "/es/endpoint")  # "/es" becomes a node as its ancestor
+    ancestor = next(n for n in trs.list_nodes(project_id, target_id) if n.path == "/es")
+    trs.record_fuzz_discoveries(project_id, target_id, "job1", [("/es", 302, "0B")])
+    assert trs.latest_status(trs.get_node(project_id, target_id, ancestor.id))["status"] == 302
+
+    trs.record_fuzz_discoveries(project_id, target_id, "job2", [("/es/", 200, "5KB")])
+
+    assert trs.latest_status(trs.get_node(project_id, target_id, ancestor.id))["status"] == 200
+    assert node.path == "/es/endpoint"
+
+
+def test_a_hit_at_the_other_spelling_never_fills_a_node_without_status(workspace_root) -> None:
+    # A node with no status stays "-" until a fuzz hits its own path (the tree never derives it from Results).
+    project_id, target_id = _setup(workspace_root)
+    node = trs.add_path(project_id, target_id, "/es")
+
+    trs.record_fuzz_discoveries(project_id, target_id, "job1", [("/es/", 200, "5KB")])
+
+    assert trs.latest_status(trs.get_node(project_id, target_id, node.id)) is None
+    trs.record_fuzz_discoveries(project_id, target_id, "job2", [("/es", 200, "5KB")])
+    assert trs.latest_status(trs.get_node(project_id, target_id, node.id))["status"] == 200
+
+
+def test_a_redirect_at_the_other_spelling_does_not_replace_a_real_answer(workspace_root) -> None:
+    project_id, target_id = _setup(workspace_root)
+    trs.add_path(project_id, target_id, "/es/endpoint")
+    ancestor = next(n for n in trs.list_nodes(project_id, target_id) if n.path == "/es")
+    trs.record_fuzz_discoveries(project_id, target_id, "job1", [("/es", 200, "5KB")])
+
+    trs.record_fuzz_discoveries(project_id, target_id, "job2", [("/es/", 302, "0B")])
+
+    assert trs.latest_status(trs.get_node(project_id, target_id, ancestor.id))["status"] == 200
+
+
 def test_delete_node_keeps_the_same_path_with_the_other_trailing_slash(workspace_root) -> None:
     # "/es" and "/es/" are two nodes (each with its own answer): removing one must not remove the other.
     project_id, target_id = _setup(workspace_root)

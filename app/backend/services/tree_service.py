@@ -194,9 +194,18 @@ def record_fuzz_discoveries(
     if not nodes:
         return
     by_path = {node.path: node for node in nodes.values()}
+    by_key = {_key_for_comparison(node.path): node for node in nodes.values()}
     changed = False
     for path, status, size in findings:
-        node = by_path.get(normalize_path(path))
+        exact = normalize_path(path)
+        node = by_path.get(exact)
+        if node is None:
+            # "/es" and "/es/" are one place: a hit at one spelling refreshes the tracked other one, so
+            # a "/es" that was recorded as a 302 shows the 200 of "/es/" once a fuzz finds it. It never
+            # fills a node that has no status yet, and a redirect never replaces an answer.
+            node = by_key.get(_key_for_comparison(exact))
+            if node is not None and (latest_status(node) is None or status in REDIRECT_STATUSES):
+                node = None  # a node with no status stays "-" until a fuzz hits its own path
         if node is None:
             continue
         node.discoveries.append(
@@ -271,7 +280,16 @@ def delete_node(project_id: str, target_id: str, node_id: str) -> list[str]:
     if node.path == "/":
         raise ValueError('The tree root ("/") cannot be removed.')
 
-    to_delete = _self_and_descendants(nodes, node.path, exact_self=True)
+    twin_stays = any(
+        other.id != node_id and _key_for_comparison(other.path) == _key_for_comparison(node.path)
+        for other in nodes.values()
+    )
+    if twin_stays:
+        # "/es" and "/es/" are two nodes of ONE place: the place (and everything under it) is still
+        # in the tree through the other one, so only this node goes.
+        to_delete = [node_id]
+    else:
+        to_delete = _self_and_descendants(nodes, node.path, exact_self=True)
     for did in to_delete:
         del nodes[did]
     _save_nodes(project_id, target_id, nodes)
