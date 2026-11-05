@@ -1641,6 +1641,34 @@ async function loadAppVersion() {
     } catch (e) { /* purely cosmetic -- never block the app over this */ }
 }
 
+// Left/Right at the edge of a text field moves to the neighbouring field of the same row or form
+// (Status > Size > Parent path, a new target's name > URL...); at the first/last one nothing happens.
+// Inside the text the arrows still move the caret as usual.
+const ARROW_NAV_TYPES = new Set(["text", "search", "number", "url", "email", "password", ""]);
+document.addEventListener("keydown", (e) => {
+    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    const el = e.target;
+    const isField = (f) => f instanceof HTMLTextAreaElement || (f instanceof HTMLInputElement && ARROW_NAV_TYPES.has(f.type));
+    if (!isField(el)) return;
+    const row = el.closest("form, .inline-form, .filter-add-form");
+    if (!row) return;
+    const fields = [...row.querySelectorAll("input, textarea")].filter((f) => isField(f) && !f.disabled && f.offsetParent !== null);
+    const index = fields.indexOf(el);
+    const forward = e.key === "ArrowRight";
+    const next = fields[index + (forward ? 1 : -1)];
+    if (index < 0 || !next) return;
+    let start = null;
+    let end = null;
+    try { start = el.selectionStart; end = el.selectionEnd; } catch (err) { /* number fields have no caret */ }
+    if (start !== null && (start !== end || (forward ? end !== el.value.length : start !== 0))) return;
+    e.preventDefault();
+    next.focus();
+    try {
+        const caret = forward ? 0 : next.value.length;
+        next.setSelectionRange(caret, caret);
+    } catch (err) { /* number fields have no caret */ }
+});
+
 window.addEventListener("hashchange", () => ensurePrefs().then(render));
 window.addEventListener("DOMContentLoaded", () => ensurePrefs().then(render));
 window.addEventListener("DOMContentLoaded", setupSettingsMenu);
@@ -2505,7 +2533,7 @@ async function renderProjects(folderId = "") {
             onclick: () => { location.hash = `#/projects/${p.id}`; },
         }, [
             h("h3", {}, [fuzzingDot, nameEl]),
-            h("p", { text: p.id }),
+            h("p", { text: `${p.target_count || 0} target${p.target_count === 1 ? "" : "s"}` }),
             menuBtn,
             menu,
             picker.element,
@@ -3447,6 +3475,8 @@ async function renderWorkspace(projectId, targetId, tab) {
     // Hide rules live on the backend, per target (see results_service.set_hide_rules).
     // Filled in by loadHideRules() before the Results tab is shown.
     const resultsHideFilters = []; // [{status, size, parentPath, depth}]
+    // Values of a rule taken back for editing (click on it in the list): the rebuilt add-form starts with them.
+    let hideRuleDraft = null;
     // Per parent folder: how many of its direct children the Hide rules hide, shown as
     // "(10 · 3 hidden)" so the gap between the Jobs count (everything dirsearch found) and
     // the rows shown here is never a mystery. Rebuilt on every render.
@@ -4227,12 +4257,14 @@ async function renderWorkspace(projectId, targetId, tab) {
         const hidePopup = h("div", { class: "filters-popup hide-rules-popup" });
         if (!resultsHideRulesPopupOpen) hidePopup.setAttribute("hidden", "hidden");
 
-        const statusInput = h("input", { placeholder: "Status", title: "e.g. 404" });
-        const sizeInput = h("input", { placeholder: "Size", title: "e.g. 3KB" });
+        const draft = hideRuleDraft;
+        hideRuleDraft = null;
+        const statusInput = h("input", { placeholder: "Status", title: "e.g. 404", value: draft ? draft.status : "" });
+        const sizeInput = h("input", { placeholder: "Size", title: "e.g. 3KB", value: draft ? draft.size : "" });
         // 50% wider than Status/Size, per explicit request -- a parent
         // path is typically the longest of the three values.
-        const parentInput = h("input", { class: "filter-parent-input", placeholder: "Parent path", title: "e.g. /admin/" });
-        const depthInput = h("input", { type: "number", min: "0", class: "filter-depth-input", placeholder: "1" });
+        const parentInput = h("input", { class: "filter-parent-input", placeholder: "Parent path", title: "e.g. /admin/", value: draft ? draft.parentPath : "" });
+        const depthInput = h("input", { type: "number", min: "0", class: "filter-depth-input", placeholder: "1", value: draft ? draft.depth : "" });
         attachTooltip(
             depthInput,
             "How many path levels below \"Parent path\" this rule hides. 1 (default) = direct "
@@ -4280,11 +4312,15 @@ async function renderWorkspace(projectId, targetId, tab) {
                 f.status && `status ${f.status}`, f.size,
                 f.parentPath && (depthSuffix ? `${f.parentPath} (${depthSuffix})` : f.parentPath),
             ].filter(Boolean).join(" · ");
-            chipsRow.appendChild(h("span", { class: "filter-chip-remove" }, [
+            const ruleChip = h("span", {
+                class: "filter-chip-remove editable",
+                title: "Click to edit: the rule is removed and its values go back to the form",
+            }, [
                 document.createTextNode(label),
                 h("button", {
                     type: "button", text: "✕", title: "Remove filter",
-                    onclick: () => {
+                    onclick: (e) => {
+                        e.stopPropagation(); // the ✕ only removes; clicking the rule itself edits it
                         withResultsFilterScrollMemory(() => {
                             const idx = resultsHideFilters.indexOf(f);
                             if (idx !== -1) resultsHideFilters.splice(idx, 1);
@@ -4294,7 +4330,24 @@ async function renderWorkspace(projectId, targetId, tab) {
                         });
                     },
                 }),
-            ]));
+            ]);
+            ruleChip.addEventListener("click", () => {
+                withResultsFilterScrollMemory(() => {
+                    const idx = resultsHideFilters.indexOf(f);
+                    if (idx !== -1) resultsHideFilters.splice(idx, 1);
+                    // A rule saved before depth existed hides every descendant: that is 0 in the form.
+                    hideRuleDraft = {
+                        status: f.status || "", size: f.size || "", parentPath: f.parentPath || "",
+                        depth: f.depth === undefined ? (f.parentPath ? "0" : "") : String(f.depth),
+                    };
+                    saveHideRules();
+                    renderResultsFilterUI();
+                    renderResultsTree();
+                });
+                const firstField = filterBarContainer.querySelector(".hide-rules-popup .filter-add-form input");
+                if (firstField) firstField.focus();
+            });
+            chipsRow.appendChild(ruleChip);
         }
         hidePopup.appendChild(chipsRow);
         hideToggleBtn.addEventListener("click", (e) => {

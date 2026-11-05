@@ -97,3 +97,15 @@ def test_a_damaged_folder_file_does_not_hide_the_others(client: TestClient) -> N
     bad = _folder(client, "Bad")
     layout.folder_file(bad["id"]).write_text("{ not json", encoding="utf-8")
     assert [f["id"] for f in client.get("/api/folders").json()] == [good["id"]]
+
+
+def test_the_project_list_carries_how_many_targets_each_has(client: TestClient) -> None:
+    full = _project(client, "Full")
+    _project(client, "Empty")
+    for name in ("One", "Two"):
+        response = client.post(f"/api/projects/{full['id']}/targets", json={"name": name, "base_url": f"http://127.0.0.1:9/{name}"})
+        assert response.status_code == 200, response.text
+
+    counts = {p["name"]: p["target_count"] for p in client.get("/api/projects").json()}
+
+    assert counts == {"Full": 2, "Empty": 0}

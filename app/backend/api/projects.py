@@ -22,6 +22,8 @@ def list_projects(job_manager: JobManager = Depends(get_job_manager)) -> list[di
     projects = []
     for p in project_service.list_projects():
         data = p.to_dict()
+        targets = target_service.list_targets(p.id)
+        data["target_count"] = len(targets)
         # Same "currently fuzzing" dot the Targets grid shows, one level up: every
         # running job of every target in this project, with its target's name.
         running = [
@@ -31,7 +33,7 @@ def list_projects(job_manager: JobManager = Depends(get_job_manager)) -> list[di
                 "percent": round(job.completed_lines / job.total_wordlist_lines * 100)
                 if job.total_wordlist_lines else 0,
             }
-            for t in target_service.list_targets(p.id)
+            for t in targets
             for job in job_manager.list_jobs(t.id)
             if job.status == JobStatus.RUNNING
         ]

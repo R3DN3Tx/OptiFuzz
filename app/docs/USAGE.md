@@ -309,7 +309,7 @@ A hide rule has up to four fields: **Status**, **Size**, **Parent path** and **D
 
 **Depth** says how many levels below the parent path the rule reaches: `1` (the default) means only its direct children, and `0` means everything under it, however deep. It only matters when a **Parent path** is set; without one, the rule applies to the whole list and Depth is ignored.
 
-Remove a rule with the ✕ on its chip. The number on the **Hide rules** button shows how many rules are active.
+Remove a rule with the ✕ on its chip. To change one, click the rule itself: it is removed and its values go back into the fields, so you can edit them and click **+ Hide** again. In any row of fields (these four, or a new target's name and URL), the Left and Right arrows at the edge of the text move to the next or previous field. The number on the **Hide rules** button shows how many rules are active.
 
 ---
 

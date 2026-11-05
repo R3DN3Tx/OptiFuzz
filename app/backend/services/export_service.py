@@ -1460,6 +1460,29 @@ resultsFuzzedBtn.addEventListener("click", function () {
 
 // Hide rules -- same composable status/size/parent-path/depth rules as the
 // live app, same add-form + chip-list UI, operating on the embedded JSON.
+// Left/Right at the edge of a text field moves to the neighbouring field of the same form (as in the live app).
+document.addEventListener("keydown", function (e) {
+    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    var el = e.target;
+    var types = ["text", "search", "number", "url", "email", "password", ""];
+    function isField(f) { return f instanceof HTMLTextAreaElement || (f instanceof HTMLInputElement && types.indexOf(f.type) !== -1); }
+    if (!isField(el)) return;
+    var row = el.closest("form, .inline-form, .filter-add-form");
+    if (!row) return;
+    var fields = Array.prototype.filter.call(row.querySelectorAll("input, textarea"), function (f) {
+        return isField(f) && !f.disabled && f.offsetParent !== null;
+    });
+    var index = fields.indexOf(el);
+    var forward = e.key === "ArrowRight";
+    var next = fields[index + (forward ? 1 : -1)];
+    if (index < 0 || !next) return;
+    var start = null, end = null;
+    try { start = el.selectionStart; end = el.selectionEnd; } catch (err) { /* number fields have no caret */ }
+    if (start !== null && (start !== end || (forward ? end !== el.value.length : start !== 0))) return;
+    e.preventDefault();
+    next.focus();
+    try { var caret = forward ? 0 : next.value.length; next.setSelectionRange(caret, caret); } catch (err) { /* no caret */ }
+});
 var hideForm = document.getElementById("results-hide-form");
 var hideChips = document.getElementById("results-hide-chips");
 var hideBtn = document.getElementById("results-hide-btn");
@@ -1482,7 +1505,24 @@ function renderHideChips() {
             renderHideChips();
             renderResults();
         });
-        hideChips.appendChild(h("span", { class: "filter-chip-remove" }, [document.createTextNode(label), removeBtn]));
+        removeBtn.addEventListener("click", function (e) { e.stopPropagation(); });
+        var ruleChip = h("span", {
+            class: "filter-chip-remove editable",
+            title: "Click to edit: the rule is removed and its values go back to the form",
+        }, [document.createTextNode(label), removeBtn]);
+        // Same as the live app: clicking the rule takes it back into the form to edit and add again.
+        ruleChip.addEventListener("click", function () {
+            var idx = resultsHideFilters.indexOf(f);
+            if (idx !== -1) resultsHideFilters.splice(idx, 1);
+            document.getElementById("results-hide-status").value = f.status || "";
+            document.getElementById("results-hide-size").value = f.size || "";
+            document.getElementById("results-hide-parent").value = f.parentPath || "";
+            document.getElementById("results-hide-depth").value = f.depth === undefined ? (f.parentPath ? "0" : "") : String(f.depth);
+            renderHideChips();
+            renderResults();
+            document.getElementById("results-hide-status").focus();
+        });
+        hideChips.appendChild(ruleChip);
     });
 }
 hideForm.addEventListener("submit", function (e) {
@@ -2842,6 +2882,29 @@ resultsFuzzedBtn.addEventListener("click", function () {
 
 // Hide rules -- same composable status/size/parent-path/depth rules as the
 // live app, same add-form + chip-list UI, operating on the embedded JSON.
+// Left/Right at the edge of a text field moves to the neighbouring field of the same form (as in the live app).
+document.addEventListener("keydown", function (e) {
+    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    var el = e.target;
+    var types = ["text", "search", "number", "url", "email", "password", ""];
+    function isField(f) { return f instanceof HTMLTextAreaElement || (f instanceof HTMLInputElement && types.indexOf(f.type) !== -1); }
+    if (!isField(el)) return;
+    var row = el.closest("form, .inline-form, .filter-add-form");
+    if (!row) return;
+    var fields = Array.prototype.filter.call(row.querySelectorAll("input, textarea"), function (f) {
+        return isField(f) && !f.disabled && f.offsetParent !== null;
+    });
+    var index = fields.indexOf(el);
+    var forward = e.key === "ArrowRight";
+    var next = fields[index + (forward ? 1 : -1)];
+    if (index < 0 || !next) return;
+    var start = null, end = null;
+    try { start = el.selectionStart; end = el.selectionEnd; } catch (err) { /* number fields have no caret */ }
+    if (start !== null && (start !== end || (forward ? end !== el.value.length : start !== 0))) return;
+    e.preventDefault();
+    next.focus();
+    try { var caret = forward ? 0 : next.value.length; next.setSelectionRange(caret, caret); } catch (err) { /* no caret */ }
+});
 var hideForm = document.getElementById("results-hide-form");
 var hideChips = document.getElementById("results-hide-chips");
 var hideBtn = document.getElementById("results-hide-btn");
@@ -2864,7 +2927,24 @@ function renderHideChips() {
             renderHideChips();
             renderResults();
         });
-        hideChips.appendChild(h("span", { class: "filter-chip-remove" }, [document.createTextNode(label), removeBtn]));
+        removeBtn.addEventListener("click", function (e) { e.stopPropagation(); });
+        var ruleChip = h("span", {
+            class: "filter-chip-remove editable",
+            title: "Click to edit: the rule is removed and its values go back to the form",
+        }, [document.createTextNode(label), removeBtn]);
+        // Same as the live app: clicking the rule takes it back into the form to edit and add again.
+        ruleChip.addEventListener("click", function () {
+            var idx = resultsHideFilters.indexOf(f);
+            if (idx !== -1) resultsHideFilters.splice(idx, 1);
+            document.getElementById("results-hide-status").value = f.status || "";
+            document.getElementById("results-hide-size").value = f.size || "";
+            document.getElementById("results-hide-parent").value = f.parentPath || "";
+            document.getElementById("results-hide-depth").value = f.depth === undefined ? (f.parentPath ? "0" : "") : String(f.depth);
+            renderHideChips();
+            renderResults();
+            document.getElementById("results-hide-status").focus();
+        });
+        hideChips.appendChild(ruleChip);
     });
 }
 hideForm.addEventListener("submit", function (e) {

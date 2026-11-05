@@ -1373,6 +1373,9 @@ section > h2, section > .section-header-row > h2 { font-size: 13px; text-transfo
     line-height: 1;
 }
 .filter-chip-remove button:hover { border-color: transparent; filter: brightness(1.3); }
+/* A hide rule in the list: clicking it takes it back into the add-form to edit. */
+.filter-chip-remove.editable { cursor: pointer; }
+.filter-chip-remove.editable:hover { border-color: var(--accent); }
 .filter-add-form {
     display: flex;
     align-items: center;
