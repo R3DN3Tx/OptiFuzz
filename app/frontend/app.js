@@ -5332,14 +5332,13 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                         + "-- purely a naming convention for telling an authenticated fuzz's report "
                         + "apart when browsing outputs/ directly; never touches the actual request.",
                 }, [authenticatedCheckbox, document.createTextNode("Authenticated")]),
-                h("span", { class: "hint", text: "If enabled, the saved output filename will get \"__AUTH\" appended." }),
             ]),
             h("div", { class: "advanced-row" }, [
                 h("label", { text: "Auto-pause on status codes" }),
                 pauseStatusInput,
                 h("span", {
                     class: "hint",
-                    text: "Job pauses as soon as one of these is seen (e.g. 429 = rate limited / site down). "
+                    text: "Job pauses as soon as one of these is seen. "
                         + "Resume it manually from Running/Jobs once the target is back up.",
                 }),
             ]),
@@ -5348,7 +5347,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                 concurrencyInput,
                 h("span", {
                     class: "hint",
-                    text: "Applies immediately, only to this target -- other targets keep their own limit.",
+                    text: "Applies immediately, only to this target. Other targets keep their own limit.",
                 }),
             ]),
             h("div", { class: "headers-group" }, [

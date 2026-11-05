@@ -602,7 +602,12 @@ details.advanced input[type="checkbox"] { width: auto; padding: 0; }
 .custom-options-group { display: flex; flex-direction: column; gap: 4px; }
 .custom-options-group label { font-size: 12.5px; }
 .default-headers-group { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+details.advanced .default-headers-group > summary { padding: 0; }
 .default-headers-group summary { cursor: pointer; }
+/* The explanation sits right under the title, aligned with where "Default headers" starts (past the arrow),
+   and leaves some air before the list of headers. */
+.default-headers-group > :not(summary) { margin-left: 13px; }
+.default-headers-group > .hint { margin-bottom: 8px; }
 /* Grows downward as content wraps, instead of scrolling off to the right
    (same auto-grow-height technique as .tree-path-input / .header-value-input). */
 .custom-options-input {
