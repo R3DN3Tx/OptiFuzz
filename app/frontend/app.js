@@ -1664,16 +1664,27 @@ function buildPathHierarchy(items, makeSynthetic, sort = null) {
     }
     // Siblings only (see the sorting helpers above): by the chosen column when there is one, empty
     // values last whichever the direction, ties and the default order by path.
+    // A node with no value of its own (an implied parent) takes the best one among its descendants
+    // (the highest when sorting descending, the lowest when ascending), so it sits with its family.
+    const sortValueMemo = new Map();
     const nodeSortValue = (node) => {
         if (!sort) return null;
-        const primary = pickPrimaryItem(node.items);
-        const own = itemSortValue(primary, sort.column);
-        if (own !== null) return own;
-        for (const item of node.items) {
-            const value = itemSortValue(item, sort.column);
-            if (value !== null) return value;
+        if (sortValueMemo.has(node.key)) return sortValueMemo.get(node.key);
+        let value = itemSortValue(pickPrimaryItem(node.items), sort.column);
+        if (value === null) {
+            for (const item of node.items) {
+                value = itemSortValue(item, sort.column);
+                if (value !== null) break;
+            }
         }
-        return null;
+        if (value === null) {
+            for (const child of childrenOf.get(node.key) || []) {
+                const childValue = nodeSortValue(child);
+                if (childValue !== null && (value === null || (sort.dir === -1 ? childValue > value : childValue < value))) value = childValue;
+            }
+        }
+        sortValueMemo.set(node.key, value);
+        return value;
     };
     const compareSiblings = (a, b) => {
         if (sort) {

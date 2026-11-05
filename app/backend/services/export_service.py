@@ -884,18 +884,25 @@ function isRedirectItem(item) {
     return !!item.redirect || [301, 302, 303, 307, 308].indexOf(status) !== -1;
 }
 // A position can hold "/x" (a redirect stub) and "/x/": the answer that is not a redirect speaks for it.
-function nodeSortValue(node, column) {
+// A node with no value of its own (an implied parent) takes the best one among its descendants (the
+// highest when sorting descending, the lowest when ascending), so it sits with its family.
+function nodeSortValue(node, sort) {
     var ordered = node.items.filter(function (it) { return !isRedirectItem(it); })
         .concat(node.items.filter(isRedirectItem));
     for (var i = 0; i < ordered.length; i++) {
-        var value = itemSortValue(ordered[i], column);
+        var value = itemSortValue(ordered[i], sort.column);
         if (value !== null) return value;
     }
-    return null;
+    var best = null;
+    node.children.forEach(function (child) {
+        var childValue = nodeSortValue(child, sort);
+        if (childValue !== null && (best === null || (sort.dir === -1 ? childValue > best : childValue < best))) best = childValue;
+    });
+    return best;
 }
 function compareSiblings(a, b, sort) {
     if (sort) {
-        var va = nodeSortValue(a, sort.column), vb = nodeSortValue(b, sort.column);
+        var va = nodeSortValue(a, sort), vb = nodeSortValue(b, sort);
         if (va !== vb) {
             if (va === null) return 1;
             if (vb === null) return -1;
@@ -2375,18 +2382,25 @@ function isRedirectItem(item) {
     return !!item.redirect || [301, 302, 303, 307, 308].indexOf(status) !== -1;
 }
 // A position can hold "/x" (a redirect stub) and "/x/": the answer that is not a redirect speaks for it.
-function nodeSortValue(node, column) {
+// A node with no value of its own (an implied parent) takes the best one among its descendants (the
+// highest when sorting descending, the lowest when ascending), so it sits with its family.
+function nodeSortValue(node, sort) {
     var ordered = node.items.filter(function (it) { return !isRedirectItem(it); })
         .concat(node.items.filter(isRedirectItem));
     for (var i = 0; i < ordered.length; i++) {
-        var value = itemSortValue(ordered[i], column);
+        var value = itemSortValue(ordered[i], sort.column);
         if (value !== null) return value;
     }
-    return null;
+    var best = null;
+    node.children.forEach(function (child) {
+        var childValue = nodeSortValue(child, sort);
+        if (childValue !== null && (best === null || (sort.dir === -1 ? childValue > best : childValue < best))) best = childValue;
+    });
+    return best;
 }
 function compareSiblings(a, b, sort) {
     if (sort) {
-        var va = nodeSortValue(a, sort.column), vb = nodeSortValue(b, sort.column);
+        var va = nodeSortValue(a, sort), vb = nodeSortValue(b, sort);
         if (va !== vb) {
             if (va === null) return 1;
             if (vb === null) return -1;
