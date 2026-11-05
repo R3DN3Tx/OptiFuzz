@@ -57,7 +57,7 @@ Routes that deliberately answer something else, so status handling can be checke
 | `/external-docs` | 302 | to another host (`https://example.com/docs`); leave "follow redirects" off |
 | `/crash`, `/broken-export` | 500 | |
 | `/admin/secret`, `/admin/export` | 403 | inside a subdirectory |
-| `/admin/old` | 302 | to `/admin/panel/index.html` |
+| `/admin/old` | 302 | to `/admin/panel/index.html` on the same host, another port (`127.0.0.1:9090`) |
 | `/api/v1/internal` | 403 | |
 | `/api/v1/crash`, `/api/v2/debug` | 500 | |
 | `/api/v2/beta` | 404 | custom page |

@@ -42,7 +42,7 @@ SPECIAL_ROUTES = {
     # Status variety inside subfolders, so FUZZ TREE children / Results
     # filters have 403/404/302/500 entries below the root too.
     "/admin/secret": (403, b"Forbidden: admin secret area.\n"),
-    "/admin/old": (302, b"Moved to the new admin panel...\n", "/admin/panel/index.html"),
+    "/admin/old": (302, b"Moved to the new admin panel...\n", "http://127.0.0.1:9090/admin/panel/index.html"),  # leaves this origin
     "/admin/export": (403, b"Forbidden.\n"),
     "/api/v1/internal": (403, b"Forbidden: internal API, not for external use.\n"),
     "/api/v1/crash": (500, b"Internal Server Error in /api/v1/crash.\n"),
