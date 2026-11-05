@@ -1708,3 +1708,8 @@ button.resume-gear-btn.primary {
 /* "Show more" row at the end of a long list of results (exported reports draw long lists a page at a time) */
 .show-more-row td { padding: 6px 6px; }
 .show-more-btn { padding: 3px 12px; }
+
+/* Sortable Status / Size headers (Results and TREE, also in the exported reports) */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text, inherit); }
+.sort-arrow { color: var(--muted); font-size: .8em; margin-left: 5px; }

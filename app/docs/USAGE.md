@@ -296,6 +296,7 @@ All of these are remembered for each target, even after restarting the app.
 
 - **Search path…** shows only the paths that contain the text.
 - **Filters** has two options: **Fuzzed**, to show only paths that were fuzzed, and **Status**, to show only the codes you list, separated by commas (`200,301`).
+- **Sort by Status or Size**: click the **Status** or **Size** header (in Results and in the Tree, also in exported reports). The first click sorts descending (grey ▼), the second ascending (grey ▲), the third goes back to the original order. Parents are sorted among themselves and, inside each parent, its children among themselves, so a child never leaves its parent. Rows with no status or size always go last.
 - **Hide rules** keep the rows you do not want to see out of the list. Nothing is deleted: remove a rule and those rows come back.
 
 #### Hide rules

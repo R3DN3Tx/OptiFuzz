@@ -1437,6 +1437,43 @@ function pickPrimaryItem(items) {
     return pool.find((it) => it.path === "/" || it.path.endsWith("/")) || pool[0];
 }
 
+// ---- Sorting by Status / Size (Results and TREE) -----------------------------------------------
+// Sorting is tree-aware: it only reorders SIBLINGS. The parents are sorted among themselves and, inside
+// each parent, its children are sorted among themselves, so a child never leaves its parent.
+// Clicking a header cycles: descending (grey ▼) -> ascending (grey ▲) -> original order (no arrow).
+function sizeToBytes(text) {
+    const match = /^\s*([\d.]+)\s*([KMGT]?)B?\s*$/i.exec(String(text || ""));
+    if (!match) return null;
+    const unit = match[2].toUpperCase();
+    return parseFloat(match[1]) * 1024 ** (unit ? "KMGT".indexOf(unit) + 1 : 0);
+}
+// `item` is a Results row (status: number, size: text) or a TREE node (status: { status, size }).
+function itemSortValue(item, column) {
+    const st = item.status && typeof item.status === "object" ? item.status : null;
+    if (column === "status") {
+        const value = st ? st.status : item.status;
+        return typeof value === "number" ? value : null;
+    }
+    return sizeToBytes(st ? st.size : item.size);
+}
+function nextSort(sort, column) {
+    if (!sort || sort.column !== column) return { column, dir: -1 };
+    return sort.dir === -1 ? { column, dir: 1 } : null;
+}
+// A <th> that cycles `getSort()` through nextSort() when clicked and shows the grey arrow.
+function buildSortHeader(label, column, getSort, setSort) {
+    const arrow = h("span", { class: "sort-arrow" });
+    const th = h("th", { class: "sortable", title: `Sort by ${label.toLowerCase()}` }, [document.createTextNode(label), arrow]);
+    const paint = () => {
+        const sort = getSort();
+        arrow.textContent = sort && sort.column === column ? (sort.dir === -1 ? "▼" : "▲") : "";
+    };
+    th.addEventListener("click", () => { setSort(nextSort(getSort(), column)); });
+    paint();
+    th.repaintSort = paint;
+    return th;
+}
+
 // A job's path may carry a query string ("/gs/htc/?a=a": dirsearch appends it
 // to every word). The query is part of what gets requested, but the place
 // being fuzzed -- what TREE, Results grouping and the "Fuzzed" tags match on --
@@ -1556,7 +1593,7 @@ function appendConnectorUnits(pathPrefix, connector) {
 //
 // Returns { childrenOf: Map(key -> [node, ...]), topLevel: [node, ...] },
 // each node shaped { key, path, items: [item, ...], synthetic }.
-function buildPathHierarchy(items, makeSynthetic) {
+function buildPathHierarchy(items, makeSynthetic, sort = null) {
     // Two raw items can normalize to the same key -- verified against a
     // real dirsearch run: both "/admin" (a 301 redirect stub) and "/admin/"
     // (the actual 200 hit) are separate, genuinely distinct results. Real,
@@ -1625,8 +1662,32 @@ function buildPathHierarchy(items, makeSynthetic) {
             topLevel.push(node);
         }
     }
-    for (const list of childrenOf.values()) list.sort((a, b) => a.path.localeCompare(b.path));
-    topLevel.sort((a, b) => a.path.localeCompare(b.path));
+    // Siblings only (see the sorting helpers above): by the chosen column when there is one, empty
+    // values last whichever the direction, ties and the default order by path.
+    const nodeSortValue = (node) => {
+        if (!sort) return null;
+        const primary = pickPrimaryItem(node.items);
+        const own = itemSortValue(primary, sort.column);
+        if (own !== null) return own;
+        for (const item of node.items) {
+            const value = itemSortValue(item, sort.column);
+            if (value !== null) return value;
+        }
+        return null;
+    };
+    const compareSiblings = (a, b) => {
+        if (sort) {
+            const va = nodeSortValue(a), vb = nodeSortValue(b);
+            if (va !== vb) {
+                if (va === null) return 1;
+                if (vb === null) return -1;
+                return (va - vb) * sort.dir;
+            }
+        }
+        return a.path.localeCompare(b.path);
+    };
+    for (const list of childrenOf.values()) list.sort(compareSiblings);
+    topLevel.sort(compareSiblings);
 
     return { childrenOf, topLevel };
 }
@@ -3461,6 +3522,7 @@ async function renderWorkspace(projectId, targetId, tab) {
     let resultsSearchQuery = resultsViewMemo.search;
     let showFuzzedResultsOnly = resultsViewMemo.fuzzedOnly;
     let resultsStatusText = resultsViewMemo.statuses || "";
+    let resultsSort = resultsViewMemo.sort || null; // { column: "status" | "size", dir: -1 | 1 } or null = original order
     let resultsStatusSet = parseStatusFilter(resultsStatusText);
     let resultsFiltersPopupOpen = false; // Results' "Filters ▾" dropdown -- same pattern as TREE's
     let resultsHideRulesPopupOpen = false; // "Hide rules ▾" dropdown -- the add-form AND every rule live inside it
@@ -3932,7 +3994,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // their own top-level entries instead of disappearing too.
         const visibleResults = allResults.filter(passesResultFilters);
         updateHiddenByRules();
-        const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult);
+        const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult, resultsSort);
         lastResultsHierarchy = hierarchy;
 
         hierarchy.topLevel.forEach((top, i) => {
@@ -4392,11 +4454,23 @@ async function renderWorkspace(projectId, targetId, tab) {
         app.appendChild(treeApi.element);
     } else {
         renderResultsFilterUI();
+        const sortHeaders = [];
+        const sortHeader = (label, column) => {
+            const th = buildSortHeader(label, column, () => resultsSort, (next) => {
+                resultsSort = next;
+                resultsViewMemo.sort = next;
+                savePref(resultsViewKey, resultsViewMemo);
+                sortHeaders.forEach((header) => header.repaintSort());
+                renderResultsTree();
+            });
+            sortHeaders.push(th);
+            return th;
+        };
         app.appendChild(h("section", {}, [
             filterBarContainer,
             h("table", { class: "results-table" }, [
                 h("thead", {}, [h("tr", {}, [
-                    h("th", { text: "Status" }), h("th", { text: "Size" }), h("th", { text: "" }),
+                    sortHeader("Status", "status"), sortHeader("Size", "size"), h("th", { text: "" }),
                     h("th", { text: "Path" }), h("th", { text: "Redirect" }),
                 ])]),
                 resultsBody,
@@ -4542,6 +4616,7 @@ async function renderTreeSection(projectId, targetId, baseUrl, onJobLaunched) {
     let treeSearchQuery = "";
     let showInterestingOnly = false;
     let showFuzzedOnlyTree = false;
+    let treeSort = null; // { column: "status" | "size", dir: -1 | 1 } or null = original order
     function passesTreeFilters(n) {
         if (treeSearchQuery && !n.path.toLowerCase().includes(treeSearchQuery)) return false;
         if (showInterestingOnly && !n.interesting) return false;
@@ -4819,7 +4894,7 @@ async function renderTreeSection(projectId, targetId, baseUrl, onJobLaunched) {
         // only the visible ones -- a filtered-out parent's still-visible
         // children just show up as top-level instead of disappearing too.
         const visibleNodes = nodes.filter(passesTreeFilters);
-        const hierarchy = buildPathHierarchy(visibleNodes, makeSyntheticTreeNode);
+        const hierarchy = buildPathHierarchy(visibleNodes, makeSyntheticTreeNode, treeSort);
 
         hierarchy.topLevel.forEach((top, i) => {
             appendNodeRows(hierarchy, top, 0, null, "", i === hierarchy.topLevel.length - 1);
@@ -4929,11 +5004,21 @@ async function renderTreeSection(projectId, targetId, baseUrl, onJobLaunched) {
     // a narrow window rather than overflowing).
     const toolbar = h("div", { class: "tree-toolbar tree-toolbar-sticky" }, [addForm, filterBar]);
 
+    const sortHeaders = [];
+    const sortHeader = (label, column) => {
+        const th = buildSortHeader(label, column, () => treeSort, (next) => {
+            treeSort = next;
+            sortHeaders.forEach((header) => header.repaintSort());
+            renderRows();
+        });
+        sortHeaders.push(th);
+        return th;
+    };
     const section = h("section", {}, [
         toolbar,
         h("table", { class: "tree-table" }, [
             h("thead", {}, [h("tr", {}, [
-                h("th", { text: "Status" }), h("th", { text: "Size" }), h("th", { text: "" }), h("th", { text: "Path" }),
+                sortHeader("Status", "status"), sortHeader("Size", "size"), h("th", { text: "" }), h("th", { text: "Path" }),
                 h("th", { text: "Note" }), h("th", { text: "" }),
             ])]),
             body,

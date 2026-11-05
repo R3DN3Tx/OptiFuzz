@@ -506,7 +506,7 @@ _TEMPLATE = r"""<!doctype html>
       </div>
     </div>
     <table class="results-table exp-table exp-results">
-      <thead><tr><th>Status</th><th>Size</th><th>Path</th><th>Redirect</th></tr></thead>
+      <thead><tr><th class="sortable" data-sort="status">Status<span class="sort-arrow"></span></th><th class="sortable" data-sort="size">Size<span class="sort-arrow"></span></th><th>Path</th><th>Redirect</th></tr></thead>
       <tbody id="results-body"></tbody>
     </table>
   </section>
@@ -522,7 +522,7 @@ _TEMPLATE = r"""<!doctype html>
       </div>
     </div>
     <table class="tree-table exp-table exp-tree">
-      <thead><tr><th>Status</th><th>Size</th><th>Path</th><th>Note</th></tr></thead>
+      <thead><tr><th class="sortable" data-sort="status">Status<span class="sort-arrow"></span></th><th class="sortable" data-sort="size">Size<span class="sort-arrow"></span></th><th>Path</th><th>Note</th></tr></thead>
       <tbody id="tree-body"></tbody>
     </table>
   </section>
@@ -858,7 +858,69 @@ function appendConnectorUnits(pathPrefix, connector) {
 // distinct item at that key, in encounter order) replaces it; both row
 // builders below render one row per item sharing a position instead of
 // picking a single winner.
-function buildHierarchy(items) {
+// ---- Sorting by Status / Size, same as the live app: only SIBLINGS are reordered (parents among
+// themselves, the children of each parent among themselves), so a child never leaves its parent.
+// Click cycle: descending (grey ▼) -> ascending (grey ▲) -> original order.
+function sizeToBytes(text) {
+    var match = /^\s*([\d.]+)\s*([KMGT]?)B?\s*$/i.exec(String(text || ""));
+    if (!match) return null;
+    var unit = match[2].toUpperCase();
+    return parseFloat(match[1]) * Math.pow(1024, unit ? "KMGT".indexOf(unit) + 1 : 0);
+}
+function itemSortValue(item, column) {
+    var st = item.status && typeof item.status === "object" ? item.status : null;
+    if (column === "status") {
+        var value = st ? st.status : item.status;
+        return typeof value === "number" ? value : null;
+    }
+    return sizeToBytes(st ? st.size : item.size);
+}
+function nextSort(sort, column) {
+    if (!sort || sort.column !== column) return { column: column, dir: -1 };
+    return sort.dir === -1 ? { column: column, dir: 1 } : null;
+}
+function isRedirectItem(item) {
+    var status = item.status && typeof item.status === "object" ? item.status.status : item.status;
+    return !!item.redirect || [301, 302, 303, 307, 308].indexOf(status) !== -1;
+}
+// A position can hold "/x" (a redirect stub) and "/x/": the answer that is not a redirect speaks for it.
+function nodeSortValue(node, column) {
+    var ordered = node.items.filter(function (it) { return !isRedirectItem(it); })
+        .concat(node.items.filter(isRedirectItem));
+    for (var i = 0; i < ordered.length; i++) {
+        var value = itemSortValue(ordered[i], column);
+        if (value !== null) return value;
+    }
+    return null;
+}
+function compareSiblings(a, b, sort) {
+    if (sort) {
+        var va = nodeSortValue(a, sort.column), vb = nodeSortValue(b, sort.column);
+        if (va !== vb) {
+            if (va === null) return 1;
+            if (vb === null) return -1;
+            return (va - vb) * sort.dir;
+        }
+    }
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+function wireSortHeaders(table, getSort, setSort) {
+    var ths = table.querySelectorAll("th.sortable");
+    function paint() {
+        var sort = getSort();
+        ths.forEach(function (th) {
+            th.querySelector(".sort-arrow").textContent =
+                sort && sort.column === th.getAttribute("data-sort") ? (sort.dir === -1 ? "▼" : "▲") : "";
+        });
+    }
+    ths.forEach(function (th) {
+        th.addEventListener("click", function () {
+            setSort(nextSort(getSort(), th.getAttribute("data-sort")));
+            paint();
+        });
+    });
+}
+function buildHierarchy(items, sort) {
     var byKey = {};
     function ensure(key) {
         if (byKey[key]) return byKey[key];
@@ -870,7 +932,7 @@ function buildHierarchy(items) {
     ensure("/");
     items.forEach(function (item) { ensure(normalizeKey(item.path)).items.push(item); });
     Object.keys(byKey).forEach(function (key) {
-        byKey[key].children.sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+        byKey[key].children.sort(function (a, b) { return compareSiblings(a, b, sort); });
     });
     return byKey["/"];
 }
@@ -1147,8 +1209,11 @@ function renderTree() {
     // Results below) and is always fully expanded (explicit request) --
     // search/filters never collapse anything here, there's nothing to
     // revert on clear.
-    appendTreeRows(treeBody, buildHierarchy(filtered), 0, null, "", true, true);
+    appendTreeRows(treeBody, buildHierarchy(filtered, treeSort), 0, null, "", true, true);
 }
+var treeSort = null, resultsSort = null;
+wireSortHeaders(document.querySelector(".exp-tree"), function () { return treeSort; }, function (sort) { treeSort = sort; renderTree(); });
+wireSortHeaders(document.querySelector(".exp-results"), function () { return resultsSort; }, function (sort) { resultsSort = sort; renderResults(); });
 treeSearchInput.addEventListener("input", renderTree);
 [treeInterestingBtn, treeFuzzedBtn].forEach(function (btn) {
     btn.addEventListener("click", function () { btn.classList.toggle("active"); renderTree(); });
@@ -1431,7 +1496,7 @@ function renderResults() {
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
     resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
-    var hierarchy = buildHierarchy(filtered);
+    var hierarchy = buildHierarchy(filtered, resultsSort);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a
@@ -1913,7 +1978,7 @@ _PROJECT_TEMPLATE = r"""
       </div>
     </div>
     <table class="results-table exp-table exp-results">
-      <thead><tr><th>Status</th><th>Size</th><th>Path</th><th>Redirect</th></tr></thead>
+      <thead><tr><th class="sortable" data-sort="status">Status<span class="sort-arrow"></span></th><th class="sortable" data-sort="size">Size<span class="sort-arrow"></span></th><th>Path</th><th>Redirect</th></tr></thead>
       <tbody id="results-body"></tbody>
     </table>
   </section>
@@ -1929,7 +1994,7 @@ _PROJECT_TEMPLATE = r"""
       </div>
     </div>
     <table class="tree-table exp-table exp-tree">
-      <thead><tr><th>Status</th><th>Size</th><th>Path</th><th>Note</th></tr></thead>
+      <thead><tr><th class="sortable" data-sort="status">Status<span class="sort-arrow"></span></th><th class="sortable" data-sort="size">Size<span class="sort-arrow"></span></th><th>Path</th><th>Note</th></tr></thead>
       <tbody id="tree-body"></tbody>
     </table>
   </section>
@@ -2284,7 +2349,69 @@ function appendConnectorUnits(pathPrefix, connector) {
 // distinct item at that key, in encounter order) replaces it; both row
 // builders below render one row per item sharing a position instead of
 // picking a single winner.
-function buildHierarchy(items) {
+// ---- Sorting by Status / Size, same as the live app: only SIBLINGS are reordered (parents among
+// themselves, the children of each parent among themselves), so a child never leaves its parent.
+// Click cycle: descending (grey ▼) -> ascending (grey ▲) -> original order.
+function sizeToBytes(text) {
+    var match = /^\s*([\d.]+)\s*([KMGT]?)B?\s*$/i.exec(String(text || ""));
+    if (!match) return null;
+    var unit = match[2].toUpperCase();
+    return parseFloat(match[1]) * Math.pow(1024, unit ? "KMGT".indexOf(unit) + 1 : 0);
+}
+function itemSortValue(item, column) {
+    var st = item.status && typeof item.status === "object" ? item.status : null;
+    if (column === "status") {
+        var value = st ? st.status : item.status;
+        return typeof value === "number" ? value : null;
+    }
+    return sizeToBytes(st ? st.size : item.size);
+}
+function nextSort(sort, column) {
+    if (!sort || sort.column !== column) return { column: column, dir: -1 };
+    return sort.dir === -1 ? { column: column, dir: 1 } : null;
+}
+function isRedirectItem(item) {
+    var status = item.status && typeof item.status === "object" ? item.status.status : item.status;
+    return !!item.redirect || [301, 302, 303, 307, 308].indexOf(status) !== -1;
+}
+// A position can hold "/x" (a redirect stub) and "/x/": the answer that is not a redirect speaks for it.
+function nodeSortValue(node, column) {
+    var ordered = node.items.filter(function (it) { return !isRedirectItem(it); })
+        .concat(node.items.filter(isRedirectItem));
+    for (var i = 0; i < ordered.length; i++) {
+        var value = itemSortValue(ordered[i], column);
+        if (value !== null) return value;
+    }
+    return null;
+}
+function compareSiblings(a, b, sort) {
+    if (sort) {
+        var va = nodeSortValue(a, sort.column), vb = nodeSortValue(b, sort.column);
+        if (va !== vb) {
+            if (va === null) return 1;
+            if (vb === null) return -1;
+            return (va - vb) * sort.dir;
+        }
+    }
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+function wireSortHeaders(table, getSort, setSort) {
+    var ths = table.querySelectorAll("th.sortable");
+    function paint() {
+        var sort = getSort();
+        ths.forEach(function (th) {
+            th.querySelector(".sort-arrow").textContent =
+                sort && sort.column === th.getAttribute("data-sort") ? (sort.dir === -1 ? "▼" : "▲") : "";
+        });
+    }
+    ths.forEach(function (th) {
+        th.addEventListener("click", function () {
+            setSort(nextSort(getSort(), th.getAttribute("data-sort")));
+            paint();
+        });
+    });
+}
+function buildHierarchy(items, sort) {
     var byKey = {};
     function ensure(key) {
         if (byKey[key]) return byKey[key];
@@ -2296,7 +2423,7 @@ function buildHierarchy(items) {
     ensure("/");
     items.forEach(function (item) { ensure(normalizeKey(item.path)).items.push(item); });
     Object.keys(byKey).forEach(function (key) {
-        byKey[key].children.sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+        byKey[key].children.sort(function (a, b) { return compareSiblings(a, b, sort); });
     });
     return byKey["/"];
 }
@@ -2573,8 +2700,11 @@ function renderTree() {
     // Results below) and is always fully expanded (explicit request) --
     // search/filters never collapse anything here, there's nothing to
     // revert on clear.
-    appendTreeRows(treeBody, buildHierarchy(filtered), 0, null, "", true, true);
+    appendTreeRows(treeBody, buildHierarchy(filtered, treeSort), 0, null, "", true, true);
 }
+var treeSort = null, resultsSort = null;
+wireSortHeaders(document.querySelector(".exp-tree"), function () { return treeSort; }, function (sort) { treeSort = sort; renderTree(); });
+wireSortHeaders(document.querySelector(".exp-results"), function () { return resultsSort; }, function (sort) { resultsSort = sort; renderResults(); });
 treeSearchInput.addEventListener("input", renderTree);
 [treeInterestingBtn, treeFuzzedBtn].forEach(function (btn) {
     btn.addEventListener("click", function () { btn.classList.toggle("active"); renderTree(); });
@@ -2853,7 +2983,7 @@ function renderResults() {
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
     resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
-    var hierarchy = buildHierarchy(filtered);
+    var hierarchy = buildHierarchy(filtered, resultsSort);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a

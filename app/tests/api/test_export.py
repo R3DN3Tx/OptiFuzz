@@ -148,6 +148,18 @@ def test_export_has_tab_navigation_and_search_filter_controls(client: TestClient
     assert ">Fuzz</button>" not in body
 
 
+def test_exports_let_status_and_size_be_sorted_in_results_and_tree(client: TestClient) -> None:
+    project, target = _make_project_and_target(client)
+
+    single = client.get(f"/api/projects/{project['id']}/targets/{target['id']}/export").text
+    combined = client.get(f"/api/projects/{project['id']}/export-all-combined").text
+
+    for body in (single, combined):
+        assert body.count('<th class="sortable" data-sort="status">') == 2  # Results + Tree
+        assert body.count('<th class="sortable" data-sort="size">') == 2
+        assert "function compareSiblings(" in body
+
+
 def test_export_target_with_empty_tree_and_no_jobs(client: TestClient) -> None:
     # Must not crash/500 on a brand-new target with nothing in it yet.
     project, target = _make_project_and_target(client)
