@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from backend.api.deps import get_job_manager
-from backend.api.schemas import CreateProjectRequest, RenameRequest, SetOutputsMirrorDirRequest
+from backend.api.schemas import CreateProjectRequest, MoveRequest, RenameRequest, SetOutputsMirrorDirRequest
 from backend.job_manager.manager import JobManager
 from backend.models.job import TERMINAL_STATUSES, JobStatus
 from backend.persistence.slug import slugify
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 @router.post("")
 def create_project(body: CreateProjectRequest) -> dict:
-    return project_service.create_project(body.name, body.notes).to_dict()
+    return project_service.create_project(body.name, body.notes, body.folder_id).to_dict()
 
 
 @router.get("")
@@ -49,6 +49,11 @@ def get_project(project_id: str) -> dict:
 @router.patch("/{project_id}")
 def rename_project(project_id: str, body: RenameRequest) -> dict:
     return project_service.rename_project(project_id, body.name).to_dict()
+
+
+@router.post("/{project_id}/move")
+def move_project(project_id: str, body: MoveRequest) -> dict:
+    return project_service.move_project(project_id, body.folder_id).to_dict()
 
 
 @router.get("/{project_id}/export-all")

@@ -31,7 +31,7 @@ The main features at a glance. **Everything OptiFuzz does, screen by screen, is 
 >
 > Getting started, every form field and option, job states, auto-pause, Results filters and hide rules, the tree, exports, settings and where your data lives.
 
-- **Projects and targets.** One installation holds many projects, each with several targets (hosts). Everything a target produces stays isolated from every other target.
+- **Projects and targets.** One installation holds many projects, each with several targets (hosts). Everything a target produces stays isolated from every other target. Projects can be grouped in folders (nested as deep as you like): add one with **+ New folder**, open it to see only what is inside, and use **Move** in the three-dot menu of any project or folder to put it somewhere else.
 - **Fuzzing you control.** Start dirsearch jobs from a form with a wordlist, extensions, headers and any other dirsearch flag. If you type no extensions, the form tells you that dirsearch's default extensions are active (*Default extensions activated*) and lists them when you hover it. **Pause, resume and stop** at any time; a paused job continues from where it stopped, and an app crash does not lose a long run.
 - **Auto-pause.** A job pauses when the target answers a status code you chose (for example `429` or a `403` block), and you decide whether Resume repeats that word or moves on.
 - **Readable results.** Colour-coded status codes, a **NEW** badge on what you have not seen yet, search, filters and persistent hide rules to cut noise.

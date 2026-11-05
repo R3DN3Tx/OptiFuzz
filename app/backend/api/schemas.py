@@ -9,6 +9,18 @@ from pydantic import BaseModel, Field, field_validator
 class CreateProjectRequest(BaseModel):
     name: str
     notes: str = ""
+    folder_id: str = ""
+
+
+class CreateFolderRequest(BaseModel):
+    name: str
+    parent_id: str = ""
+
+
+class MoveRequest(BaseModel):
+    """`folder_id`: the folder to move into; "" = the top level."""
+
+    folder_id: str = ""
 
 
 class RenameRequest(BaseModel):

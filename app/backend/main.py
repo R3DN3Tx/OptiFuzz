@@ -6,11 +6,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import data_health, engine_info, jobs, projects, results, settings, stream, targets, tree, update, wordlists
+from backend.api import data_health, engine_info, folders, jobs, projects, results, settings, stream, targets, tree, update, wordlists
 from backend.engine.dirsearch import DirsearchEngine
 from backend.job_manager.manager import JobManager, JobNotFoundError
 from backend.persistence.atomic import DamagedFileError
 from backend.security import LocalOnlyMiddleware
+from backend.services.folder_service import DuplicateFolderNameError, FolderNotEmptyError, FolderNotFoundError
 from backend.services.project_service import DuplicateProjectNameError, ProjectNotFoundError
 from backend.services.target_service import DuplicateTargetNameError, TargetNotFoundError
 from backend.services.tree_service import TreeNodeNotFoundError
@@ -53,6 +54,7 @@ def _warm_damage_scan() -> None:
 app.router.on_startup.append(_warm_damage_scan)
 
 app.include_router(projects.router)
+app.include_router(folders.router)
 app.include_router(targets.router)
 app.include_router(jobs.router)
 app.include_router(results.router)
@@ -99,10 +101,10 @@ def _damaged_handler(_request: Request, exc: Exception) -> JSONResponse:
 
 app.add_exception_handler(DamagedFileError, _damaged_handler)
 
-for exc_type in (ProjectNotFoundError, TargetNotFoundError, JobNotFoundError, TreeNodeNotFoundError):
+for exc_type in (ProjectNotFoundError, FolderNotFoundError, TargetNotFoundError, JobNotFoundError, TreeNodeNotFoundError):
     app.add_exception_handler(exc_type, _not_found_handler)
 
-for exc_type in (DuplicateProjectNameError, DuplicateTargetNameError):
+for exc_type in (DuplicateProjectNameError, DuplicateFolderNameError, FolderNotEmptyError, DuplicateTargetNameError):
     app.add_exception_handler(exc_type, _conflict_handler)
 
 app.add_exception_handler(ValueError, _bad_request_handler)

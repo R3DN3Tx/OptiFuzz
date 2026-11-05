@@ -311,6 +311,48 @@ main { padding: 16px; max-width: 1100px; margin: 0 auto; }
 .card-menu button:hover { background: #232833; }
 .card-menu button.danger-item { color: var(--red); }
 
+/* ---- Folders (Projects view) ------------------------------------------- */
+.card.folder-card { background: rgba(224,184,75,.07); border-color: rgba(224,184,75,.28); }
+.card.folder-card:hover { border-color: var(--yellow); }
+.folder-card-icon { display: inline-flex; color: var(--yellow); margin-right: 6px; vertical-align: -2px; flex-shrink: 0; }
+button.folder-btn { background: var(--yellow); border-color: var(--yellow); color: #1c1600; font-weight: 600; }
+button.folder-btn:hover { filter: brightness(1.1); border-color: var(--yellow); }
+/* Wide enough for the whole placeholder, "New project/folder name". */
+.new-item-input { min-width: 215px; }
+.search-input.projects-search, .search-field.projects-search { min-width: 235px; }
+
+/* "Move" dropdown of a card's menu: the same look as the wordlist picker's popup. */
+.move-popup {
+    position: absolute;
+    top: 30px;
+    right: 6px;
+    z-index: 30;
+    width: 300px;
+    max-height: 340px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    flex-direction: column;
+    cursor: default;
+}
+.move-popup:not([hidden]) { display: flex; }
+.move-title { padding: 8px 10px 4px; font-size: 12px; color: var(--muted); }
+.move-tree { padding: 4px 0; }
+.move-row { display: flex; align-items: center; gap: 4px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+.move-row:hover { background: #232833; }
+.move-row.selected { background: var(--accent); color: #06101f; }
+.move-row.selected .folder-card-icon { color: #06101f; }
+.move-row.disabled { cursor: default; color: var(--muted); opacity: .6; }
+.move-row.disabled:hover { background: transparent; }
+.move-arrow { width: 12px; flex: 0 0 12px; color: var(--muted); text-align: center; }
+.move-arrow.clickable { cursor: pointer; }
+.move-row.selected .move-arrow { color: #06101f; }
+.move-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-here { margin-left: 4px; font-size: 11px; opacity: .7; }
+.move-footer { padding: 8px 10px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+.move-footer button:disabled { opacity: .5; cursor: not-allowed; }
+
 .fuzzing-dot {
     display: inline-block;
     width: 8px;

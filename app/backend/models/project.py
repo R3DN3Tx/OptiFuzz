@@ -17,6 +17,9 @@ class Project:
     # this is purely an additional, optional copy for the pentester's own
     # convenience (services/output_mirror_service.py).
     outputs_mirror_dir: str = ""
+    # The folder this project is shown in ("" = the top level). Organising only: the project's own
+    # directory never moves (services/folder_service.py).
+    folder_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -25,6 +28,7 @@ class Project:
             "created_at": self.created_at,
             "notes": self.notes,
             "outputs_mirror_dir": self.outputs_mirror_dir,
+            "folder_id": self.folder_id,
         }
 
     @classmethod
@@ -35,4 +39,5 @@ class Project:
             created_at=data["created_at"],
             notes=data.get("notes", ""),
             outputs_mirror_dir=data.get("outputs_mirror_dir", ""),
+            folder_id=data.get("folder_id", ""),
         )

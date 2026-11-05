@@ -28,6 +28,14 @@ def workspace_file() -> Path:
     return workspace_root() / "workspace.json"
 
 
+def folders_dir() -> Path:
+    return workspace_root() / "folders"
+
+
+def folder_file(folder_id: str) -> Path:
+    return folders_dir() / f"{validate_safe_id(folder_id, label='folder_id')}.json"
+
+
 def projects_dir() -> Path:
     return workspace_root() / "projects"
 

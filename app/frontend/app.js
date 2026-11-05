@@ -94,6 +94,7 @@ function toggleCollapsed(routeKey, key) {
 }
 
 function routeKeyFor(route) {
+    if (route.view === "projects" && route.folderId) return `projects/${route.folderId}`;
     if (route.view === "workspace") return `workspace/${route.projectId}/${route.targetId}/${route.tab}`;
     if (route.view === "targets") return `targets/${route.projectId}`;
     return "projects";
@@ -1110,7 +1111,7 @@ function formatElapsed(ms) {
 // time -- opening one closes whichever other one was already open.
 let openCardMenu = null;
 
-function buildCardMenu(onDelete, onRename) {
+function buildCardMenu(onDelete, onRename, onMove, deleteConfirm) {
     function closeMenu() {
         menu.hidden = true;
         if (openCardMenu === menu) openCardMenu = null;
@@ -1126,6 +1127,15 @@ function buildCardMenu(onDelete, onRename) {
                 await onRename();
             },
         }) : null,
+        onMove ? h("button", {
+            type: "button",
+            text: "Move",
+            onclick: (e) => {
+                e.stopPropagation();
+                closeMenu();
+                onMove();
+            },
+        }) : null,
         h("button", {
             class: "danger-item",
             type: "button",
@@ -1133,7 +1143,7 @@ function buildCardMenu(onDelete, onRename) {
             onclick: async (e) => {
                 e.stopPropagation();
                 closeMenu();
-                if (!confirm("This action is not reversible and will delete all related files. Continue?")) return;
+                if (!confirm(deleteConfirm || "This action is not reversible and will delete all related files. Continue?")) return;
                 await onDelete();
             },
         }),
@@ -1257,6 +1267,7 @@ function closeStream() {
 
 function parseRoute() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    if (parts.length >= 2 && parts[0] === "folders") return { view: "projects", folderId: parts[1] };
     if (parts.length >= 4 && parts[0] === "projects" && parts[2] === "targets") {
         // "jobs" (New Fuzz + Running/Jobs) is the default landing tab --
         // no sub-route segment.
@@ -1358,7 +1369,7 @@ async function renderOnce() {
     const route = parseRoute();
     const routeKey = routeKeyFor(route);
     try {
-        if (route.view === "projects") await renderProjects();
+        if (route.view === "projects") await renderProjects(route.folderId || "");
         else if (route.view === "targets") await renderTargets(route.projectId);
         else await renderWorkspace(route.projectId, route.targetId, route.tab);
     } catch (err) {
@@ -2183,14 +2194,167 @@ function setupSettingsMenu() {
     });
 }
 
+// ---- Folders (Projects view) -----------------------------------------
+//
+// A folder only groups projects and other folders in the Projects view; a
+// project's own data never moves (backend/services/folder_service.py). A
+// project or folder whose folder no longer exists (e.g. its file was damaged)
+// is shown at the top level, so nothing becomes unreachable.
+
+async function fetchFolders() {
+    try {
+        return await api("/api/folders");
+    } catch (e) {
+        return []; // folders are an organising layer: never block a view on them
+    }
+}
+
+// The folders from the top level down to `folderId` (itself included); [] for the top level.
+function folderChain(folders, folderId) {
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const chain = [];
+    for (let id = folderId; id && byId.has(id) && chain.length < 100; id = byId.get(id).parent_id) {
+        chain.unshift(byId.get(id));
+    }
+    return chain;
+}
+
+// "Projects / Folder / Folder / <rest...>": every part but the last is a link. `rest` items are
+// {text, href?} -- the last one is the current page and stays plain text.
+function setBreadcrumb(folders, folderId, rest) {
+    const parts = [
+        { text: "Projects", href: "#/" },
+        ...folderChain(folders, folderId).map((f) => ({ text: f.name, href: `#/folders/${f.id}` })),
+        ...rest,
+    ];
+    breadcrumb.innerHTML = "";
+    parts.forEach((part, i) => {
+        if (i) breadcrumb.append(" / ");
+        if (part.href && i < parts.length - 1) breadcrumb.appendChild(h("a", { href: part.href, text: part.text }));
+        else breadcrumb.append(part.text);
+    });
+}
+
+// Only one "Move to..." dropdown open at a time.
+let openMovePopup = null;
+
+// The dropdown behind a card's "Move": the tree of folders (projects are listed dimmed, for context)
+// to pick where the item goes, and a Move button. `blockedFolderIds`: folders that cannot be chosen
+// (a folder being moved, and everything inside it).
+function buildMovePicker({ folders, projects, blockedFolderIds, currentFolderId, onMove }) {
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const parentOf = (f) => (byId.has(f.parent_id) ? f.parent_id : "");
+    const folderOfProject = (p) => (byId.has(p.folder_id) ? p.folder_id : "");
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    let selected = null; // chosen folder id ("" = top level); null = nothing chosen yet
+    const expanded = new Set();
+    for (let id = currentFolderId, guard = 0; id && byId.has(id) && guard < 100; id = byId.get(id).parent_id, guard++) {
+        expanded.add(id);
+    }
+
+    const tree = h("div", { class: "wordlist-tree move-tree" });
+    const moveBtn = h("button", { class: "primary", type: "button", text: "Move" });
+    moveBtn.disabled = true;
+    const popup = h("div", { class: "move-popup", hidden: "hidden" }, [
+        h("div", { class: "move-title", text: "Move to…" }),
+        tree,
+        h("div", { class: "move-footer" }, [moveBtn]),
+    ]);
+    popup.addEventListener("click", (e) => e.stopPropagation()); // never also opens the card underneath
+
+    function row(depth, label, { icon, selectable, folderId, arrow }) {
+        const el = h("div", { class: `move-row${selectable ? "" : " disabled"}${selectable && selected === folderId ? " selected" : ""}` });
+        el.style.paddingLeft = `${10 + depth * 14}px`;
+        el.appendChild(arrow || h("span", { class: "move-arrow" }));
+        if (icon) {
+            const iconEl = h("span", { class: "folder-card-icon" });
+            iconEl.innerHTML = FOLDER_ICON_SVG;
+            el.appendChild(iconEl);
+        }
+        el.appendChild(h("span", { class: "move-label", text: label }));
+        if (selectable && folderId === currentFolderId) el.appendChild(h("span", { class: "move-here", text: "(current)" }));
+        if (selectable) el.addEventListener("click", () => { selected = folderId; refresh(); });
+        return el;
+    }
+
+    function renderLevel(parentId, depth) {
+        for (const f of folders.filter((x) => parentOf(x) === parentId).sort(byName)) {
+            const blocked = blockedFolderIds.has(f.id);
+            const hasKids = folders.some((x) => parentOf(x) === f.id) || projects.some((p) => folderOfProject(p) === f.id);
+            let arrow = null;
+            if (hasKids && !blocked) {
+                arrow = h("span", { class: "move-arrow clickable", text: expanded.has(f.id) ? "▾" : "▸" });
+                arrow.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    if (expanded.has(f.id)) expanded.delete(f.id);
+                    else expanded.add(f.id);
+                    refresh();
+                });
+            }
+            tree.appendChild(row(depth, f.name, { icon: true, selectable: !blocked, folderId: f.id, arrow }));
+            if (!blocked && expanded.has(f.id)) renderLevel(f.id, depth + 1);
+        }
+        for (const p of projects.filter((x) => folderOfProject(x) === parentId).sort(byName)) {
+            tree.appendChild(row(depth, p.name, { icon: false, selectable: false }));
+        }
+    }
+
+    function refresh() {
+        tree.innerHTML = "";
+        tree.appendChild(row(0, "Projects (top level)", { icon: false, selectable: true, folderId: "" }));
+        renderLevel("", 1);
+        moveBtn.disabled = selected === null || selected === currentFolderId;
+    }
+
+    moveBtn.addEventListener("click", async () => {
+        moveBtn.disabled = true;
+        try {
+            await onMove(selected);
+        } catch (err) {
+            alert(`Could not move: ${err.message}`);
+            moveBtn.disabled = false;
+        }
+    });
+
+    function close() {
+        popup.hidden = true;
+        if (openMovePopup === popup) openMovePopup = null;
+    }
+    function open() {
+        if (openMovePopup && openMovePopup !== popup) openMovePopup.hidden = true;
+        selected = null;
+        refresh();
+        popup.hidden = false;
+        openMovePopup = popup;
+    }
+    function onDocumentClick(e) {
+        if (!document.body.contains(popup)) {
+            document.removeEventListener("click", onDocumentClick);
+            return;
+        }
+        if (!popup.hidden && !popup.contains(e.target)) close();
+    }
+    document.addEventListener("click", onDocumentClick);
+
+    return { element: popup, open, close };
+}
+
 // ---- Projects -------------------------------------------------------
 
-async function renderProjects() {
+async function renderProjects(folderId = "") {
     breadcrumb.textContent = "";
-    // In parallel: the view is only as slow as the slower of the two requests, not their sum.
-    const [projectsList, damagedAll] = await Promise.all([api("/api/projects"), fetchDamaged()]);
+    // In parallel: the view is only as slow as the slowest request, not their sum.
+    const [projectsList, damagedAll, folders] = await Promise.all([api("/api/projects"), fetchDamaged(), fetchFolders()]);
     let projects = projectsList;
     const damagedProjects = damagedAll.filter((d) => d.kind === "project");
+    if (folderId && !folders.some((f) => f.id === folderId)) {
+        history.replaceState(null, "", "#/"); // that folder is gone: back to the top level
+        folderId = "";
+    }
+    if (folderId) setBreadcrumb(folders, folderId, []);
+    const folderIds = new Set(folders.map((f) => f.id));
+    const projectFolder = (p) => (folderIds.has(p.folder_id) ? p.folder_id : "");
+    const folderParent = (f) => (folderIds.has(f.parent_id) ? f.parent_id : "");
 
     // novalidate: the submit handler already does its own manual empty
     // check below -- without this, the browser's own constraint-validation
@@ -2206,67 +2370,161 @@ async function renderProjects() {
             return;
         }
         try {
-            await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+            await api("/api/projects", { method: "POST", body: JSON.stringify({ name, folder_id: folderId }) });
         } catch (err) {
             setFieldWarning(input, err.message);
             return;
         }
         render();
     } }, [
-        h("input", { placeholder: "New project name", maxlength: String(MAX_NAME_LENGTH) }),
+        h("input", { class: "new-item-input", placeholder: "New project/folder name", maxlength: String(MAX_NAME_LENGTH) }),
         h("button", { class: "primary", type: "submit", text: "+ New Project" }),
+        h("button", { class: "folder-btn", type: "button", text: "+ New folder", onclick: async () => {
+            const input = form.querySelector("input");
+            const name = input.value.trim();
+            if (!name) {
+                setFieldWarning(input, "Enter a name for the folder.");
+                return;
+            }
+            try {
+                await api("/api/folders", { method: "POST", body: JSON.stringify({ name, parent_id: folderId }) });
+            } catch (err) {
+                setFieldWarning(input, err.message);
+                return;
+            }
+            render();
+        } }),
     ]);
 
-    const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input", placeholder: "Search projects…" });
+    const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input projects-search", placeholder: "Search projects/folders…" });
     const gridBox = h("div", {});
+
+    function countsText(id) {
+        const nFolders = folders.filter((f) => folderParent(f) === id).length;
+        const nProjects = projects.filter((p) => projectFolder(p) === id).length;
+        const parts = [];
+        if (nFolders) parts.push(`${nFolders} folder${nFolders === 1 ? "" : "s"}`);
+        if (nProjects) parts.push(`${nProjects} project${nProjects === 1 ? "" : "s"}`);
+        return parts.join(" · ") || "Empty";
+    }
+
+    // Everything below this folder: it cannot be moved into any of it.
+    function folderAndDescendants(id) {
+        const out = new Set([id]);
+        let grew = true;
+        while (grew) {
+            grew = false;
+            for (const f of folders) {
+                if (!out.has(f.id) && out.has(folderParent(f))) { out.add(f.id); grew = true; }
+            }
+        }
+        return out;
+    }
+
+    function folderCard(f) {
+        const { element: nameEl, startEdit } = buildEditableName("span", f.name, async (newName) => {
+            await api(`/api/folders/${f.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
+            f.name = newName;
+        });
+        const picker = buildMovePicker({
+            folders, projects, blockedFolderIds: folderAndDescendants(f.id), currentFolderId: folderParent(f),
+            onMove: async (target) => {
+                await api(`/api/folders/${f.id}/move`, { method: "POST", body: JSON.stringify({ folder_id: target }) });
+                render();
+            },
+        });
+        const [menuBtn, menu] = buildCardMenu(
+            async () => {
+                try {
+                    await api(`/api/folders/${f.id}`, { method: "DELETE" });
+                    render();
+                } catch (err) {
+                    alert(`Could not delete folder: ${err.message}`);
+                }
+            },
+            async () => startEdit(),
+            () => picker.open(),
+            "Delete this folder? Only an empty folder can be deleted.",
+        );
+        const icon = h("span", { class: "folder-card-icon" });
+        icon.innerHTML = FOLDER_ICON_SVG;
+        return h("div", {
+            class: "card folder-card",
+            onclick: () => { location.hash = `#/folders/${f.id}`; },
+        }, [
+            h("h3", {}, [icon, nameEl]),
+            h("p", { text: countsText(f.id) }),
+            menuBtn,
+            menu,
+            picker.element,
+        ]);
+    }
+
+    function projectCard(p) {
+        const { element: nameEl, startEdit } = buildEditableName("span", p.name, async (newName) => {
+            await api(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
+            p.name = newName;
+        });
+        const picker = buildMovePicker({
+            folders, projects, blockedFolderIds: new Set(), currentFolderId: projectFolder(p),
+            onMove: async (target) => {
+                await api(`/api/projects/${p.id}/move`, { method: "POST", body: JSON.stringify({ folder_id: target }) });
+                render();
+            },
+        });
+        const [menuBtn, menu] = buildCardMenu(
+            async () => {
+                try {
+                    await api(`/api/projects/${p.id}`, { method: "DELETE" });
+                    render();
+                } catch (err) {
+                    alert(`Could not delete project: ${err.message}`);
+                }
+            },
+            async () => startEdit(),
+            () => picker.open(),
+        );
+        let fuzzingDot = null;
+        if (p.is_fuzzing) {
+            fuzzingDot = h("span", { class: "fuzzing-dot" });
+            attachRunningJobsTooltip(fuzzingDot, p.running_jobs || []);
+        }
+        return h("div", {
+            class: "card",
+            onclick: () => { location.hash = `#/projects/${p.id}`; },
+        }, [
+            h("h3", {}, [fuzzingDot, nameEl]),
+            h("p", { text: p.id }),
+            menuBtn,
+            menu,
+            picker.element,
+        ]);
+    }
 
     function renderGrid() {
         const query = searchInput.value.trim().toLowerCase();
-        const visible = query ? projects.filter((p) => p.name.toLowerCase().includes(query)) : projects;
-        const visibleDamaged = query ? damagedProjects.filter((d) => d.name.toLowerCase().includes(query)) : damagedProjects;
+        const here = (name) => !query || name.toLowerCase().includes(query);
+        const visibleFolders = folders.filter((f) => folderParent(f) === folderId && here(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+        const visible = projects.filter((p) => projectFolder(p) === folderId && here(p.name));
+        // A damaged project has no folder to read: it is listed at the top level.
+        const visibleDamaged = folderId ? [] : damagedProjects.filter((d) => here(d.name));
+        const anythingHere = folders.some((f) => folderParent(f) === folderId)
+            || projects.some((p) => projectFolder(p) === folderId)
+            || (!folderId && damagedProjects.length);
 
         gridBox.innerHTML = "";
-        if (!projects.length && !damagedProjects.length) {
-            gridBox.appendChild(h("div", { class: "empty", text: "No projects yet." }));
+        if (!anythingHere) {
+            gridBox.appendChild(h("div", { class: "empty", text: folderId ? "This folder is empty." : "No projects yet." }));
             return;
         }
-        if (!visible.length && !visibleDamaged.length) {
-            gridBox.appendChild(h("div", { class: "empty", text: "No projects match your search." }));
+        if (!visibleFolders.length && !visible.length && !visibleDamaged.length) {
+            gridBox.appendChild(h("div", { class: "empty", text: "No projects or folders match your search." }));
             return;
         }
         gridBox.appendChild(h("div", { class: "card-grid" }, [
+            ...visibleFolders.map(folderCard),
             ...visibleDamaged.map((d) => buildDamagedCard(d, async () => render())),
-            ...visible.map((p) => {
-                const { element: nameEl, startEdit } = buildEditableName("span", p.name, async (newName) => {
-                    await api(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
-                    p.name = newName;
-                });
-                const [menuBtn, menu] = buildCardMenu(
-                    async () => {
-                        try {
-                            await api(`/api/projects/${p.id}`, { method: "DELETE" });
-                            render();
-                        } catch (err) {
-                            alert(`Could not delete project: ${err.message}`);
-                        }
-                    },
-                    async () => startEdit()
-                );
-                let fuzzingDot = null;
-                if (p.is_fuzzing) {
-                    fuzzingDot = h("span", { class: "fuzzing-dot" });
-                    attachRunningJobsTooltip(fuzzingDot, p.running_jobs || []);
-                }
-                return h("div", {
-                    class: "card",
-                    onclick: () => { location.hash = `#/projects/${p.id}`; },
-                }, [
-                    h("h3", {}, [fuzzingDot, nameEl]),
-                    h("p", { text: p.id }),
-                    menuBtn,
-                    menu,
-                ]);
-            }),
+            ...visible.map(projectCard),
         ]));
     }
     searchInput.addEventListener("input", renderGrid);
@@ -2285,6 +2543,7 @@ async function renderProjects() {
         currentStream.addEventListener(name, async () => {
             try {
                 projects = await api("/api/projects");
+                if (openMovePopup && !openMovePopup.hidden) return; // do not close the Move dropdown under the user
                 renderGrid();
             } catch (e) { /* the next job event retries */ }
         });
@@ -2350,10 +2609,8 @@ async function buildOutputsMirrorSection(projectId) {
 }
 
 async function renderTargets(projectId) {
-    const project = await api(`/api/projects/${projectId}`);
-    breadcrumb.innerHTML = "";
-    breadcrumb.appendChild(h("a", { href: "#/", text: "Projects" }));
-    breadcrumb.append(` / ${project.name}`);
+    const [project, folders] = await Promise.all([api(`/api/projects/${projectId}`), fetchFolders()]);
+    setBreadcrumb(folders, project.folder_id, [{ text: project.name }]);
 
     const gridBox = h("div", {});
     const { element: searchInputEl, input: searchInput } = buildSearchInput({ class: "search-input targets-search", placeholder: "Search targets (name or URL)…" });
@@ -2664,16 +2921,17 @@ function buildInlineFuzzLauncherRow(colCount, entry) {
 const ACTIVE_JOB_STATUSES = new Set(["QUEUED", "RUNNING", "PAUSED"]);
 
 async function renderWorkspace(projectId, targetId, tab) {
-    const [project, target] = await Promise.all([
+    const [project, target, folders] = await Promise.all([
         api(`/api/projects/${projectId}`),
         api(`/api/projects/${projectId}/targets/${targetId}`),
+        fetchFolders(),
     ]);
     const TAB_LABELS = { jobs: "JOBS", results: "RESULTS", tree: "TREE" };
-    breadcrumb.innerHTML = "";
-    breadcrumb.appendChild(h("a", { href: "#/", text: "Projects" }));
-    breadcrumb.append(" / ");
-    breadcrumb.appendChild(h("a", { href: `#/projects/${projectId}`, text: project.name }));
-    breadcrumb.append(` / ${target.name} / ${TAB_LABELS[tab]}`);
+    setBreadcrumb(folders, project.folder_id, [
+        { text: project.name, href: `#/projects/${projectId}` },
+        { text: target.name },
+        { text: TAB_LABELS[tab] },
+    ]);
 
     const workspaceBase = `#/projects/${projectId}/targets/${targetId}`;
     // A single self-contained HTML snapshot of this Target,

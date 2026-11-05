@@ -62,7 +62,7 @@ OptiFuzz has three levels. Everything a target produces (jobs, results, tree, no
 
 ### The screens
 
-- **Projects**: the start page. Create, search, rename and delete projects.
+- **Projects**: the start page. Create, search, rename, move and delete projects, and group them in folders.
 - **Targets**: opened by clicking a project. Add targets to it, set the project's outputs mirror, and export all its targets at once.
 - **Target workspace**: opened by clicking a target. It has the **JOBS**, **RESULTS** and **TREE** tabs and the buttons to export that single target.
 - **Settings**: the gear icon at the top right of the header, next to the version number. It holds the app-wide options (see [Settings](#11-settings)).
@@ -99,6 +99,12 @@ Each page remembers its scroll position, so you can switch between JOBS, RESULTS
 Type a name and click **+ New Project** to create one. A name can be written in any language and has up to 80 characters; if you click the button with the field empty, the field turns red and a small message appears right below it. Every wrong value in the app is shown the same way: the field turns red with a short message under it (it floats over the page, nothing moves), and both go away when you click anywhere else, press Esc or edit the field. Click a project card to open it, and use the search box above the cards to filter them by name.
 
 To rename or delete a project, click the three dots (⋯) in the top-right corner of its card and choose **Rename** or **Delete**. After choosing Rename, type the new name where the old one was and press Enter. Deleting removes the project together with its targets, jobs and results.
+
+#### Folders
+
+Click **+ New folder** (next to **+ New Project**) to group projects. A folder is the yellow card with a folder icon; click it to open it, and the top bar shows where you are (**Projects / Clients / Acme**, each part a link). Inside a folder the page is the same as Projects, but it only lists what the folder holds, and anything you create there goes into it. Folders can hold other folders. Folder and project names are checked separately; two folders in the same place cannot share a name.
+
+The three-dot menu of a folder has the same **Rename** and **Delete** as a project, and **Move** is in both menus. **Move** opens a tree of your folders (projects are listed greyed out for context): pick the destination, or **Projects (top level)**, and click **Move**. A folder cannot be moved into itself or into one of its own subfolders, and only an empty folder can be deleted. Moving changes only where something is shown: no project data is touched.
 
 A small orange dot on a card means something is fuzzing inside it right now. Hover the dot to see each running job with its target, path and progress. It updates live.
 
