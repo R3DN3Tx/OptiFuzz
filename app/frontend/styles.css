@@ -135,9 +135,15 @@ header h1 {
     display: block;
 }
 
+/* A long path (many nested folders) wraps onto further lines inside its own space, left of the
+   version, instead of running on underneath it: it may shrink (min-width: 0) and break anywhere. */
 .breadcrumb {
     color: var(--muted);
     font-size: 13px;
+    flex: 0 1 auto;
+    min-width: 0;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .breadcrumb a { color: var(--text); text-decoration: none; }
