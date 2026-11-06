@@ -2453,7 +2453,7 @@ function buildMovePicker({ folders, projects, blockedFolderIds, currentFolderId,
 // ---- Projects -------------------------------------------------------
 
 async function renderProjects(folderId = "") {
-    pendingBreadcrumb = []; // the top level has no path (a folder sets its own below)
+    pendingBreadcrumb = [{ text: "Projects" }]; // the top level: the current page, so not a link (a folder sets its own below)
     // In parallel: the view is only as slow as the slowest request, not their sum.
     const [projectsList, damagedAll, folders] = await Promise.all([api("/api/projects"), fetchDamaged(), fetchFolders()]);
     let projects = projectsList;
