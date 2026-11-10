@@ -58,6 +58,10 @@ Routes that deliberately answer something else, so status handling can be checke
 | `/crash`, `/broken-export` | 500 | |
 | `/admin/secret`, `/admin/export` | 403 | inside a subdirectory |
 | `/admin/old` | 302 | to `/admin/panel/index.html` on the same host, another port (`127.0.0.1:9090`) |
+| `/api/v1-admin`, `/api/v1-debug`, `/api/v1-legacy` | 403 / 500 / 404 | names to find with `FUZZ` glued to a prefix (`/api/v1-FUZZ`) |
+| `/search/?q=<value>` | 200 | the same generic page for almost any value; `admin` (longer page, 200), `secret` (403), `old` (302), `debug` (500) answer differently: try `/search/?q=FUZZ` |
+| `/search/?<name>=1` | 200 | generic page, except the names `debug` (200, other page), `admin` (403) and `test` (500): try `/search/?FUZZ=1` |
+| `/download/report?mode=raw`, `/download/backup?mode=raw` | 200 / 403 | without `mode=raw` both are 404: try `/download/FUZZ?mode=raw` |
 | `/api/v1/internal` | 403 | |
 | `/api/v1/crash`, `/api/v2/debug` | 500 | |
 | `/api/v2/beta` | 404 | custom page |

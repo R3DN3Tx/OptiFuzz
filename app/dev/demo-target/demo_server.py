@@ -2,13 +2,13 @@
 demo_site/ directory like before, plus a handful of fixed routes that
 return non-2xx/3xx status codes with deliberately different body sizes, so
 status-code handling (and dirsearch's own same-size-404 detection) can be
-eyeballed directly in the app.
-"""
+eyeballed directly in the app.\n"""
 from __future__ import annotations
 
 import http.server
 import os
 import socketserver
+from urllib.parse import parse_qsl, urlsplit
 
 DEMO_DIR = os.path.dirname(os.path.abspath(__file__)) + "/demo_site"
 
@@ -51,6 +51,11 @@ SPECIAL_ROUTES = {
     "/static/private": (403, b"Forbidden: private static assets.\n"),
     "/backup/old": (302, b"Moved...\n", "/backup/db.sql.bak"),
     "/wp-admin/staging": (403, b"Forbidden: staging.\n"),
+    # Names that only exist once the middle of a path or the start of a word is filled in
+    # (for trying FUZZ in the middle of a path: /api/FUZZ/crash, /api/v1-FUZZ).
+    "/api/v1-admin": (403, b"Forbidden: v1 admin area.\n"),
+    "/api/v1-debug": (500, b"500: v1 debug endpoint failed.\n"),
+    "/api/v1-legacy": (404, b"Custom 404: the v1 legacy endpoint is gone and will not come back.\n"),
     "/external-docs": (
         302,
         b"Redirecting to externally-hosted docs...\n",
@@ -59,12 +64,51 @@ SPECIAL_ROUTES = {
 }
 
 
+GENERIC_SEARCH_PAGE = b"<html><body>Search results page. Nothing special for this value.</body></html>\n" * 3
+
+
+def query_route(path: str, query: str):
+    """Pages whose answer depends on the query string (for trying FUZZ in a query): the same generic page
+    for almost any value, and something different only for a few. (status, body[, Location]) or None."""
+    params = parse_qsl(query, keep_blank_values=True)
+    names = {name for name, _ in params}
+    values = dict(params)
+    if path in ("/search", "/search/"):
+        # A value that changes the answer (FUZZ as the value of q)
+        if values.get("q") == "admin":
+            return 200, b"<html><body>Admin search: 3 hidden results, last login 2025-01-01, owner root.</body></html>\n" * 4
+        if values.get("q") == "secret":
+            return 403, b"Forbidden: secret search is not allowed.\n"
+        if values.get("q") == "old":
+            return 302, b"Moved...\n", "/search/?q=new"
+        if values.get("q") == "debug":
+            return 500, b"500: search backend failed on this term.\n"
+        # A parameter NAME that changes the answer (FUZZ as the name: /search/?FUZZ=1)
+        if "debug" in names:
+            return 200, b"<html><body>DEBUG PANEL: cache 98%, workers 12, queue 0, build 7c1e9.</body></html>\n" * 2
+        if "admin" in names:
+            return 403, b"Forbidden: admin parameter.\n"
+        if "test" in names:
+            return 500, b"500: test parameter crashed the page.\n"
+        return 200, GENERIC_SEARCH_PAGE
+    if path in ("/download/report", "/download/backup"):
+        if values.get("mode") != "raw":
+            return 404, b"Custom 404: nothing to download without mode=raw.\n"
+        if path.endswith("backup"):
+            return 403, b"Forbidden: backups are not downloadable.\n"
+        return 200, b"RAW REPORT CONTENTS: line 1\nline 2\nline 3\n"
+    return None
+
+
 class DemoHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DEMO_DIR, **kwargs)
 
     def do_GET(self):
-        route = SPECIAL_ROUTES.get(self.path)
+        parts = urlsplit(self.path)
+        route = query_route(parts.path, parts.query) if parts.query or parts.path.startswith(("/search", "/download")) else None
+        if route is None:
+            route = SPECIAL_ROUTES.get(self.path)
         if route:
             status, body = route[0], route[1]
             self.send_response(status)
