@@ -135,6 +135,23 @@ def test_restart_starts_the_helper_then_closes_the_window(monkeypatch: pytest.Mo
     assert cmd[-2:] == ["python", "run_desktop.py"]
 
 
+def test_the_restart_helper_never_runs_under_a_console_interpreter_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    # python.exe gets a console window of its own when started from the console-less app (a blank terminal
+    # flashed between closing and reopening); pythonw.exe has none.
+    (tmp_path / "python.exe").write_bytes(b"")
+    (tmp_path / "pythonw.exe").write_bytes(b"")
+    monkeypatch.setattr(update_service.sys, "platform", "win32")
+    monkeypatch.setattr(update_service.sys, "executable", str(tmp_path / "python.exe"))
+    assert update_service._windowless_python() == str(tmp_path / "pythonw.exe")
+    monkeypatch.setattr(update_service.sys, "executable", str(tmp_path / "pythonw.exe"))
+    assert update_service._windowless_python() == str(tmp_path / "pythonw.exe")
+    monkeypatch.setattr(update_service.sys, "platform", "linux")
+    monkeypatch.setattr(update_service.sys, "executable", str(tmp_path / "python.exe"))
+    assert update_service._windowless_python() == str(tmp_path / "python.exe")
+
+
 def _run_relaunch(pid: int, marker: Path) -> subprocess.Popen:
     import sys
 

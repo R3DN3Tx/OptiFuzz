@@ -118,7 +118,7 @@ def restart() -> None:
         options["start_new_session"] = True
     try:
         subprocess.Popen(
-            [_pip_python(), str(_RELAUNCH_SCRIPT), str(os.getpid()), str(REPO_ROOT), *_restart_command],
+            [_windowless_python(), str(_RELAUNCH_SCRIPT), str(os.getpid()), str(REPO_ROOT), *_restart_command],
             cwd=str(REPO_ROOT), **options,
         )
     except OSError as exc:
@@ -127,6 +127,18 @@ def restart() -> None:
     timer = threading.Timer(_CLOSE_DELAY_SECONDS, close)
     timer.daemon = True
     timer.start()
+
+
+def _windowless_python() -> str:
+    """The interpreter for the restart helper. On Windows the console-subsystem python.exe gets a console window
+    of its own when started from the console-less app (a blank terminal flashed between closing and reopening),
+    even detached: pythonw.exe has no console at all, and the helper needs none."""
+    exe = Path(sys.executable)
+    if sys.platform == "win32" and exe.name.lower() == "python.exe":
+        candidate = exe.with_name("pythonw.exe")
+        if candidate.exists():
+            return str(candidate)
+    return str(exe)
 
 
 def _pip_python() -> str:
