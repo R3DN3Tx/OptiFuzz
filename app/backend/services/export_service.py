@@ -957,6 +957,12 @@ function jobFuzzedPath(j) {
     return path.split(/[?#]/)[0];
 }
 // Text with the fuzz word painted as a tag (a job made with the fuzz word shows its pattern).
+// A fixed query lives in the Headers chip (as for any job); a query that holds the fuzz word is part of the pattern.
+function fuzzShownPath(path, keyword) {
+    var text = String(path || "");
+    var at = text.indexOf("?");
+    return at !== -1 && text.slice(at).indexOf(keyword) === -1 ? text.slice(0, at) : text;
+}
 function fuzzPathText(path, keyword) {
     var box = h("span", { class: "fuzz-path-text" }, []);
     var rest = String(path);
@@ -1028,7 +1034,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
         if (anyPattern) {
             cells.push(h("td", {}, [entry.fuzz_keyword
-                ? fuzzPathText(entry.path, entry.fuzz_keyword)
+                ? fuzzPathText(fuzzShownPath(entry.path, entry.fuzz_keyword), entry.fuzz_keyword)
                 : h("span", { text: String(entry.path || "").split(/[?#]/)[0] || "—" })]));
         }
         cells.push(
@@ -1767,7 +1773,7 @@ if (!DATA.jobs.length) {
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
         var jobPathLink = job.fuzz_keyword
-            ? fuzzPathText(job.path, job.fuzz_keyword)
+            ? fuzzPathText(fuzzShownPath(job.path, job.fuzz_keyword), job.fuzz_keyword)
             : h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);
@@ -2487,6 +2493,12 @@ function jobFuzzedPath(j) {
     return path.split(/[?#]/)[0];
 }
 // Text with the fuzz word painted as a tag (a job made with the fuzz word shows its pattern).
+// A fixed query lives in the Headers chip (as for any job); a query that holds the fuzz word is part of the pattern.
+function fuzzShownPath(path, keyword) {
+    var text = String(path || "");
+    var at = text.indexOf("?");
+    return at !== -1 && text.slice(at).indexOf(keyword) === -1 ? text.slice(0, at) : text;
+}
 function fuzzPathText(path, keyword) {
     var box = h("span", { class: "fuzz-path-text" }, []);
     var rest = String(path);
@@ -2558,7 +2570,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
         if (anyPattern) {
             cells.push(h("td", {}, [entry.fuzz_keyword
-                ? fuzzPathText(entry.path, entry.fuzz_keyword)
+                ? fuzzPathText(fuzzShownPath(entry.path, entry.fuzz_keyword), entry.fuzz_keyword)
                 : h("span", { text: String(entry.path || "").split(/[?#]/)[0] || "—" })]));
         }
         cells.push(
@@ -3282,7 +3294,7 @@ function renderJobs() {
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
         var jobPathLink = job.fuzz_keyword
-            ? fuzzPathText(job.path, job.fuzz_keyword)
+            ? fuzzPathText(fuzzShownPath(job.path, job.fuzz_keyword), job.fuzz_keyword)
             : h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);

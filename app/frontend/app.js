@@ -758,7 +758,7 @@ function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
 function attachRunningJobsTooltip(el, runningJobs) {
     const box = h("div", { class: "app-tooltip running-jobs-tooltip" }, runningJobs.map((j) =>
         h("div", { class: "running-jobs-tooltip-row" }, [
-            h("span", { class: "running-jobs-tooltip-path", text: (j.target ? `${j.target} ` : "") + (j.fuzz_keyword ? j.path : pathWithoutQuery(j.path)) }),
+            h("span", { class: "running-jobs-tooltip-path", text: (j.target ? `${j.target} ` : "") + (j.fuzz_keyword ? fuzzShownPath(j.path, j.fuzz_keyword) : pathWithoutQuery(j.path)) }),
             h("span", { class: "running-jobs-tooltip-percent", text: `${j.percent}%` }),
         ])
     ));
@@ -921,7 +921,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: `job-status job-${entry.status}`, text: entry.status })]));
         if (anyPattern) {
             cells.push(h("td", {}, [entry.fuzz_keyword
-                ? buildFuzzPathText(entry.path, entry.fuzz_keyword)
+                ? buildFuzzPathText(fuzzShownPath(entry.path, entry.fuzz_keyword), entry.fuzz_keyword)
                 : h("span", { text: pathWithoutQuery(entry.path) || "—" })]));
         }
         cells.push(
@@ -1077,7 +1077,7 @@ function buildClickablePath(path, baseUrl, displayText) {
 
 // The path of a job made with the fuzz word in it: not a link (it is a pattern, not a page), the word painted as a tag.
 function buildFuzzJobPath(job) {
-    const text = buildFuzzPathText(job.path, job.fuzz_keyword);
+    const text = buildFuzzPathText(fuzzShownPath(job.path, job.fuzz_keyword), job.fuzz_keyword);
     text.title = `${job.fuzz_keyword} stands for each word of the wordlist`;
     attachCopyPathContextMenu(text, () => job.path);
     return text;
@@ -1502,6 +1502,14 @@ function pathWithoutQuery(path) {
 
 // The place a job fuzzes (the one that carries its "Fuzzed" tag): its path without the query, or -- for a job made
 // with the fuzz word -- the directory the word sits in ("/api/" for "/api/FUZZ/crash", "/search/" for "/search/?q=FUZZ").
+// A pattern as shown in the Path of a job or of its history: a fixed query ("?mode=raw") lives in the Headers
+// chip like it does for any job, so it is left out here; a query that holds the fuzz word is part of the pattern.
+function fuzzShownPath(path, keyword) {
+    const text = String(path || "");
+    const at = text.indexOf("?");
+    return at !== -1 && !text.slice(at).includes(keyword) ? text.slice(0, at) : text;
+}
+
 function jobFuzzedPath(job) {
     const path = String(job.path || "");
     if (job.fuzz_keyword && path.includes(job.fuzz_keyword)) {

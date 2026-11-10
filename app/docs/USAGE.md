@@ -151,7 +151,7 @@ Backspace or Delete next to the tag removes the whole tag. Use `FUZZ` once, and 
 
 In the job list the path of such a job shows the tag, and it is not a link, since it is a pattern and not a page. Clicking its Results count takes you to the folder where `FUZZ` sits.
 
-The **Fuzzed** tag of such a job goes on the folder where `FUZZ` sits (`/api/` for `/api/FUZZ/crash`, `/search/` for `/search/?q=FUZZ`), in Results and in Tree. Open it to see the jobs fuzzed there. When one of them uses `FUZZ`, the table gets a **Path** column with its pattern.
+The **Fuzzed** tag of such a job goes on the folder where `FUZZ` sits (`/api/` for `/api/FUZZ/crash`, `/search/` for `/search/?q=FUZZ`), in Results and in Tree. Open it to see the jobs fuzzed there. When one of them uses `FUZZ`, the table gets a **Path** column with its pattern. A fixed query after the pattern (`/download/FUZZ?mode=raw`) shows in **Headers** as `query*`, like for any job, and not in Path.
 
 In Results, each path found by a job with `FUZZ` in the query is shown with its query (`?q=admin`). A fixed query (one you typed without `FUZZ`) is not part of the path shown there: hover the path to see the full URL.
 
