@@ -2301,8 +2301,8 @@ function setupSettingsMenu() {
         panel.appendChild(h("div", {
             class: "hint",
             text: `Put this word in the path of a New Fuzz to say where the wordlist goes: /api/${data.default}/users `
-                + "requests /api/admin/users, /api/backup/users... Change it if a real path of your target "
-                + "already contains it. Leave it empty for the default.",
+                + "requests /api/admin/users, /api/backup/users... Without it, the wordlist goes at the end of the path. "
+                + "Change the word if a real path of your target already contains it. Leave it empty for the default.",
         }));
 
         const input = h("input", {
@@ -5165,15 +5165,17 @@ function buildFuzzPathField({ placeholder, value, getKeyword, onEnter }) {
         const keyword = getKeyword();
         const parts = [];
         for (const node of field.childNodes) {
-            const tag = node.nodeType === 1 && node.classList.contains("fuzz-tag") && node.textContent === keyword;
+            const styled = node.nodeType === 1 && node.classList.contains("fuzz-tag");
+            const tag = styled && node.textContent === keyword;
             const text = node.textContent;
             if (!text) continue;
-            if (!tag && parts.length && !parts[parts.length - 1].tag) parts[parts.length - 1].text += text;
+            if (styled && !tag) parts.push({ text, tag: false, stray: true }); // typed over the tag: still wearing its style
+            else if (!tag && parts.length && !parts[parts.length - 1].tag && !parts[parts.length - 1].stray) parts[parts.length - 1].text += text;
             else parts.push({ text, tag });
         }
         return parts;
     }
-    const signature = (parts) => parts.map((p) => (p.tag ? "T:" : "S:") + p.text).join("|");
+    const signature = (parts) => parts.map((p) => (p.tag ? "T:" : p.stray ? "X:" : "S:") + p.text).join("|");
 
     function render(text) {
         const keyword = getKeyword();
@@ -5405,7 +5407,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         }
         forceExtLabel.title = wantLocked ? `Not available while the path has ${fuzzKeyword}.` : forceExtTitle;
     }
-    const fuzzPathTitle = () => `Type ${fuzzKeyword} where the wordlist should go, e.g. /api/${fuzzKeyword}/users`;
+    const fuzzPathTitle = () => `Type ${fuzzKeyword} where the wordlist should go, e.g. /api/${fuzzKeyword}/users. Without it, the wordlist is added at the end of the path.`;
     pathInput.title = fuzzPathTitle();
     pathInput.addEventListener("input", syncForceExt);
     function onFuzzKeywordChanged(event) {

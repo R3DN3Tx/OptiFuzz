@@ -71,8 +71,8 @@ def test_a_path_without_the_fuzz_word_is_unchanged(client: TestClient, tmp_path:
     assert job["config"]["force_extensions"] is True
 
 
-@pytest.mark.parametrize("path", ["/FUZZ/a/FUZZ", "/a?x=FUZZ", "/FUZZ?x=1"])
-def test_a_fuzz_word_used_twice_or_in_a_query_is_refused(client: TestClient, tmp_path: Path, path: str) -> None:
+@pytest.mark.parametrize("path", ["/FUZZ/a/FUZZ", "/a?x=FUZZ&y=FUZZ", "/a?x=FUZZ#top"])
+def test_a_fuzz_word_used_twice_or_with_a_fragment_is_refused(client: TestClient, tmp_path: Path, path: str) -> None:
     _pid, _tid, response = _create(client, tmp_path, path)
 
     assert response.status_code == 400
@@ -102,11 +102,51 @@ def test_a_bad_fuzz_word_is_refused(client: TestClient, word: str) -> None:
     assert client.put("/api/settings/fuzz-keyword", json={"keyword": word}).status_code == 400
 
 
+def test_a_fuzz_word_in_the_query_string_goes_after_the_question_mark_of_every_word(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    pid, tid, response = _create(client, tmp_path, "/search/?q=FUZZ&lang=en")
+
+    job = response.json()
+    assert job["path"] == "/search/?q=FUZZ&lang=en"
+    assert job["config"]["url"] == "https://t1.local/search/"
+    full = (layout.job_wordlist_dir(pid, tid, job["id"]) / "full.txt").read_text(encoding="utf-8").splitlines()
+    # a value goes in exactly as it is (no slash stripped)
+    assert full == ["?q=admin&lang=en", "# comment", "", "?q=/backup/&lang=en", "?q=static&lang=en"]
+
+
+def test_a_fuzz_word_in_the_path_may_be_followed_by_a_query(client: TestClient, tmp_path: Path) -> None:
+    pid, tid, response = _create(client, tmp_path, "/api/FUZZ?v=1")
+
+    assert response.status_code == 200
+    job = response.json()
+    assert job["config"]["url"] == "https://t1.local/api/"
+    full = (layout.job_wordlist_dir(pid, tid, job["id"]) / "full.txt").read_text(encoding="utf-8").splitlines()
+    assert full[0] == "admin?v=1"
+
+
+def test_results_of_a_query_fuzz_keep_the_query_in_their_path() -> None:
+    from backend.models.job import FuzzJob, JobStatus
+    from backend.services import results_service
+
+    assert results_service.result_path("https://t1.local/search/?q=admin", True) == "/search/?q=admin"
+    assert results_service.result_path("https://t1.local/search/?q=admin", False) == "/search/"
+    job = FuzzJob(id="j", target_id="t", project_id="p", path="/search/?q=FUZZ", config={}, status=JobStatus.COMPLETED,
+                  created_at="", fuzz_keyword="FUZZ")
+    assert job.fuzz_in_query
+    assert not FuzzJob(id="j", target_id="t", project_id="p", path="/a/FUZZ?q=1", config={}, status=JobStatus.COMPLETED,
+                       created_at="", fuzz_keyword="FUZZ").fuzz_in_query
+
+
 def test_split_fuzz_template() -> None:
     assert target_service.split_fuzz_template("/a/FUZZ/b", "FUZZ") == ("/a/FUZZ/b", "/a/", "", "/b")
     assert target_service.split_fuzz_template("a/pre-FUZZ", "FUZZ") == ("/a/pre-FUZZ", "/a/", "pre-", "")
     assert target_service.split_fuzz_template("/FUZZ", "FUZZ") == ("/FUZZ", "/", "", "")
     assert target_service.split_fuzz_template("/a/b/", "FUZZ") is None
+    assert target_service.split_fuzz_template("/s/?q=FUZZ&x=1", "FUZZ") == ("/s/?q=FUZZ&x=1", "/s/", "?q=", "&x=1")
+    # a "/" inside the query belongs to the text before each word, not to the directory
+    assert target_service.split_fuzz_template("/s/?next=/a/FUZZ", "FUZZ") == ("/s/?next=/a/FUZZ", "/s/", "?next=/a/", "")
+    assert target_service.split_fuzz_template("/a/FUZZ?x=1", "FUZZ") == ("/a/FUZZ?x=1", "/a/", "", "?x=1")
 
 
 def test_around_word_keeps_blank_lines_and_comments() -> None:
@@ -116,3 +156,4 @@ def test_around_word_keeps_blank_lines_and_comments() -> None:
     assert _around_word("# note", "", "/x") == "# note"
     assert _around_word("", "", "/x") == ""
     assert _around_word("/", "", "/x") == ""
+    assert _around_word("/etc/passwd", "?f=", "&x=1") == "?f=/etc/passwd&x=1"

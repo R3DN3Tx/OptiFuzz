@@ -141,12 +141,13 @@ def normalize_fuzz_path(path: str) -> str:
 
 
 def split_fuzz_template(path: str, keyword: str) -> tuple[str, str, str, str] | None:
-    """A New Fuzz path with the fuzz word in it ("/api/FUZZ/users") as
+    """A New Fuzz path with the fuzz word in it ("/api/FUZZ/users", "/search/?q=FUZZ") as
     (stored path, directory to request, text before the word, text after it); None when the path has no fuzz word.
 
-    dirsearch can only append a wordlist entry to the END of a URL, so the part after the word travels with each
-    entry instead: "/api/v1-FUZZ/users" requests "/api/" + "v1-<word>/users". The stored path keeps the template as
-    typed (no trailing "/" added: what follows the word is the user's to decide).
+    dirsearch can only append a wordlist entry to the END of a URL, so the text around the word travels with each
+    entry instead: "/api/v1-FUZZ/users" requests "/api/" + "v1-<word>/users", and "/search/?q=FUZZ" requests
+    "/search/" + "?q=<word>". The stored path keeps the template as typed (no trailing "/" added: what follows
+    the word is the user's to decide).
     """
     path = path.strip()
     if keyword not in path:
@@ -155,10 +156,13 @@ def split_fuzz_template(path: str, keyword: str) -> tuple[str, str, str, str] | 
         raise ValueError(f"Use {keyword} only once in the path")
     if not path.startswith("/"):
         path = "/" + path
+    if "#" in path:
+        raise ValueError(f"A path with {keyword} cannot have a # fragment")
     before, _, after = path.partition(keyword)
-    if "?" in path or "#" in path:
-        raise ValueError(f"{keyword} can only be placed in the path, not in a query string")
-    cut = before.rfind("/") + 1
+    # The directory dirsearch is pointed at ends at the last "/" of the PATH part: a "/" inside the query
+    # ("?next=/a/FUZZ") belongs to the text that goes before each word.
+    query_at = before.find("?")
+    cut = (before if query_at == -1 else before[:query_at]).rfind("/") + 1
     return path, before[:cut], before[cut:], after
 
 

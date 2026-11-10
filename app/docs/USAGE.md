@@ -139,12 +139,13 @@ You can also start a fuzz from a path you already found. In RESULTS and in TREE,
 
 ### Fuzzing inside a path
 
-By default the wordlist is tried at the end of the path. To put it somewhere else, type the word `FUZZ` in the **Path** where the wordlist should go. `FUZZ` turns into a blue tag, and each word of the wordlist replaces it:
+If the path has no `FUZZ`, the wordlist is tried at the end of it, as usual. To put it somewhere else, type the word `FUZZ` in the **Path** where the wordlist should go. `FUZZ` turns into a blue tag, and each word of the wordlist replaces it:
 
 - `/api/FUZZ/users` requests `/api/admin/users`, `/api/backup/users`, and so on.
 - `/api/v1-FUZZ` requests `/api/v1-admin`, `/api/v1-backup`, and so on.
+- `/search/?q=FUZZ` requests `/search/?q=admin`, `/search/?q=backup`, and so on. `FUZZ` can be the value of a parameter or its name (`/search/?FUZZ=1`). In a query the words are sent exactly as they are in the wordlist, and Results shows each found path with its query.
 
-Backspace or Delete next to the tag removes the whole tag. Use `FUZZ` once, and in the path only (not in a query string). You can change the word in [Fuzz word](#fuzz-word) if your target already uses `FUZZ` in its paths.
+Backspace or Delete next to the tag removes the whole tag. Use `FUZZ` once, and not after a `#`. You can change the word in [Fuzz word](#fuzz-word) if your target already uses `FUZZ` in its paths.
 
 **Force extensions (-f)** is switched off and greyed out while the path has `FUZZ`, because it adds the extension at the end of each word and the path goes on after it. When you remove `FUZZ`, the option goes back to what it was. Extensions that your wordlist adds itself with `%EXT%` still work.
 

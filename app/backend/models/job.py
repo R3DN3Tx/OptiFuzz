@@ -94,6 +94,13 @@ class FuzzJob:
     fuzz_keyword: str = ""
 
     @property
+    def fuzz_in_query(self) -> bool:
+        """True when the fuzz word of this job sits in the query string ("/search/?q=FUZZ"): there the query is
+        what changes from one request to the next, so Results keeps it as part of the path."""
+        at = self.path.find(self.fuzz_keyword) if self.fuzz_keyword else -1
+        return at != -1 and "?" in self.path[:at]
+
+    @property
     def raw_filename(self) -> str:
         """Name of this job's raw dirsearch output (.txt), the same one the outputs mirror copy has."""
         from backend.persistence import layout  # lazy: persistence imports this module's package

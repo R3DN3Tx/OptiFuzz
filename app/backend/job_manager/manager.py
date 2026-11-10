@@ -1423,7 +1423,8 @@ class JobManager:
         """Makes sure the request that auto-paused the job (a 429, a 403 from a block...) is
         requested again on resume: its answer is not a real result of that path."""
         base_path = urlparse(config.url).path.rstrip("/") + "/"
-        path = unquote(urlparse(url).path)
+        # A fuzz job's words carry the text around the fuzz word with them, query included.
+        path = unquote(results_service.result_path(url, bool(job.fuzz_keyword)))
         if not path.startswith(base_path):
             return  # not a wordlist path (e.g. dirsearch's own calibration probe)
         index = first_line_requesting(
@@ -1510,7 +1511,10 @@ class JobManager:
         )
 
     def _flush_results(self, job_id: str, items: list[ParsedResult]) -> None:
-        results = [_parsed_to_result(job_id, item) for item in items]
+        with self._lock:
+            known = self._jobs.get(job_id)
+        keep_query = bool(known and known.fuzz_in_query)
+        results = [_parsed_to_result(job_id, item, keep_query) for item in items]
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
@@ -1577,13 +1581,13 @@ def _finding_key(result: Result) -> tuple:
     return (result.url, result.status, result.redirect or "")
 
 
-def _parsed_to_result(job_id: str, parsed: ParsedResult) -> Result:
+def _parsed_to_result(job_id: str, parsed: ParsedResult, keep_query: bool = False) -> Result:
     return Result(
         job_id=job_id,
         time=parsed.time,
         status=parsed.status,
         size=parsed.size,
         url=parsed.url,
-        path=urlparse(parsed.url).path or "/",
+        path=results_service.result_path(parsed.url, keep_query),
         redirect=parsed.redirect,
     )

@@ -10,6 +10,13 @@ from backend.persistence.atomic import read_json, write_json_atomic
 from backend.persistence.paths import path_is_file
 
 
+def result_path(url: str, keep_query: bool) -> str:
+    """The path Results shows for a found URL; a job that fuzzes a query string keeps the query too."""
+    parts = urlparse(url)
+    path = parts.path or "/"
+    return f"{path}?{parts.query}" if keep_query and parts.query else path
+
+
 def read_job_results(project_id: str, target_id: str, job: FuzzJob) -> list[Result]:
     """One job's own results, read from its raw JSON report on disk. Only
     safe to call when no dirsearch process is writing that report -- see
@@ -40,7 +47,7 @@ def read_job_results(project_id: str, target_id: str, job: FuzzJob) -> list[Resu
                 status=entry.get("status", 0),
                 size=_format_size(entry.get("contentLength")),
                 url=url,
-                path=urlparse(url).path or "/",
+                path=result_path(url, job.fuzz_in_query),
                 redirect=entry.get("redirect") or None,
             )
         )

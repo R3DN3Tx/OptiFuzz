@@ -62,10 +62,13 @@ def resolve_wordlist(
 def _around_word(line: str, prefix: str, suffix: str) -> str:
     """One wordlist line with the text that surrounds the fuzz word in the job's path put around it
     ("admin" -> "admin/users" for "/api/FUZZ/users"). Blank lines and comments stay as they are (the line
-    numbers must keep lining up for a resume); a word that is only a slash has nothing to put around."""
+    numbers must keep lining up for a resume); a word that is only a slash has nothing to put around.
+    In a query string ("?q=" + word) the word is a value and goes in exactly as it is."""
     word = line.strip()
     if not word or word.startswith("#"):
         return line
+    if "?" in prefix:
+        return f"{prefix}{word}{suffix}"
     word = word.lstrip("/")
     if suffix:
         word = word.rstrip("/")  # "admin/" + "/users" would request "admin//users"
