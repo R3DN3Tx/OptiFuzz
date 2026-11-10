@@ -89,6 +89,9 @@ class FuzzJob:
     pause_on_status: list[int] = field(default_factory=list)
     output_stem: str = ""  # "" => pre-existing job, use layout.job_output_base_legacy
     output_flat: bool = False  # True => outputs/<stem>_<id>.{ext}, no per-job subfolder
+    # The word that marked the fuzz position in `path` ("/api/FUZZ/users") when this job was created; "" for a
+    # normal job. Kept with the job so changing the word in Settings never changes how an old job is shown.
+    fuzz_keyword: str = ""
 
     @property
     def raw_filename(self) -> str:
@@ -130,6 +133,7 @@ class FuzzJob:
             "pause_on_status": self.pause_on_status,
             "output_stem": self.output_stem,
             "output_flat": self.output_flat,
+            "fuzz_keyword": self.fuzz_keyword,
         }
 
     @classmethod
@@ -162,4 +166,5 @@ class FuzzJob:
             pause_on_status=data.get("pause_on_status", []),
             output_stem=data.get("output_stem", ""),
             output_flat=data.get("output_flat", False),
+            fuzz_keyword=data.get("fuzz_keyword", ""),
         )

@@ -140,6 +140,28 @@ def normalize_fuzz_path(path: str) -> str:
     return head + tail
 
 
+def split_fuzz_template(path: str, keyword: str) -> tuple[str, str, str, str] | None:
+    """A New Fuzz path with the fuzz word in it ("/api/FUZZ/users") as
+    (stored path, directory to request, text before the word, text after it); None when the path has no fuzz word.
+
+    dirsearch can only append a wordlist entry to the END of a URL, so the part after the word travels with each
+    entry instead: "/api/v1-FUZZ/users" requests "/api/" + "v1-<word>/users". The stored path keeps the template as
+    typed (no trailing "/" added: what follows the word is the user's to decide).
+    """
+    path = path.strip()
+    if keyword not in path:
+        return None
+    if path.count(keyword) > 1:
+        raise ValueError(f"Use {keyword} only once in the path")
+    if not path.startswith("/"):
+        path = "/" + path
+    before, _, after = path.partition(keyword)
+    if "?" in path or "#" in path:
+        raise ValueError(f"{keyword} can only be placed in the path, not in a query string")
+    cut = before.rfind("/") + 1
+    return path, before[:cut], before[cut:], after
+
+
 def resolve_fuzz_url(base_url: str, path: str) -> str:
     """Join a Target's base_url with a sub-path the same way a human would
     expect."""

@@ -202,6 +202,11 @@ class WordlistsDirRequest(BaseModel):
     dir: str | None = None
 
 
+class FuzzKeywordRequest(BaseModel):
+    # None or "" clears it (back to the default word).
+    keyword: str | None = None
+
+
 class UiZoomRequest(BaseModel):
     # None clears it (back to automatic); the range is checked by display_service.
     percent: int | None = None

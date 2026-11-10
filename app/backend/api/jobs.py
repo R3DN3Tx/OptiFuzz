@@ -59,12 +59,25 @@ def create_job(
             status_code=400, detail=f"Not a dirsearch default header: {', '.join(unknown)}"
         )
 
-    path = target_service.normalize_fuzz_path(body.path)
-    url = target_service.resolve_fuzz_url(target.base_url, path)
+    # A fuzz word inside the path ("/api/FUZZ/users"): the wordlist goes there instead of at the end.
+    fuzz_keyword = app_settings.get_fuzz_keyword()
+    try:
+        template = target_service.split_fuzz_template(body.path, fuzz_keyword)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if template is None:
+        fuzz_keyword = ""
+        path = target_service.normalize_fuzz_path(body.path)
+        url = target_service.resolve_fuzz_url(target.base_url, path)
+        word_prefix = word_suffix = ""
+    else:
+        path, directory, word_prefix, word_suffix = template
+        url = target_service.resolve_fuzz_url(target.base_url, directory)
     config = DirsearchJobConfig(
         url=url,
         extensions=tuple(body.extensions),
-        force_extensions=body.force_extensions,
+        # -f adds ".ext" after each word, which would land after the text that follows the fuzz word.
+        force_extensions=body.force_extensions and template is None,
         threads=body.threads,
         http_method=body.http_method,
         headers=body.headers,
@@ -103,6 +116,9 @@ def create_job(
         pause_on_status=body.pause_on_status,
         output_stem=output_stem,
         output_flat=True,  # current naming scheme -- see layout.job_output_base_flat
+        fuzz_keyword=fuzz_keyword,
+        word_prefix=word_prefix,
+        word_suffix=word_suffix,
     )
     return job.to_dict()
 

@@ -1720,3 +1720,25 @@ button.resume-gear-btn.primary {
 th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--text, inherit); }
 .sort-arrow { color: var(--muted); font-size: .8em; margin-left: 3px; }
+
+/* ---- Fuzz position in the New Fuzz path ---------------------------------- */
+/* A one-line editable box that looks like the inputs next to it, so a part of its text can be bold and blue. */
+.fuzz-path-field {
+    display: inline-block;
+    min-width: 160px;
+    white-space: pre;
+    overflow: hidden;
+    cursor: text;
+    font: inherit;
+    color: var(--text);
+    background: #1e222b;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+.fuzz-path-field:empty::before { content: attr(data-placeholder); color: #757575; }
+.fuzz-tag { color: var(--accent); font-weight: 700; }
+.fuzz-path-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Force extensions while the path has the fuzz word: shown off and out of reach. */
+details.advanced label.disabled { color: var(--muted); cursor: not-allowed; opacity: .6; }
+details.advanced label.disabled input { cursor: not-allowed; }

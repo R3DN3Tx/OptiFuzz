@@ -34,6 +34,8 @@ def resolve_wordlist(
     *,
     extensions: list[str] | None = None,
     force_extensions: bool = False,
+    word_prefix: str = "",
+    word_suffix: str = "",
 ) -> ResolvedWordlist:
     """Concatenates every source file's lines (in order) into one file at
     output_path -- this becomes the job's permanent on-disk wordlist, read
@@ -44,6 +46,8 @@ def resolve_wordlist(
     lines = list(_iter_source_lines(source_files))
     if not lines:
         raise ValueError("resolved wordlist is empty")
+    if word_prefix or word_suffix:
+        lines = [_around_word(line, word_prefix, word_suffix) for line in lines]
     # Blank lines and "#" comments stay in the file (the line numbers must keep lining up for a resume) and
     # dirsearch never requests them, but a list made only of them has nothing to fuzz.
     if not any(line.strip() and not line.strip().startswith("#") for line in lines):
@@ -53,6 +57,19 @@ def resolve_wordlist(
     extensions = list(extensions or [])
     total_requests = _estimate_requests(lines, extensions, force_extensions)
     return ResolvedWordlist(total_lines=len(lines), total_requests=total_requests)
+
+
+def _around_word(line: str, prefix: str, suffix: str) -> str:
+    """One wordlist line with the text that surrounds the fuzz word in the job's path put around it
+    ("admin" -> "admin/users" for "/api/FUZZ/users"). Blank lines and comments stay as they are (the line
+    numbers must keep lining up for a resume); a word that is only a slash has nothing to put around."""
+    word = line.strip()
+    if not word or word.startswith("#"):
+        return line
+    word = word.lstrip("/")
+    if suffix:
+        word = word.rstrip("/")  # "admin/" + "/users" would request "admin//users"
+    return f"{prefix}{word}{suffix}" if word else ""
 
 
 def estimate_requests(lines: list[str], extensions: list[str], force_extensions: bool) -> int:

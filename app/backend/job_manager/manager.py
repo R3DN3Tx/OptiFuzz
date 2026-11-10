@@ -296,12 +296,16 @@ class JobManager:
         pause_on_status: list[int] | None = None,
         output_stem: str = "",
         output_flat: bool = False,
+        fuzz_keyword: str = "",
+        word_prefix: str = "",
+        word_suffix: str = "",
     ) -> FuzzJob:
         job_id = uuid.uuid4().hex[:12]
         wordlist_dir = layout.job_wordlist_dir(project_id, target_id, job_id)
         resolved = resolve_wordlist(
             wordlist_files, wordlist_dir / "full.txt",
             extensions=list(config.extensions), force_extensions=config.force_extensions,
+            word_prefix=word_prefix, word_suffix=word_suffix,
         )
 
         job = FuzzJob(
@@ -318,6 +322,7 @@ class JobManager:
             pause_on_status=list(pause_on_status or []),
             output_stem=output_stem,
             output_flat=output_flat,
+            fuzz_keyword=fuzz_keyword,
         )
         self._save(job)
 

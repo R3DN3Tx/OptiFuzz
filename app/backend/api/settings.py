@@ -14,6 +14,7 @@ from backend.api.schemas import (
     PortSettingsRequest,
     UiZoomRequest,
     WordlistsDirRequest,
+    FuzzKeywordRequest,
 )
 from backend.persistence import app_settings
 from backend.services import browser_service, display_service, output_naming, port_service, wordlist_service
@@ -174,6 +175,24 @@ def set_wordlists_dir_settings(body: WordlistsDirRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _wordlists_dir_payload()
+
+
+def _fuzz_keyword_payload() -> dict:
+    return {"keyword": app_settings.get_fuzz_keyword(), "default": app_settings.DEFAULT_FUZZ_KEYWORD}
+
+
+@router.get("/api/settings/fuzz-keyword")
+def get_fuzz_keyword_settings() -> dict:
+    return _fuzz_keyword_payload()
+
+
+@router.put("/api/settings/fuzz-keyword")
+def set_fuzz_keyword_settings(body: FuzzKeywordRequest) -> dict:
+    try:
+        app_settings.set_fuzz_keyword(body.keyword)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _fuzz_keyword_payload()
 
 
 @router.get("/api/settings/ui-prefs")

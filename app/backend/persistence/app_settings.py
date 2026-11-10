@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from backend.persistence.atomic import DamagedFileError, quarantine, read_json, restore_backup, write_json_atomic
@@ -153,6 +154,29 @@ def set_wordlists_dir(path: str | None) -> None:
         settings["wordlists_dir"] = path
     else:
         settings.pop("wordlists_dir", None)
+    save_settings(settings)
+
+
+# The word that marks, inside a New Fuzz path, where the wordlist goes ("/api/FUZZ/users"). None/absent means
+# the default; the Settings page shows the default as the input's placeholder, never as a stored value.
+DEFAULT_FUZZ_KEYWORD = "FUZZ"
+_FUZZ_KEYWORD_RE = re.compile(r"[A-Za-z0-9_]{3,32}")
+
+
+def get_fuzz_keyword() -> str:
+    configured = load_settings().get("fuzz_keyword")
+    return configured if isinstance(configured, str) and _FUZZ_KEYWORD_RE.fullmatch(configured) else DEFAULT_FUZZ_KEYWORD
+
+
+def set_fuzz_keyword(value: str | None) -> None:
+    value = (value or "").strip()
+    if value and not _FUZZ_KEYWORD_RE.fullmatch(value):
+        raise ValueError("The fuzz word must be 3 to 32 letters, digits or underscores")
+    settings = load_settings()
+    if value and value != DEFAULT_FUZZ_KEYWORD:
+        settings["fuzz_keyword"] = value
+    else:
+        settings.pop("fuzz_keyword", None)
     save_settings(settings)
 
 

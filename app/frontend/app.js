@@ -1065,6 +1065,14 @@ function buildClickablePath(path, baseUrl, displayText) {
     return link;
 }
 
+// The path of a job made with the fuzz word in it: not a link (it is a pattern, not a page), the word painted as a tag.
+function buildFuzzJobPath(job) {
+    const text = buildFuzzPathText(job.path, job.fuzz_keyword);
+    text.title = `${job.fuzz_keyword} stands for each word of the wordlist`;
+    attachCopyPathContextMenu(text, () => job.path);
+    return text;
+}
+
 function formatProgress(job) {
     // Real, extension-aware request counts (job.total_wordlist_requests,
     // job.completed_requests -- backend/job_manager/wordlist_resolver.py),
@@ -1770,6 +1778,11 @@ const SETTINGS_PAGES = [
         desc: "Folder the New Fuzz wordlist picker browses; use your own instead of the bundled one",
     },
     {
+        id: "fuzz-keyword",
+        title: "Fuzz word",
+        desc: "The word that marks where the wordlist goes inside a New Fuzz path",
+    },
+    {
         id: "port",
         title: "Desktop app port",
         desc: "Custom local port the app listens on, instead of the built-in default",
@@ -1871,6 +1884,7 @@ function setupSettingsMenu() {
             else if (pageId === "ui-zoom") await renderZoomPage();
             else if (pageId === "default-extensions") await renderDefaultExtensionsPage();
             else if (pageId === "wordlists-dir") await renderWordlistsDirPage();
+            else if (pageId === "fuzz-keyword") await renderFuzzKeywordPage();
             else if (pageId === "updates") renderUpdatesPage();
         } catch (err) {
             panel.innerHTML = "";
@@ -2276,6 +2290,41 @@ function setupSettingsMenu() {
         });
 
         panel.appendChild(h("div", { class: "outputs-mirror-row" }, [dirInput, pickBtn]));
+        panel.appendChild(fieldError);
+    }
+
+    async function renderFuzzKeywordPage() {
+        const data = await api("/api/settings/fuzz-keyword");
+
+        panel.innerHTML = "";
+        pageHeader("Fuzz word");
+        panel.appendChild(h("div", {
+            class: "hint",
+            text: `Put this word in the path of a New Fuzz to say where the wordlist goes: /api/${data.default}/users `
+                + "requests /api/admin/users, /api/backup/users... Change it if a real path of your target "
+                + "already contains it. Leave it empty for the default.",
+        }));
+
+        const input = h("input", {
+            class: "outputs-mirror-input", placeholder: data.default, value: data.keyword === data.default ? "" : data.keyword,
+        });
+        const fieldError = h("div", { class: "field-error", hidden: "hidden" });
+        async function save() {
+            fieldError.hidden = true;
+            try {
+                const result = await api("/api/settings/fuzz-keyword", {
+                    method: "PUT", body: JSON.stringify({ keyword: input.value.trim() }),
+                });
+                input.value = result.keyword === result.default ? "" : result.keyword;
+                window.dispatchEvent(new CustomEvent("optifuzz:fuzz-keyword", { detail: result.keyword }));
+            } catch (err) {
+                fieldError.textContent = `Could not save: ${err.message}`;
+                fieldError.hidden = false;
+            }
+        }
+        input.addEventListener("change", save);
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+        panel.appendChild(h("div", { class: "outputs-mirror-row" }, [input]));
         panel.appendChild(fieldError);
     }
 
@@ -3459,7 +3508,9 @@ async function renderWorkspace(projectId, targetId, tab) {
                 statusCell,
                 h("td", { class: "job-info-cell" }, [infoBtn]),
                 h("td", {}, [actions]),
-                h("td", {}, [buildClickablePath(job.path, target.base_url, pathWithoutQuery(job.path))]),
+                h("td", {}, [job.fuzz_keyword
+                    ? buildFuzzJobPath(job)
+                    : buildClickablePath(job.path, target.base_url, pathWithoutQuery(job.path))]),
                 (() => {
                     const cell = h("td", { class: "jobs-progress-cell" });
                     renderProgressCell(cell, formatProgress(job));
@@ -5062,6 +5113,169 @@ function effectiveDefaultExtensions(settings) {
     const value = settings.configured_value === null ? settings.dirsearch_default : settings.configured_value;
     return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
+// ---- Fuzz position in the New Fuzz path ---------------------------------
+//
+// Typing the fuzz word (FUZZ by default, changeable in Settings) inside the path says where the wordlist
+// goes: "/api/FUZZ/users" requests /api/<word>/users. The word is painted as a tag in the field itself, and
+// Backspace / Delete next to it remove the whole tag instead of one letter.
+
+let fuzzKeyword = "FUZZ";
+
+async function fetchFuzzKeyword() {
+    try {
+        fuzzKeyword = (await api("/api/settings/fuzz-keyword")).keyword || fuzzKeyword;
+    } catch (e) { /* keeps the last known word */ }
+    return fuzzKeyword;
+}
+
+// "/a/FUZZ/b" -> [{text:"/a/",tag:false},{text:"FUZZ",tag:true},{text:"/b",tag:false}]
+function splitAroundKeyword(text, keyword) {
+    const parts = [];
+    let rest = text;
+    while (keyword) {
+        const at = rest.indexOf(keyword);
+        if (at === -1) break;
+        if (at) parts.push({ text: rest.slice(0, at), tag: false });
+        parts.push({ text: keyword, tag: true });
+        rest = rest.slice(at + keyword.length);
+    }
+    if (rest) parts.push({ text: rest, tag: false });
+    return parts;
+}
+
+// Text with the fuzz word painted as a tag (job rows): `keyword` is the word that job was created with.
+function buildFuzzPathText(path, keyword) {
+    const nodes = splitAroundKeyword(path, keyword).map((part) => (
+        part.tag ? h("span", { class: "fuzz-tag", text: part.text }) : document.createTextNode(part.text)
+    ));
+    return h("span", { class: "fuzz-path-text" }, nodes);
+}
+
+// A one-line text field (a contenteditable div, so a part of the text can be bold and blue) that acts like the
+// old path input: `.value`, `.focus()` and "input" events work the same.
+function buildFuzzPathField({ placeholder, value, getKeyword, onEnter }) {
+    const field = h("div", {
+        class: "fuzz-path-field", spellcheck: "false", role: "textbox", "aria-label": "Path", "data-placeholder": placeholder,
+    });
+    field.contentEditable = "plaintext-only";
+    if (field.contentEditable !== "plaintext-only") field.contentEditable = "true"; // WebKitGTK without it
+
+    function wanted() { return splitAroundKeyword(field.textContent, getKeyword()); }
+    function actual() {
+        const keyword = getKeyword();
+        const parts = [];
+        for (const node of field.childNodes) {
+            const tag = node.nodeType === 1 && node.classList.contains("fuzz-tag") && node.textContent === keyword;
+            const text = node.textContent;
+            if (!text) continue;
+            if (!tag && parts.length && !parts[parts.length - 1].tag) parts[parts.length - 1].text += text;
+            else parts.push({ text, tag });
+        }
+        return parts;
+    }
+    const signature = (parts) => parts.map((p) => (p.tag ? "T:" : "S:") + p.text).join("|");
+
+    function render(text) {
+        const keyword = getKeyword();
+        field.replaceChildren(...splitAroundKeyword(text, keyword).map((part) => (
+            part.tag ? h("span", { class: "fuzz-tag", text: part.text }) : document.createTextNode(part.text)
+        )));
+    }
+    function caretOffset() {
+        const selection = window.getSelection();
+        if (!selection.rangeCount || !field.contains(selection.anchorNode)) return null;
+        const range = document.createRange();
+        range.selectNodeContents(field);
+        range.setEnd(selection.anchorNode, selection.anchorOffset);
+        return range.toString().length;
+    }
+    function setCaret(offset) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+        let passed = 0;
+        let last = null;
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            last = node;
+            if (offset < passed + node.length) {
+                range.setStart(node, offset - passed);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                return;
+            }
+            passed += node.length;
+        }
+        if (last) range.setStart(last, last.length);
+        else range.setStart(field, 0);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+    // The tag a Backspace (backward) / Delete (forward) with the caret where it is would touch, if any.
+    function tagNextToCaret(backward) {
+        const selection = window.getSelection();
+        if (!selection.rangeCount || !selection.isCollapsed || !field.contains(selection.anchorNode)) return null;
+        const node = selection.anchorNode;
+        const offset = selection.anchorOffset;
+        const isTag = (n) => n && n.nodeType === 1 && n.classList.contains("fuzz-tag");
+        if (node === field) return [field.childNodes[backward ? offset - 1 : offset]].find(isTag) || null;
+        const owner = isTag(node.parentElement) && node.parentElement !== field ? node.parentElement : null;
+        if (owner) {
+            // Inside the tag's own text: the tag is touched unless the caret is at the far edge it moves away from.
+            if (backward ? offset > 0 : offset < node.length) return owner;
+            return [backward ? owner.previousSibling : owner.nextSibling].find(isTag) || null;
+        }
+        if (node.nodeType !== 3) return null;
+        if (backward && offset === 0) return [node.previousSibling].find(isTag) || null;
+        if (!backward && offset === node.length) return [node.nextSibling].find(isTag) || null;
+        return null;
+    }
+
+    field.addEventListener("input", () => {
+        if (!field.textContent) { field.replaceChildren(); return; }
+        if (signature(actual()) === signature(wanted())) return;
+        const caret = caretOffset();
+        render(field.textContent);
+        if (caret !== null) setCaret(caret);
+    });
+    field.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            onEnter();
+            return;
+        }
+        if ((event.key !== "Backspace" && event.key !== "Delete") || event.ctrlKey || event.metaKey || event.altKey) return;
+        const tag = tagNextToCaret(event.key === "Backspace");
+        if (!tag) return;
+        event.preventDefault();
+        const before = document.createRange();
+        before.selectNodeContents(field);
+        before.setEndBefore(tag);
+        const start = before.toString().length;
+        tag.remove();
+        field.normalize();
+        setCaret(start);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // Pasted text goes in as plain text on one line.
+    field.addEventListener("paste", (event) => {
+        event.preventDefault();
+        const text = (event.clipboardData || window.clipboardData).getData("text").replace(/[\r\n]+/g, "");
+        document.execCommand("insertText", false, text);
+    });
+    field.addEventListener("drop", (event) => event.preventDefault());
+
+    Object.defineProperty(field, "value", {
+        get: () => field.textContent,
+        set: (text) => render(String(text)),
+    });
+    render(value);
+    // The word changed in Settings: repaint what is already typed.
+    field.refreshKeyword = () => render(field.textContent);
+    return field;
+}
+
 async function fetchDefaultExtensionsForNewFuzz() {
     try {
         return effectiveDefaultExtensions(await api("/api/settings/default-extensions-fallback"));
@@ -5098,7 +5312,8 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // fuzz) should still be remembered, and both the main New Fuzz section
     // AND every inline "Fuzz this path" launcher from Results/TREE share
     // this same function, so fixing it here covers both for free.
-    const [wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders, defaultExtensions] = await Promise.all([
+    const [, wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders, defaultExtensions] = await Promise.all([
+        fetchFuzzKeyword(),
         fetchWordlistTreeForNewFuzz(),
         fetchConcurrencyForNewFuzz(projectId, targetId),
         fetchFuzzDefaultsForNewFuzz(projectId, targetId),
@@ -5107,7 +5322,10 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     ]);
     const hasSavedDefaults = Object.keys(fuzzDefaults).length > 0;
 
-    const pathInput = h("input", { placeholder: "/path/ (e.g. /api/)", value: "/" });
+    let submitForm = () => {};
+    const pathInput = buildFuzzPathField({
+        placeholder: "/path/ (e.g. /api/)", value: "/", getKeyword: () => fuzzKeyword, onEnter: () => submitForm(),
+    });
     // With a default extension list in effect (dirsearch's own, or the one from Settings) an empty
     // field does not mean "none": say so, and list them on hover or focus.
     let currentDefaultExtensions = defaultExtensions;
@@ -5166,6 +5384,41 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // afterward is simpler and unambiguous either way).
     const forceExtCheckbox = h("input", { type: "checkbox" });
     forceExtCheckbox.checked = hasSavedDefaults ? Boolean(fuzzDefaults.force_extensions) : true;
+    // What the user chose for -f. While the path has the fuzz word the box is ticked off and greyed out (-f adds
+    // ".ext" at the END of each word, which cannot work when the path goes on after it); when the word goes away
+    // the box returns to this, so typing and deleting it never switches a setting off behind the user's back.
+    let forceExtChoice = forceExtCheckbox.checked;
+    let forceExtLocked = false;
+    const forceExtLabel = h("label", {
+        title: "For each wordlist word with no extension/trailing slash, also tests "
+            + "word/ (as a directory) and word.<ext> for every configured extension "
+            + "-- not just the bare word.",
+    }, [forceExtCheckbox, document.createTextNode("Force extensions (-f)")]);
+    const forceExtTitle = forceExtLabel.title;
+    function syncForceExt() {
+        const wantLocked = Boolean(fuzzKeyword) && pathInput.value.includes(fuzzKeyword);
+        if (wantLocked !== forceExtLocked) {
+            forceExtLocked = wantLocked;
+            forceExtCheckbox.checked = wantLocked ? false : forceExtChoice;
+            forceExtCheckbox.disabled = wantLocked;
+            forceExtLabel.classList.toggle("disabled", wantLocked);
+        }
+        forceExtLabel.title = wantLocked ? `Not available while the path has ${fuzzKeyword}.` : forceExtTitle;
+    }
+    const fuzzPathTitle = () => `Type ${fuzzKeyword} where the wordlist should go, e.g. /api/${fuzzKeyword}/users`;
+    pathInput.title = fuzzPathTitle();
+    pathInput.addEventListener("input", syncForceExt);
+    function onFuzzKeywordChanged(event) {
+        if (!document.body.contains(pathInput)) {
+            window.removeEventListener("optifuzz:fuzz-keyword", onFuzzKeywordChanged);
+            return;
+        }
+        fuzzKeyword = event.detail;
+        pathInput.title = fuzzPathTitle();
+        pathInput.refreshKeyword();
+        syncForceExt();
+    }
+    window.addEventListener("optifuzz:fuzz-keyword", onFuzzKeywordChanged);
     // Purely a saved-output-filename tag -- never touches the actual
     // dirsearch invocation. See api/jobs.py::create_job.
     const authenticatedCheckbox = h("input", { type: "checkbox" });
@@ -5322,11 +5575,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         h("summary", { text: "Advanced options" }),
         h("div", { class: "advanced-body" }, [
             h("div", { class: "advanced-row" }, [
-                h("label", {
-                    title: "For each wordlist word with no extension/trailing slash, also tests "
-                        + "word/ (as a directory) and word.<ext> for every configured extension "
-                        + "-- not just the bare word.",
-                }, [forceExtCheckbox, document.createTextNode("Force extensions (-f)")]),
+                forceExtLabel,
                 h("label", {
                     title: "Tags this fuzz's saved output filename with \"__AUTH\" after the path "
                         + "-- purely a naming convention for telling an authenticated fuzz's report "
@@ -5409,7 +5658,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                     wordlist_files: wordlistPicker.getValue() ? [wordlistPicker.getValue()] : [],
                     extensions: collectExtensions(),
                     threads: Math.min(Number(threadsInput.value) || 5, MAX_THREADS),
-                    force_extensions: forceExtCheckbox.checked,
+                    force_extensions: forceExtChoice,
                     authenticated: authenticatedCheckbox.checked,
                     pause_on_status: collectPauseOnStatus(),
                     headers: collectHeaders(),
@@ -5424,7 +5673,10 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     threadsInput.addEventListener("input", saveFuzzDefaultsDebounced);
     pauseStatusInput.addEventListener("input", saveFuzzDefaultsDebounced);
     customOptionsInput.addEventListener("input", saveFuzzDefaultsDebounced);
-    forceExtCheckbox.addEventListener("change", saveFuzzDefaultsNow);
+    forceExtCheckbox.addEventListener("change", () => {
+        forceExtChoice = forceExtCheckbox.checked;
+        saveFuzzDefaultsNow();
+    });
     authenticatedCheckbox.addEventListener("change", saveFuzzDefaultsNow);
     defaultHeaderBoxes.forEach((entry) => entry.box.addEventListener("change", () => {
         refreshDefaultHeadersSummary();
@@ -5453,6 +5705,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         advanced,
     ]);
 
+    submitForm = () => form.requestSubmit();
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const extensions = collectExtensions();
@@ -5477,7 +5730,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
                     wordlist_files: [wordlistPath],
                     extensions,
                     threads: Math.min(Number(threadsInput.value) || 5, MAX_THREADS),
-                    force_extensions: forceExtCheckbox.checked,
+                    force_extensions: forceExtChoice,
                     authenticated: authenticatedCheckbox.checked,
                     pause_on_status: pauseOnStatus,
                     headers,
@@ -5493,7 +5746,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
 
     return {
         element: form,
-        setPath: (path) => { pathInput.value = path; pathInput.focus(); },
+        setPath: (path) => { pathInput.value = path; syncForceExt(); pathInput.focus(); },
     };
 }
 

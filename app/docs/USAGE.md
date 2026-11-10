@@ -17,6 +17,7 @@ Use OptiFuzz only against systems you own or have explicit permission to test (s
 - [4. Starting a fuzz](#4-starting-a-fuzz)
   - [Where to start one](#where-to-start-one)
   - [Main fields](#main-fields)
+  - [Fuzzing inside a path](#fuzzing-inside-a-path)
   - [The wordlist picker](#the-wordlist-picker)
   - [Advanced options](#advanced-options)
   - [What is remembered](#what-is-remembered)
@@ -135,6 +136,19 @@ You can also start a fuzz from a path you already found. In RESULTS and in TREE,
 - **Extensions**: comma-separated, for example `php,html`. If you leave it empty, dirsearch does not use none: it falls back to its own default extensions (`php,asp,aspx,jsp,html,htm`), and the field says *Default extensions activated*. Hover it, or click inside it, to see the list in use. You can change that default in [Default extensions (Force extensions)](#default-extensions-force-extensions).
 - **Threads**: how many requests run in parallel (default 5, at most 500).
 - **Fuzz**: starts the job. If the target is already running as many jobs as it is allowed, the new one waits in the queue.
+
+### Fuzzing inside a path
+
+By default the wordlist is tried at the end of the path. To put it somewhere else, type the word `FUZZ` in the **Path** where the wordlist should go. `FUZZ` turns into a blue tag, and each word of the wordlist replaces it:
+
+- `/api/FUZZ/users` requests `/api/admin/users`, `/api/backup/users`, and so on.
+- `/api/v1-FUZZ` requests `/api/v1-admin`, `/api/v1-backup`, and so on.
+
+Backspace or Delete next to the tag removes the whole tag. Use `FUZZ` once, and in the path only (not in a query string). You can change the word in [Fuzz word](#fuzz-word) if your target already uses `FUZZ` in its paths.
+
+**Force extensions (-f)** is switched off and greyed out while the path has `FUZZ`, because it adds the extension at the end of each word and the path goes on after it. When you remove `FUZZ`, the option goes back to what it was. Extensions that your wordlist adds itself with `%EXT%` still work.
+
+In the job list the path of such a job shows the tag, and it is not a link, since it is a pattern and not a page.
 
 ### The wordlist picker
 
@@ -421,6 +435,10 @@ Extensions you type in a fuzz always take priority over this setting.
 ### Wordlists folder
 
 The folder the wordlist picker reads. Leave it empty to use the `wordlists` folder that comes with OptiFuzz, or type the path of a folder you already have (or choose it with the folder button). Its subfolders appear as groups in the picker. OptiFuzz only reads from it and never changes it.
+
+### Fuzz word
+
+The word that marks where the wordlist goes inside a New Fuzz path (see [Fuzzing inside a path](#fuzzing-inside-a-path)). It is `FUZZ` unless you change it: type another word of 3 to 32 letters, digits or underscores, or leave it empty to go back to `FUZZ`. Jobs already created keep the word they were made with.
 
 ### Desktop app port
 
