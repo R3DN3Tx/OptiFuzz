@@ -948,12 +948,35 @@ function buildHierarchy(items, sort) {
 // app uses (TREE/Results' own "Fuzzed" tag toggle, and a job's own history)
 // -- same classes, same columns (minus Status for a single-job case, see
 // the .no-status modifier above), so it looks and behaves identically.
+function jobFuzzedPath(j) {
+    var path = String(j.path || "");
+    if (j.fuzz_keyword && path.indexOf(j.fuzz_keyword) !== -1) {
+        var before = path.slice(0, path.indexOf(j.fuzz_keyword)).split("?")[0];
+        return before.slice(0, before.lastIndexOf("/") + 1) || "/";
+    }
+    return path.split(/[?#]/)[0];
+}
+// Text with the fuzz word painted as a tag (a job made with the fuzz word shows its pattern).
+function fuzzPathText(path, keyword) {
+    var box = h("span", { class: "fuzz-path-text" }, []);
+    var rest = String(path);
+    while (keyword && rest.indexOf(keyword) !== -1) {
+        var at = rest.indexOf(keyword);
+        if (at) box.appendChild(document.createTextNode(rest.slice(0, at)));
+        box.appendChild(h("span", { class: "fuzz-tag", text: keyword }));
+        rest = rest.slice(at + keyword.length);
+    }
+    if (rest) box.appendChild(document.createTextNode(rest));
+    return box;
+}
 function buildFuzzHistoryTable(history, hideStatus, path) {
     if (!history || !history.length) {
         return h("div", { class: "hint", text: "Never fuzzed directly." });
     }
     var headCells = [];
+    var anyPattern = history.some(function (entry) { return entry.fuzz_keyword; });
     if (!hideStatus) headCells.push(h("th", { text: "Status" }));
+    if (anyPattern) headCells.push(h("th", { text: "Path" }));
     headCells.push(
         h("th", { text: "Wordlist" }), h("th", { text: "Extensions" }), h("th", { text: "Headers" }), h("th", { text: "Options" }),
     );
@@ -975,9 +998,11 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         var headersCell = h("td", {});
         // A query string in the job's URL is not a header: shown first as
         // "query*" (hover = the full query), explained by the footnote below.
-        var queryText = String(entry.path || (entry.config && entry.config.url) || "").split("#")[0];
+        var queryText = String((entry.fuzz_keyword ? entry.path : (entry.path || (entry.config && entry.config.url))) || "").split("#")[0];
         var queryAt = queryText.indexOf("?");
         var query = queryAt >= 0 && queryAt < queryText.length - 1 ? queryText.slice(queryAt) : "";
+        // A query with the fuzz word in it is already shown whole in the Path column: the chip is for fixed queries.
+        if (entry.fuzz_keyword && query.indexOf(entry.fuzz_keyword) !== -1) query = "";
         if (query) {
             headersCell.appendChild(buildHeaderNameChip("query*", query, query));
             anyQuery = true;
@@ -1001,6 +1026,11 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (cfg.extra_args && cfg.extra_args.length) other.push(cfg.extra_args.join(" "));
         var cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
+        if (anyPattern) {
+            cells.push(h("td", {}, [entry.fuzz_keyword
+                ? fuzzPathText(entry.path, entry.fuzz_keyword)
+                : h("span", { text: String(entry.path || "").split(/[?#]/)[0] || "—" })]));
+        }
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
             h("td", { text: extensionsCellText(entry.extensions || [], cfg) }),
@@ -1037,7 +1067,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
             h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
         ])]));
     }
-    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, sections);
+    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") + (anyPattern ? " with-path" : "") }, sections);
 }
 function buildFuzzHistoryRow(colspan, history, hideStatus, path) {
     return h("tr", { class: "fuzz-history-row hidden" }, [
@@ -1234,11 +1264,11 @@ renderTree();
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 // Exact job paths, same rule as the live app: "path/" and "path" are separate.
-DATA.jobs.forEach(function (j) { fuzzedPaths[String(j.path).split(/[?#]/)[0]] = true; });
+DATA.jobs.forEach(function (j) { fuzzedPaths[jobFuzzedPath(j)] = true; });
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return String(j.path).split(/[?#]/)[0] === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return jobFuzzedPath(j) === path; }).map(function (j) {
         return {
-            job_id: j.id, status: j.status, wordlist_sources: j.wordlist_sources,
+            job_id: j.id, path: j.path, fuzz_keyword: j.fuzz_keyword || "", status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
             created_at: j.created_at, started_at: j.started_at,
         };
@@ -1736,7 +1766,9 @@ if (!DATA.jobs.length) {
 
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
-        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
+        var jobPathLink = job.fuzz_keyword
+            ? fuzzPathText(job.path, job.fuzz_keyword)
+            : h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);
 
@@ -1748,7 +1780,7 @@ if (!DATA.jobs.length) {
             });
             resultsLink.addEventListener("click", function (e) {
                 e.stopPropagation();
-                goToResultsAndReveal(String(job.path).split(/[?#]/)[0]);
+                goToResultsAndReveal(jobFuzzedPath(job));
             });
             resultsCell.appendChild(resultsLink);
         } else {
@@ -2446,12 +2478,35 @@ function buildHierarchy(items, sort) {
 // app uses (TREE/Results' own "Fuzzed" tag toggle, and a job's own history)
 // -- same classes, same columns (minus Status for a single-job case, see
 // the .no-status modifier above), so it looks and behaves identically.
+function jobFuzzedPath(j) {
+    var path = String(j.path || "");
+    if (j.fuzz_keyword && path.indexOf(j.fuzz_keyword) !== -1) {
+        var before = path.slice(0, path.indexOf(j.fuzz_keyword)).split("?")[0];
+        return before.slice(0, before.lastIndexOf("/") + 1) || "/";
+    }
+    return path.split(/[?#]/)[0];
+}
+// Text with the fuzz word painted as a tag (a job made with the fuzz word shows its pattern).
+function fuzzPathText(path, keyword) {
+    var box = h("span", { class: "fuzz-path-text" }, []);
+    var rest = String(path);
+    while (keyword && rest.indexOf(keyword) !== -1) {
+        var at = rest.indexOf(keyword);
+        if (at) box.appendChild(document.createTextNode(rest.slice(0, at)));
+        box.appendChild(h("span", { class: "fuzz-tag", text: keyword }));
+        rest = rest.slice(at + keyword.length);
+    }
+    if (rest) box.appendChild(document.createTextNode(rest));
+    return box;
+}
 function buildFuzzHistoryTable(history, hideStatus, path) {
     if (!history || !history.length) {
         return h("div", { class: "hint", text: "Never fuzzed directly." });
     }
     var headCells = [];
+    var anyPattern = history.some(function (entry) { return entry.fuzz_keyword; });
     if (!hideStatus) headCells.push(h("th", { text: "Status" }));
+    if (anyPattern) headCells.push(h("th", { text: "Path" }));
     headCells.push(
         h("th", { text: "Wordlist" }), h("th", { text: "Extensions" }), h("th", { text: "Headers" }), h("th", { text: "Options" }),
     );
@@ -2473,9 +2528,11 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         var headersCell = h("td", {});
         // A query string in the job's URL is not a header: shown first as
         // "query*" (hover = the full query), explained by the footnote below.
-        var queryText = String(entry.path || (entry.config && entry.config.url) || "").split("#")[0];
+        var queryText = String((entry.fuzz_keyword ? entry.path : (entry.path || (entry.config && entry.config.url))) || "").split("#")[0];
         var queryAt = queryText.indexOf("?");
         var query = queryAt >= 0 && queryAt < queryText.length - 1 ? queryText.slice(queryAt) : "";
+        // A query with the fuzz word in it is already shown whole in the Path column: the chip is for fixed queries.
+        if (entry.fuzz_keyword && query.indexOf(entry.fuzz_keyword) !== -1) query = "";
         if (query) {
             headersCell.appendChild(buildHeaderNameChip("query*", query, query));
             anyQuery = true;
@@ -2499,6 +2556,11 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
         if (cfg.extra_args && cfg.extra_args.length) other.push(cfg.extra_args.join(" "));
         var cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: "job-status job-" + entry.status, text: entry.status })]));
+        if (anyPattern) {
+            cells.push(h("td", {}, [entry.fuzz_keyword
+                ? fuzzPathText(entry.path, entry.fuzz_keyword)
+                : h("span", { text: String(entry.path || "").split(/[?#]/)[0] || "—" })]));
+        }
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
             h("td", { text: extensionsCellText(entry.extensions || [], cfg) }),
@@ -2535,7 +2597,7 @@ function buildFuzzHistoryTable(history, hideStatus, path) {
             h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
         ])]));
     }
-    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") }, sections);
+    return h("table", { class: "fuzz-history-table" + (hideStatus ? " no-status" : "") + (anyPattern ? " with-path" : "") }, sections);
 }
 function buildFuzzHistoryRow(colspan, history, hideStatus, path) {
     return h("tr", { class: "fuzz-history-row hidden" }, [
@@ -2731,7 +2793,7 @@ treeSearchInput.addEventListener("input", renderTree);
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return String(j.path).split(/[?#]/)[0] === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return jobFuzzedPath(j) === path; }).map(function (j) {
         return {
             job_id: j.id, status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
@@ -3219,7 +3281,9 @@ function renderJobs() {
 
         var absoluteUrl;
         try { absoluteUrl = new URL(job.path, DATA.target.base_url).href; } catch (e) { absoluteUrl = DATA.target.base_url; }
-        var jobPathLink = h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
+        var jobPathLink = job.fuzz_keyword
+            ? fuzzPathText(job.path, job.fuzz_keyword)
+            : h("a", { class: "result-path-link", href: absoluteUrl, target: "_blank", rel: "noopener", text: String(job.path).split(/[?#]/)[0] });
         attachCopyPathContextMenu(jobPathLink, job.path);
         var pathCell = h("td", {}, [jobPathLink]);
 
@@ -3231,7 +3295,7 @@ function renderJobs() {
             });
             resultsLink.addEventListener("click", function (e) {
                 e.stopPropagation();
-                goToResultsAndReveal(String(job.path).split(/[?#]/)[0]);
+                goToResultsAndReveal(jobFuzzedPath(job));
             });
             resultsCell.appendChild(resultsLink);
         } else {
@@ -3321,7 +3385,7 @@ function loadTarget(t) {
     applyResultsView(t.view);
     resultsHideFilters = ((t.view && t.view.hide_rules) || []).map(function (r) { return Object.assign({}, r); });
     fuzzedPaths = {};
-    DATA.jobs.forEach(function (j) { fuzzedPaths[String(j.path).split(/[?#]/)[0]] = true; });
+    DATA.jobs.forEach(function (j) { fuzzedPaths[jobFuzzedPath(j)] = true; });
     renderBreadcrumb();
     renderTree();
     renderHideChips();

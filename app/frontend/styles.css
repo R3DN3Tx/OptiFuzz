@@ -1742,3 +1742,22 @@ th.sortable:hover { color: var(--text, inherit); }
 /* Force extensions while the path has the fuzz word: shown off and out of reach. */
 details.advanced label.disabled { color: var(--muted); cursor: not-allowed; opacity: .6; }
 details.advanced label.disabled input { cursor: not-allowed; }
+
+/* The history table with the extra Path column (a job made with the fuzz word shows its pattern): the same
+   fixed-width scheme as above, spread over one more column. */
+.fuzz-history-table.with-path th:nth-child(1), .fuzz-history-table.with-path td:nth-child(1) { width: 10%; }
+.fuzz-history-table.with-path th:nth-child(2), .fuzz-history-table.with-path td:nth-child(2) { width: 15%; padding-left: 2px; padding-right: 4px; overflow-wrap: anywhere; }
+.fuzz-history-table.with-path th:nth-child(3), .fuzz-history-table.with-path td:nth-child(3) { width: 11%; padding-left: 4px; }
+.fuzz-history-table.with-path th:nth-child(4), .fuzz-history-table.with-path td:nth-child(4) { width: 12%; padding-right: 4px; }
+.fuzz-history-table.with-path th:nth-child(5), .fuzz-history-table.with-path td:nth-child(5) { width: 11%; padding-left: 4px; }
+.fuzz-history-table.with-path th:nth-child(6), .fuzz-history-table.with-path td:nth-child(6) { width: 13%; }
+.fuzz-history-table.with-path th:nth-child(7), .fuzz-history-table.with-path td:nth-child(7) { width: 7%; }
+.fuzz-history-table.with-path th:nth-child(8), .fuzz-history-table.with-path td:nth-child(8) { width: 14%; }
+.fuzz-history-table.with-path th:nth-child(9), .fuzz-history-table.with-path td:nth-child(9) { width: 7%; }
+.fuzz-history-table.no-status.with-path th:nth-child(1), .fuzz-history-table.no-status.with-path td:nth-child(1) { width: 16%; padding-left: 4px; }
+.fuzz-history-table.no-status.with-path th:nth-child(2), .fuzz-history-table.no-status.with-path td:nth-child(2) { width: 14%; padding-left: 4px; padding-right: 1px; }
+.fuzz-history-table.no-status.with-path th:nth-child(3), .fuzz-history-table.no-status.with-path td:nth-child(3) { width: 11%; padding-left: 1px; }
+.fuzz-history-table.no-status.with-path th:nth-child(4), .fuzz-history-table.no-status.with-path td:nth-child(4) { width: 17%; padding-right: 4px; }
+.fuzz-history-table.no-status.with-path th:nth-child(5), .fuzz-history-table.no-status.with-path td:nth-child(5) { width: 25%; padding-left: 4px; }
+.fuzz-history-table.no-status.with-path th:nth-child(6), .fuzz-history-table.no-status.with-path td:nth-child(6) { width: 11%; }
+.fuzz-history-table.no-status.with-path th:nth-child(7), .fuzz-history-table.no-status.with-path td:nth-child(7) { width: 6%; }

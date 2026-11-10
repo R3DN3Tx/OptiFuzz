@@ -138,6 +138,36 @@ def test_results_of_a_query_fuzz_keep_the_query_in_their_path() -> None:
                        created_at="", fuzz_keyword="FUZZ").fuzz_in_query
 
 
+def test_the_fuzzed_place_of_a_job_with_the_fuzz_word_is_the_directory_the_word_sits_in() -> None:
+    from backend.models.job import FuzzJob, JobStatus
+
+    def place(path: str, keyword: str = "FUZZ") -> str:
+        return FuzzJob(id="j", target_id="t", project_id="p", path=path, config={}, status=JobStatus.COMPLETED,
+                       created_at="", fuzz_keyword=keyword).fuzzed_path
+
+    assert place("/api/FUZZ/crash") == "/api/"
+    assert place("/api/v1-FUZZ") == "/api/"
+    assert place("/search/?q=FUZZ&lang=en") == "/search/"
+    assert place("/search/?next=/a/FUZZ") == "/search/"
+    assert place("/FUZZ") == "/"
+    assert place("/admin/?lang=en", keyword="") == "/admin/"  # a normal job: its path without the query
+
+
+def test_the_tree_node_of_the_directory_lists_the_jobs_that_fuzz_a_pattern_in_it(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    pid, tid, response = _create(client, tmp_path, "/api/FUZZ/users")
+    assert response.status_code == 200
+    client.post(f"/api/projects/{pid}/targets/{tid}/tree", json={"path": "/api/"})
+    client.post(f"/api/projects/{pid}/targets/{tid}/tree", json={"path": "/other/"})
+
+    nodes = {n["path"]: n for n in client.get(f"/api/projects/{pid}/targets/{tid}/tree").json()}
+
+    history = nodes["/api/"]["fuzz_history"]
+    assert [(h["path"], h["fuzz_keyword"]) for h in history] == [("/api/FUZZ/users", "FUZZ")]
+    assert nodes["/other/"]["fuzz_history"] == []
+
+
 def test_split_fuzz_template() -> None:
     assert target_service.split_fuzz_template("/a/FUZZ/b", "FUZZ") == ("/a/FUZZ/b", "/a/", "", "/b")
     assert target_service.split_fuzz_template("a/pre-FUZZ", "FUZZ") == ("/a/pre-FUZZ", "/a/", "pre-", "")

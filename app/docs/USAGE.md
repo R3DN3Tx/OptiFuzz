@@ -149,7 +149,11 @@ Backspace or Delete next to the tag removes the whole tag. Use `FUZZ` once, and 
 
 **Force extensions (-f)** is switched off and greyed out while the path has `FUZZ`, because it adds the extension at the end of each word and the path goes on after it. When you remove `FUZZ`, the option goes back to what it was. Extensions that your wordlist adds itself with `%EXT%` still work.
 
-In the job list the path of such a job shows the tag, and it is not a link, since it is a pattern and not a page.
+In the job list the path of such a job shows the tag, and it is not a link, since it is a pattern and not a page. Clicking its Results count takes you to the folder where `FUZZ` sits.
+
+The **Fuzzed** tag of such a job goes on the folder where `FUZZ` sits (`/api/` for `/api/FUZZ/crash`, `/search/` for `/search/?q=FUZZ`), in Results and in Tree. Open it to see the jobs fuzzed there. When one of them uses `FUZZ`, the table gets a **Path** column with its pattern.
+
+In Results, each path found by a job with `FUZZ` in the query is shown with its query (`?q=admin`). A fixed query (one you typed without `FUZZ`) is not part of the path shown there: hover the path to see the full URL.
 
 ### The wordlist picker
 

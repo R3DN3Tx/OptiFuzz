@@ -348,12 +348,14 @@ def fuzz_history_for_path(path: str, jobs: list[FuzzJob]) -> list[dict[str, Any]
     wanted = directory(path)
     matching = [
         j for j in jobs
-        if directory(normalize_path(re.split(r"[?#]", j.path, maxsplit=1)[0])) == wanted
+        if directory(normalize_path(j.fuzzed_path)) == wanted
     ]
     matching.sort(key=lambda j: j.created_at, reverse=True)
     return [
         {
             "job_id": j.id,
+            "path": j.path,  # a job made with the fuzz word keeps its pattern ("/api/FUZZ/users")
+            "fuzz_keyword": j.fuzz_keyword,
             "status": j.status.value,
             "wordlist_sources": j.wordlist_sources,
             "extensions": j.config.get("extensions", []),

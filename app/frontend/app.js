@@ -758,7 +758,7 @@ function attachTooltip(el, text, maxWidth, alsoOnFocus = false) {
 function attachRunningJobsTooltip(el, runningJobs) {
     const box = h("div", { class: "app-tooltip running-jobs-tooltip" }, runningJobs.map((j) =>
         h("div", { class: "running-jobs-tooltip-row" }, [
-            h("span", { class: "running-jobs-tooltip-path", text: (j.target ? `${j.target} ` : "") + pathWithoutQuery(j.path) }),
+            h("span", { class: "running-jobs-tooltip-path", text: (j.target ? `${j.target} ` : "") + (j.fuzz_keyword ? j.path : pathWithoutQuery(j.path)) }),
             h("span", { class: "running-jobs-tooltip-percent", text: `${j.percent}%` }),
         ])
     ));
@@ -876,6 +876,8 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     // silently showed "—" for every Results row's Extensions column before
     // this fix, unnoticed until Date needed the same raw-job fallback.
     const anyDate = history.some((entry) => entry.date || entry.started_at || entry.created_at);
+    // Jobs made with the fuzz word fuzz a pattern, not one path: their pattern needs its own column to tell them apart.
+    const anyPattern = history.some((entry) => entry.fuzz_keyword);
     let anyQuery = false;
     const rows = history.map((entry) => {
         const cfg = entry.config || {};
@@ -886,7 +888,9 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
         // A query string in the job's URL ("?a=a") is not a header, but it is
         // a per-request addition just like one: shown first as "query*" (hover
         // = the full query), with the footnote under the table explaining it.
-        const query = queryOfUrl(entry.path || cfg.url);
+        // A query with the fuzz word in it is already shown whole in the Path column: the chip is for fixed queries.
+        let query = queryOfUrl(entry.fuzz_keyword ? entry.path : (entry.path || cfg.url));
+        if (entry.fuzz_keyword && query.includes(entry.fuzz_keyword)) query = "";
         if (query) {
             headersCell.appendChild(buildHeaderNameChip("query*", query, query));
             anyQuery = true;
@@ -915,6 +919,11 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
 
         const cells = [];
         if (!hideStatus) cells.push(h("td", {}, [h("span", { class: `job-status job-${entry.status}`, text: entry.status })]));
+        if (anyPattern) {
+            cells.push(h("td", {}, [entry.fuzz_keyword
+                ? buildFuzzPathText(entry.path, entry.fuzz_keyword)
+                : h("span", { text: pathWithoutQuery(entry.path) || "—" })]));
+        }
         cells.push(
             h("td", { text: (entry.wordlist_sources || []).map(wordlistBaseName).join(", ") || "?" }),
             h("td", { text: extensionsCellText(extensions, cfg) }),
@@ -948,6 +957,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
     });
     const headCells = [];
     if (!hideStatus) headCells.push(h("th", { text: "Status" }));
+    if (anyPattern) headCells.push(h("th", { text: "Path" }));
     headCells.push(
         h("th", { text: "Wordlist" }), h("th", { text: "Extensions" }),
         h("th", { text: "Headers" }), h("th", { text: "Options" }),
@@ -961,7 +971,7 @@ function buildFuzzHistoryPanel(history, hideStatus, onResultsClick) {
             h("td", { class: "fuzz-history-note", colspan: String(headCells.length), text: "* query = query string appended to every request (not a header)" }),
         ])]));
     }
-    return h("table", { class: `fuzz-history-table${hideStatus ? " no-status" : ""}${anyDate ? " with-date" : ""}` }, sections);
+    return h("table", { class: `fuzz-history-table${hideStatus ? " no-status" : ""}${anyDate ? " with-date" : ""}${anyPattern ? " with-path" : ""}` }, sections);
 }
 
 // Full-width row under the triggering row (same shape as the inline fuzz
@@ -1488,6 +1498,17 @@ function buildSortHeader(label, column, getSort, setSort) {
 // is only the path before it.
 function pathWithoutQuery(path) {
     return String(path || "").split(/[?#]/)[0];
+}
+
+// The place a job fuzzes (the one that carries its "Fuzzed" tag): its path without the query, or -- for a job made
+// with the fuzz word -- the directory the word sits in ("/api/" for "/api/FUZZ/crash", "/search/" for "/search/?q=FUZZ").
+function jobFuzzedPath(job) {
+    const path = String(job.path || "");
+    if (job.fuzz_keyword && path.includes(job.fuzz_keyword)) {
+        const before = path.slice(0, path.indexOf(job.fuzz_keyword)).split("?")[0];
+        return before.slice(0, before.lastIndexOf("/") + 1) || "/";
+    }
+    return pathWithoutQuery(path);
 }
 
 // The "?a=a" part of a path or URL ("" when there is none).
@@ -3229,6 +3250,8 @@ async function renderWorkspace(projectId, targetId, tab) {
     function jobToHistoryEntry(job) {
         return {
             job_id: job.id,
+            path: job.path,
+            fuzz_keyword: job.fuzz_keyword || "",
             status: job.status,
             wordlist_sources: job.wordlist_sources || [],
             extensions: (job.config && job.config.extensions) || [],
@@ -3349,7 +3372,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         allJobs = jobs;
         jobsByPathKey = new Map();
         for (const j of jobs) {
-            const key = normalizeKey(pathWithoutQuery(j.path));
+            const key = normalizeKey(jobFuzzedPath(j));
             if (!jobsByPathKey.has(key)) jobsByPathKey.set(key, []);
             jobsByPathKey.get(key).push(j);
         }
@@ -3524,7 +3547,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                         ? h("button", {
                             type: "button", class: "results-count-link", text: String(job.result_count),
                             title: "Go to Results",
-                            onclick: () => goToResultsAndReveal(projectId, targetId, pathWithoutQuery(job.path)),
+                            onclick: () => goToResultsAndReveal(projectId, targetId, jobFuzzedPath(job)),
                         })
                         : h("span", { text: "0" }),
                 ]),
@@ -4171,14 +4194,19 @@ async function renderWorkspace(projectId, targetId, tab) {
         // empty forces a layout that clamps scrollTop to 0 and loses the position.
         const top = bodyTop();
         let anchorIndex = null;
+        let anchorSub = 0; // which of the entry's rows it is (an open Fuzzed panel or launcher is a second row of the same entry)
         let anchorOffset = 0;
         if (keepAnchor && n) {
             let barBottom = null; // only measured once rows exist, i.e. long after the toolbar was built
+            let seenIndex = null;
+            let sub = 0;
             for (const row of resultsBody.children) {
                 if (row.dataset.planIndex === undefined) continue; // a spacer
+                sub = row.dataset.planIndex === seenIndex ? sub + 1 : 0;
+                seenIndex = row.dataset.planIndex;
                 if (barBottom === null) barBottom = stuckBottom();
                 const rect = row.getBoundingClientRect();
-                if (rect.bottom > barBottom + 0.5) { anchorIndex = row.dataset.planIndex; anchorOffset = rect.top - barBottom; break; }
+                if (rect.bottom > barBottom + 0.5) { anchorIndex = row.dataset.planIndex; anchorSub = sub; anchorOffset = rect.top - barBottom; break; }
             }
         }
         const offsets = entryOffsets();
@@ -4230,7 +4258,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         for (const [index, height] of painted) { entryHeights.set(entryId(Number(index)), height); sum += height; }
         if (painted.size) resultsRowHeight = Math.max(12, sum / painted.size);
         if (anchorIndex !== null) {
-            const row = resultsBody.querySelector(`[data-plan-index="${anchorIndex}"]`);
+            const row = resultsBody.querySelectorAll(`[data-plan-index="${anchorIndex}"]`)[anchorSub];
             if (row) {
                 const shift = row.getBoundingClientRect().top - stuckBottom() - anchorOffset;
                 if (Math.abs(shift) > 0.5) scrollArea.scrollTop += shift;
@@ -4605,7 +4633,7 @@ async function renderWorkspace(projectId, targetId, tab) {
                 cell.innerHTML = "";
                 cell.appendChild(h("button", {
                     type: "button", class: "results-count-link", text: String(newCount), title: "Go to Results",
-                    onclick: () => goToResultsAndReveal(projectId, targetId, job ? pathWithoutQuery(job.path) : ""),
+                    onclick: () => goToResultsAndReveal(projectId, targetId, job ? jobFuzzedPath(job) : ""),
                 }));
             }
         }

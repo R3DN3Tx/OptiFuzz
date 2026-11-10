@@ -94,6 +94,17 @@ class FuzzJob:
     fuzz_keyword: str = ""
 
     @property
+    def fuzzed_path(self) -> str:
+        """The place this job fuzzes, the one that carries its "Fuzzed" tag: its path without the query; for a job
+        made with the fuzz word, the directory the word sits in ("/api/" for "/api/FUZZ/crash", "/search/" for
+        "/search/?q=FUZZ")."""
+        if self.fuzz_keyword and self.fuzz_keyword in self.path:
+            before = self.path.partition(self.fuzz_keyword)[0].split("?", 1)[0]
+            return before[: before.rfind("/") + 1] or "/"
+        cut = min((i for i in (self.path.find("?"), self.path.find("#")) if i != -1), default=len(self.path))
+        return self.path[:cut]
+
+    @property
     def fuzz_in_query(self) -> bool:
         """True when the fuzz word of this job sits in the query string ("/search/?q=FUZZ"): there the query is
         what changes from one request to the next, so Results keeps it as part of the path."""
