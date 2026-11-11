@@ -92,3 +92,31 @@ def summarize_request_errors(log_file: Path) -> RequestErrorSummary | None:
         return None
     top = "; ".join(f"{n}x {reason}" for reason, n in reasons.most_common(TOP_REASONS))
     return RequestErrorSummary(count=count, text=f"{count} failed requests logged (latest part of the run); most common: {top}")
+
+
+def tail_request_urls(log_file: Path, limit: int) -> list[str]:
+    """The URLs of the last `limit` responses recorded in the log (oldest first), read from its tail only."""
+    try:
+        with open(log_file, "rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(size - TAIL_BYTES, 0))
+            text = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return []
+    urls = [record[1] for record in map(parse_request_record, text.splitlines()) if record]
+    return urls[-limit:] if limit > 0 else []
+
+
+def remove_dirsearch_logs(directory: Path) -> None:
+    """Deletes dirsearch's log of a job and its rotated copy (dirsearch.log, dirsearch.log.1...). The log holds the
+    queries of every request and is only needed while the run segment that wrote it is being analysed."""
+    try:
+        files = list(directory.glob("dirsearch.log*"))
+    except OSError:
+        return
+    for file in files:
+        try:
+            file.unlink(missing_ok=True)
+        except OSError:
+            pass  # still held open (Windows): the next start sweeps it

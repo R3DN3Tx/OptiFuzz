@@ -1504,3 +1504,93 @@ def test_errors_keep_the_job_total_across_a_pause_and_resume(workspace_root) -> 
     )
     manager._publish_progress(job, ParsedProgress(percent=50, index=9, length=18, rate=5, errors=2), 0, 4)
     assert job.errors == 6
+
+
+# ---- dirsearch.log: position fallback when the progress bar is silent, and clean-up -----------------------------
+
+
+class _SilentBarEngine(MockDirsearchEngine):
+    """Almost every request is a hit, so dirsearch draws no progress bar at all: the log is the only trace."""
+
+    def __init__(self, url_template: str = "https://target.local/word{i}") -> None:
+        super().__init__()
+        self._template = url_template
+
+    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
+        script = (
+            "import time\n"
+            f"log = open({str(log_file)!r}, 'w')\n"
+            "for i in range(40):\n"
+            f"    log.write('2026-10-21 10:00:00,100 [INFO] \"GET ' + {self._template!r}.format(i=i) + '\" 200 - 10B\\n')\n"
+            "log.flush()\n"
+            "time.sleep(60)\n"
+        )
+        return [sys.executable, "-c", script]
+
+
+def _pause_when_log_is_written(manager, job, log_file: Path) -> None:
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.RUNNING)
+    _wait_until(lambda: log_file.exists() and log_file.stat().st_size > 1000, timeout=10)
+    manager.pause_job(job.id)
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED, timeout=15)
+
+
+def test_pause_without_a_progress_bar_resumes_from_where_the_log_says(workspace_root, tmp_path: Path) -> None:
+    # BUG-026: nothing but hits means no bar, completed_lines stayed 0 and Resume started over.
+    manager = JobManager(_SilentBarEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/", threads=2),
+        wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+    log_file = layout.job_wordlist_dir("p1", "t1", job.id) / "dirsearch.log"
+    _pause_when_log_is_written(manager, job, log_file)
+    # the last 6 logged words are word34..word39: everything before word34, minus the 2 in flight, is done
+    assert manager.get_job(job.id).completed_lines == 32
+
+
+def test_pause_with_a_censored_log_keeps_the_old_behaviour(workspace_root, tmp_path: Path) -> None:
+    # If dirsearch ever censors the query again the words cannot be matched: no guess, same as before.
+    manager = JobManager(_SilentBarEngine("https://target.local/search/?q=<redacted>"), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/", threads=2),
+        wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+    log_file = layout.job_wordlist_dir("p1", "t1", job.id) / "dirsearch.log"
+    _pause_when_log_is_written(manager, job, log_file)
+    assert manager.get_job(job.id).completed_lines == 0
+
+
+def test_the_log_is_deleted_when_the_segment_ends_and_swept_at_start(workspace_root, tmp_path: Path) -> None:
+    manager = JobManager(_LogsFailuresEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/"), wordlist_files=[_wordlist(tmp_path, 300)],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.COMPLETED)
+    directory = layout.job_wordlist_dir("p1", "t1", job.id)
+    _wait_until(lambda: not list(directory.glob("dirsearch.log*")))
+    assert (directory / "full.txt").exists()  # only the log goes, never the wordlist Resume needs
+
+    (directory / "dirsearch.log").write_text("leftover", encoding="utf-8")
+    (directory / "dirsearch.log.1").write_text("rotated", encoding="utf-8")
+    JobManager(_LogsFailuresEngine(), max_concurrent_jobs=1)  # a new start
+    assert not list(directory.glob("dirsearch.log*"))
+
+
+def test_a_running_job_keeps_its_log_until_its_segment_ends(workspace_root, tmp_path: Path) -> None:
+    manager = JobManager(_SilentBarEngine(), max_concurrent_jobs=2)
+    config = DirsearchJobConfig(url="https://target.local/", threads=2)
+    first = manager.create_job(project_id="p1", target_id="t1", path="/", config=config, wordlist_files=[_wordlist(tmp_path, 300)])
+    second = manager.create_job(project_id="p1", target_id="t1", path="/", config=config, wordlist_files=[_wordlist(tmp_path, 300)])
+    log_1 = layout.job_wordlist_dir("p1", "t1", first.id) / "dirsearch.log"
+    log_2 = layout.job_wordlist_dir("p1", "t1", second.id) / "dirsearch.log"
+    _wait_until(lambda: log_1.exists() and log_2.exists() and log_1.stat().st_size > 1000 and log_2.stat().st_size > 1000, timeout=10)
+    manager.pause_job(first.id)
+    _wait_until(lambda: manager.get_job(first.id).status == JobStatus.PAUSED, timeout=15)
+    assert not log_1.exists()
+    assert log_2.exists()  # the other job is still running and keeps writing its own
+    manager.stop_job(second.id)
+    _wait_until(lambda: manager.get_job(second.id).status == JobStatus.STOPPED, timeout=15)
+    assert not log_2.exists()

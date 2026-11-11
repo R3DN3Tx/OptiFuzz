@@ -70,6 +70,16 @@ def build_target_export_data(project_id: str, target_id: str, job_manager: JobMa
     jobs = job_manager.list_jobs(target_id)
 
     results = results_service.list_results(project_id, target_id, jobs, live_results=job_manager.live_results())
+    # The raw data holds a finding once per time dirsearch reported it (a resume repeats the few words that were in
+    # flight). The app shows each finding once, so the report does too: same key as the Results tab.
+    seen_findings: set[tuple] = set()
+    unique_results = []
+    for result in results:
+        key = (result.path, result.status, result.size, result.redirect or "", result.url)
+        if key not in seen_findings:
+            seen_findings.add(key)
+            unique_results.append(result)
+    results = unique_results
     try:
         tree_view = tree_service.tree_views(project_id, target_id, jobs, results)
     except DamagedFileError:

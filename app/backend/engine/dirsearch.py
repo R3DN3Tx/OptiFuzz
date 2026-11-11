@@ -115,16 +115,27 @@ class DirsearchEngine(FuzzingEngine):
         self._module = module
 
     def _launch_args(self, config: DirsearchJobConfig) -> list[str]:
-        """`-m dirsearch`, or a tiny `-c` launcher when default headers are switched off.
+        """A tiny `-c` launcher that adjusts two things inside dirsearch before its main() runs.
 
-        dirsearch merges its DEFAULT_HEADERS under the user's, so the only way
-        to stop it sending one is to pop it from that dict before main() runs.
+        - The request log (`--log`) censors every query value (`?q=<redacted>`), which hides the word that a
+          request used. The two query patterns of its log formatter are switched off; credentials in URLs and
+          the proxy password stay censored. OptiFuzz needs the real words to resume exactly after an auto-pause
+          and to find its place when the progress bar is silent. Skipped if dirsearch changes those names.
+        - dirsearch merges its DEFAULT_HEADERS under the user's, so the only way to stop it sending one is to
+          pop it from that dict.
+
+        Every name touched here is listed in app/docs/DEPENDENCIES.md and guarded by a test.
         """
         disabled = list(config.disabled_default_headers)
-        if not disabled:
-            return ["-m", self._module]
         code = (
             f"import {self._module}\n"
+            "import re\n"
+            "try:\n"
+            "    import lib.core.logger as _log\n"
+            "    _log.QUERY_VALUE_PATTERN = re.compile(r'(?!)')\n"
+            "    _log.BARE_QUERY_COMPONENT_PATTERN = re.compile(r'(?!)')\n"
+            "except Exception:\n"
+            "    pass\n"
             "from lib.core.settings import DEFAULT_HEADERS\n"
             f"for name in {disabled!r}: DEFAULT_HEADERS.pop(name, None)\n"
             f"from {self._module}.dirsearch import main\n"
@@ -210,7 +221,7 @@ class DirsearchEngine(FuzzingEngine):
         if config.timeout is not None:
             argv += ["--timeout", str(config.timeout)]
         if config.proxy:
-            argv += ["--proxies", config.proxy]
+            argv += ["--proxy", config.proxy]
         if config.max_rate is not None:
             argv += ["--max-rate", str(config.max_rate)]
         if config.delay is not None:

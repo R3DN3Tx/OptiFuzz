@@ -223,3 +223,22 @@ def test_tree_urls_export_lists_every_tree_path_as_an_absolute_url(client: TestC
         "https://export.example.com/api/auth/",
         "https://export.example.com/login.php",
     ]
+
+
+def test_export_lists_each_finding_once_even_if_dirsearch_reported_it_twice(client, monkeypatch) -> None:
+    """A resume repeats the few words that were in flight: the app shows them once, so does the report."""
+    from backend.models.result import Result
+    from backend.services import export_service, results_service
+
+    def result(path: str, status: int = 200) -> Result:
+        return Result(job_id="j1", time="10:00:00", status=status, size="1KB", url=f"http://127.0.0.1:8910{path}", path=path)
+
+    monkeypatch.setattr(
+        results_service, "list_results",
+        lambda *a, **k: [result("/a"), result("/b"), result("/a"), result("/a", 403), result("/b")],
+    )
+    project, target = _make_project_and_target(client)
+
+    data = export_service.build_target_export_data(project["id"], target["id"], client.app.state.job_manager)
+
+    assert [(r["path"], r["status"]) for r in data["results"]] == [("/a", 200), ("/b", 200), ("/a", 403)]

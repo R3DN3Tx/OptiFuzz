@@ -91,7 +91,7 @@ def test_build_command_minimal_config(workspace_root) -> None:
     )
 
     assert argv == [
-        "python.exe", "-m", "dirsearch",
+        "python.exe", *engine._launch_args(config),
         "-u", "https://target.local/api/",
         "-w", "wordlist.txt",
         "-t", "5",
@@ -143,7 +143,7 @@ def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> No
     )
 
     assert argv == [
-        "python.exe", "-m", "dirsearch",
+        "python.exe", *engine._launch_args(config),
         "-u", "https://target.local/",
         "-w", "remainder.txt",
         "-t", "25",
@@ -162,7 +162,7 @@ def test_build_command_full_config_is_never_a_shell_string(workspace_root) -> No
         "-i", "200,301-399",
         "-x", "404",
         "--timeout", "15.0",
-        "--proxies", "http://127.0.0.1:8080",
+        "--proxy", "http://127.0.0.1:8080",
         "--max-rate", "50",
         "--delay", "0.5",
         "--recursive", "--exclude-subdirs", "/api/",
@@ -252,7 +252,7 @@ def test_detect_version_against_real_installed_dirsearch() -> None:
     assert "0.5.0" in version
 
 
-def test_build_command_without_disabled_headers_launches_the_plain_module() -> None:
+def test_build_command_always_uses_the_launcher_that_keeps_the_log_uncensored() -> None:
     engine = DirsearchEngine(python_executable="python.exe")
     config = DirsearchJobConfig(url="https://target.local/")
 
@@ -260,7 +260,28 @@ def test_build_command_without_disabled_headers_launches_the_plain_module() -> N
         config, wordlist_file=Path("wordlist.txt"), output_base=Path("outputs/job_006")
     )
 
-    assert argv[1:3] == ["-m", "dirsearch"]
+    assert argv[1] == "-c"
+    assert "QUERY_VALUE_PATTERN" in argv[2] and "BARE_QUERY_COMPONENT_PATTERN" in argv[2]
+    assert "DEFAULT_HEADERS.pop" in argv[2] and "[]" in argv[2]
+    assert argv[3:5] == ["-u", "https://target.local/"]
+
+
+def test_launcher_stops_dirsearch_from_censoring_the_query_of_the_logged_requests() -> None:
+    """dirsearch writes ?q=<redacted> in its --log; OptiFuzz needs the real word (BUG-026/027)."""
+    import subprocess
+
+    config = DirsearchJobConfig(url="https://target.local/")
+    code = DirsearchEngine(python_executable=sys.executable)._launch_args(config)[1].replace(
+        "main()",
+        "from lib.core.logger import redact_log_text as r; import sys\n"
+        "print(r('GET http://user:pw@h/search/?q=a/b&x=1 and ?bare'))",
+    )
+
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+
+    assert result.returncode == 0, result.stderr
+    assert "?q=a/b&x=1" in result.stdout and "?bare" in result.stdout
+    assert "user:pw" not in result.stdout  # credentials in a URL stay censored
 
 
 def test_build_command_with_disabled_headers_pops_them_before_dirsearch_runs() -> None:

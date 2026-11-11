@@ -17,13 +17,20 @@ from backend import platform_compat
 from backend.engine.base import FuzzingEngine
 from backend.events.bus import EventBus
 from backend.events.bus import event_bus as default_event_bus
-from backend.job_manager.dirsearch_log import RequestErrorSummary, parse_request_record, summarize_request_errors
+from backend.job_manager.dirsearch_log import (
+    RequestErrorSummary,
+    parse_request_record,
+    remove_dirsearch_logs,
+    summarize_request_errors,
+    tail_request_urls,
+)
 from backend.job_manager.pty_output import LiveOutputParser
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
     estimate_requests,
     find_resume_point,
     first_line_requesting,
+    first_lines_requesting,
     load_wordlist_lines,
     resolve_wordlist,
     write_remainder_wordlist,
@@ -282,6 +289,8 @@ class JobManager:
                         job.auto_paused = True
                         self._save(job)
                     self._jobs[job.id] = job
+                    # Nothing is running at start: a log left by a closed or crashed session is dead weight.
+                    remove_dirsearch_logs(layout.job_wordlist_dir(job.project_id, job.target_id, job.id))
 
     # -- creation ---------------------------------------------------------
 
@@ -1033,16 +1042,16 @@ class JobManager:
             job.errors = max(job.errors, base_errors + failures.count)
 
         if job.pause_requested and not job.stop_requested:
-            self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+            self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests, log_file)
         elif exit_code != 0 and not job.stop_requested:
             # A crash or an error exit: keep the real position so a FAILED job can be resumed
             # from where it got to instead of from the last periodic checkpoint.
-            self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+            self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests, log_file)
         elif exit_code == 0 and not job.stop_requested:
             reason = self._early_end_reason(config, progress_state["last"], progress_state["tail"], failures)
             if reason:
                 # Keep the true position (not 100%) so Resume continues from there.
-                self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests)
+                self._checkpoint_pause(job, lines, config, progress_state["last"], base_lines, base_requests, log_file)
                 done = job.completed_requests
                 total = job.total_wordlist_requests
                 percent = f" ({round(done / total * 100)}%)" if total else ""
@@ -1054,6 +1063,9 @@ class JobManager:
         error_reason = None
         if exit_code != 0:
             error_reason = "\n".join(stderr_lines[-STDERR_TAIL_LINES:]) or self._last_output_line(progress_state["tail"])
+        # The process has ended and the watcher has been joined: nothing reads the log after this point
+        # (a resume starts a fresh one), and it holds the full query of every request.
+        remove_dirsearch_logs(log_file.parent)
         return exit_code, error_reason
 
     @staticmethod
@@ -1398,6 +1410,7 @@ class JobManager:
         last_progress: ParsedProgress | None,
         base_lines: int,
         base_requests: int,
+        log_file: Path | None = None,
     ) -> None:
         """Folds however much of THIS run segment is safely done into
         job.completed_lines/completed_requests, via the same
@@ -1412,10 +1425,38 @@ class JobManager:
         job.completed_lines, job.completed_requests = self._compute_checkpoint(
             lines, config, last_progress, base_lines, base_requests,
         )
+        if (job.completed_lines, job.completed_requests) == (base_lines, base_requests) and log_file is not None:
+            # dirsearch draws its progress bar only for requests that are NOT hits, so a run where almost every
+            # request is a hit (?q=FUZZ answering 200) never reports a position: its own log still does.
+            from_log = self._checkpoint_from_log(job, lines, config, log_file, base_lines, base_requests)
+            if from_log is not None:
+                job.completed_lines, job.completed_requests = from_log
         trigger_url = self._auto_pause_urls.pop(job.id, None)
         job.skip_completed_lines = job.skip_completed_requests = None
         if trigger_url and job.auto_paused:
             self._repeat_auto_pause_trigger(job, trigger_url, lines, config, base_lines, base_requests)
+
+    def _checkpoint_from_log(
+        self, job: FuzzJob, lines: list[str], config: DirsearchJobConfig, log_file: Path, base_lines: int, base_requests: int,
+    ) -> tuple[int, int] | None:
+        """A safe (completed_lines, completed_requests) read from the last requests dirsearch logged, for a run whose
+        progress bar never showed a position. Requests leave in wordlist order, `threads` at a time, so everything
+        before the earliest of the last few logged words (minus one batch of in-flight requests) is done. None when
+        the log tells nothing (it is empty, or its URLs are censored)."""
+        base_path = urlparse(config.url).path.rstrip("/") + "/"
+        wanted: set[str] = set()
+        for url in tail_request_urls(log_file, config.threads * 2 + 2):
+            path = unquote(results_service.result_path(url, bool(job.fuzz_keyword)))
+            if path.startswith(base_path):
+                wanted.add(path[len(base_path):])
+        found = first_lines_requesting(lines[base_lines:], wanted, list(config.extensions), config.force_extensions)
+        if not found:
+            return None
+        safe = max(min(found.values()) - config.threads, 0)
+        if safe <= 0:
+            return None
+        requests = estimate_requests(lines[base_lines : base_lines + safe], list(config.extensions), config.force_extensions)
+        return base_lines + safe, base_requests + requests
 
     def _repeat_auto_pause_trigger(
         self, job: FuzzJob, url: str, lines: list[str], config: DirsearchJobConfig, base_lines: int, base_requests: int,

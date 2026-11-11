@@ -215,3 +215,22 @@ def first_line_requesting(
         if wanted in _line_variants(raw_line, extensions, force_extensions):
             return index
     return None
+
+
+def first_lines_requesting(
+    lines: list[str], paths: set[str], extensions: list[str], force_extensions: bool,
+) -> dict[str, int]:
+    """For each path of `paths` (relative to the job's base URL) that some line makes dirsearch request, the
+    index in `lines` of the first such line. One pass over the wordlist whatever the number of paths."""
+    wanted = {path.lstrip("/") for path in paths}
+    found: dict[str, int] = {}
+    if not wanted:
+        return found
+    extensions = list(extensions or [])
+    for index, raw_line in enumerate(lines):
+        for variant in _line_variants(raw_line, extensions, force_extensions):
+            if variant in wanted and variant not in found:
+                found[variant] = index
+        if len(found) == len(wanted):
+            break
+    return found
