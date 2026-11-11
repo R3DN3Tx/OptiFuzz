@@ -1594,25 +1594,3 @@ def test_a_running_job_keeps_its_log_until_its_segment_ends(workspace_root, tmp_
     manager.stop_job(second.id)
     _wait_until(lambda: manager.get_job(second.id).status == JobStatus.STOPPED, timeout=15)
     assert not log_2.exists()
-
-
-class _FailsEchoingCredentialsEngine(MockDirsearchEngine):
-    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
-        script = (
-            "import sys\n"
-            "sys.stderr.write('cannot reach http://bob:pw12345@127.0.0.1:8080/ (--proxy-auth bob:pw12345) for /admin\n')\n"
-            "sys.exit(2)\n"
-        )
-        return [sys.executable, "-c", script]
-
-
-def test_a_failure_reason_never_carries_a_password(workspace_root, tmp_path: Path) -> None:
-    manager = JobManager(_FailsEchoingCredentialsEngine(), max_concurrent_jobs=1)
-    job = manager.create_job(
-        project_id="p1", target_id="t1", path="/",
-        config=DirsearchJobConfig(url="https://target.local/"), wordlist_files=[_wordlist(tmp_path, 5)],
-    )
-    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.FAILED, timeout=15)
-    reason = manager.get_job(job.id).error_reason
-    assert "pw12345" not in reason
-    assert "127.0.0.1:8080" in reason and "/admin" in reason

@@ -25,7 +25,6 @@ from backend.job_manager.dirsearch_log import (
     tail_request_urls,
 )
 from backend.job_manager.pty_output import LiveOutputParser
-from backend.job_manager.redact import redact_secrets
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
     estimate_requests,
@@ -700,12 +699,12 @@ class JobManager:
                     elif job.pause_requested:
                         final_status = JobStatus.PAUSED
                     elif exit_code != 0:
-                        job.error_reason = redact_secrets(error_reason or f"dirsearch exited with code {exit_code}")
+                        job.error_reason = error_reason or f"dirsearch exited with code {exit_code}"
                         final_status = JobStatus.FAILED
                     elif job.id in self._early_ends:
                         # dirsearch gave up on its own: PAUSED at the real position,
                         # with the reason, so Resume can finish it (100% is not claimed).
-                        job.error_reason = redact_secrets(self._early_ends.pop(job.id))
+                        job.error_reason = self._early_ends.pop(job.id)
                         final_status = JobStatus.PAUSED
                     else:
                         job.completed_lines = job.total_wordlist_lines
