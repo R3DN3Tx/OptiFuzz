@@ -148,6 +148,14 @@ def set_mirror_dir(project_id: str, new_dir: str) -> Project:
     if new_dir == old_dir:
         return project
 
+    if new_dir:
+        # Refuse a folder that cannot be created BEFORE anything is moved or saved, so a failure leaves the
+        # previous mirror exactly as it was (it used to surface as a 500 half way through the migration).
+        try:
+            Path(new_dir).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ValueError(f"Cannot create that folder: {exc.strerror or exc}") from exc
+
     if old_dir and Path(old_dir).is_dir() and new_dir:
         _migrate_mirror_dir(project, Path(old_dir), Path(new_dir))
 

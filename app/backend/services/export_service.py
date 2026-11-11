@@ -762,7 +762,9 @@ function normalizeKey(path) {
 }
 function parentKeyOf(key) {
     if (key === "/") return null;
-    var idx = key.lastIndexOf("/");
+    // a "/" inside a query belongs to the query, not to the path (?file=../../etc/passwd is one row)
+    var q = key.indexOf("?");
+    var idx = (q === -1 ? key : key.slice(0, q)).lastIndexOf("/");
     return idx <= 0 ? "/" : key.slice(0, idx);
 }
 function computeDisplaySegment(rawPath, parentKey, isDirectory) {
@@ -1270,15 +1272,44 @@ renderTree();
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 // Exact job paths, same rule as the live app: "path/" and "path" are separate.
-DATA.jobs.forEach(function (j) { fuzzedPaths[jobFuzzedPath(j)] = true; });
+DATA.jobs.forEach(function (j) { fuzzedPaths[normalizeKey(jobFuzzedPath(j))] = true; });
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return jobFuzzedPath(j) === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return normalizeKey(jobFuzzedPath(j)) === normalizeKey(path); }).map(function (j) {
         return {
             job_id: j.id, path: j.path, fuzz_keyword: j.fuzz_keyword || "", status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
             created_at: j.created_at, started_at: j.started_at,
         };
     });
+}
+
+// "/x" (a redirect stub) and "/x/" are one place; the fuzz is shown (and filtered) on the place's primary
+// result only, as the live app does. A place with no result of its own is tagged on its synthetic row.
+var primaryResultCache = { results: null, byKey: {} };
+// A fuzzed folder with no result of its own is only a synthetic row: "Fuzzed" keeps what lies under it.
+function underFuzzedFolder(path) {
+    isPrimaryResult({ path: path });
+    var key = parentKeyOf(normalizeKey(path));
+    while (key && key !== "/") {
+        if (fuzzedPaths[key] && primaryResultCache.byKey[key] === undefined) return true;
+        key = parentKeyOf(key);
+    }
+    return false;
+}
+function isPrimaryResult(r) {
+    if (primaryResultCache.results !== DATA.results) {
+        var groups = {};
+        DATA.results.forEach(function (it) { var k = normalizeKey(it.path); (groups[k] = groups[k] || []).push(it); });
+        var byKey = {};
+        Object.keys(groups).forEach(function (k) {
+            var items = groups[k];
+            var real = items.filter(function (it) { return !isRedirectItem(it); });
+            var pool = real.length ? real : items;
+            byKey[k] = (pool.filter(function (it) { return it.path === "/" || it.path.charAt(it.path.length - 1) === "/"; })[0] || pool[0]).path;
+        });
+        primaryResultCache = { results: DATA.results, byKey: byKey };
+    }
+    return primaryResultCache.byKey[normalizeKey(r.path)] === r.path;
 }
 
 // Seeded from whatever hide rules were active in the live app AT EXPORT
@@ -1295,7 +1326,7 @@ function matchesHideFilter(result, f) {
         if (resultKey.indexOf(prefix) !== 0 || resultKey === parentKey) return false;
         var depth = f.depth === undefined ? 0 : f.depth;
         if (depth > 0) {
-            var segments = resultKey.slice(prefix.length).split("/").length;
+            var segments = resultKey.slice(prefix.length).split("?")[0].split("/").length;
             if (segments > depth) return false;
         }
     }
@@ -1324,7 +1355,7 @@ resultsStatusInput.addEventListener("input", function () {
 function passesResultsFilters(r) {
     var query = resultsSearchInput.value.trim().toLowerCase();
     if (query && r.path.toLowerCase().indexOf(query) === -1) return false;
-    if (resultsFuzzedBtn.classList.contains("active") && !fuzzedPaths[r.path]) return false;
+    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || underFuzzedFolder(r.path))) return false;
     if (resultsStatusSet.length && resultsStatusSet.indexOf(r.status) === -1) return false;
     if (resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return false;
     return true;
@@ -1415,7 +1446,7 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         pathContent.appendChild(link);
         if (thisChildCount > 0) pathContent.appendChild(h("span", { class: "hint", text: " (" + thisChildCount + ")" }));
 
-        var history = item ? fuzzHistoryForPath(item.path) : [];
+        var history = item ? (isPrimaryResult(item) ? fuzzHistoryForPath(item.path) : []) : fuzzHistoryForPath(node.key);
         var detailRow = null;
         if (history.length) {
             detailRow = buildFuzzHistoryRow(4, history, false, item ? item.path : node.key);
@@ -2298,7 +2329,9 @@ function normalizeKey(path) {
 }
 function parentKeyOf(key) {
     if (key === "/") return null;
-    var idx = key.lastIndexOf("/");
+    // a "/" inside a query belongs to the query, not to the path (?file=../../etc/passwd is one row)
+    var q = key.indexOf("?");
+    var idx = (q === -1 ? key : key.slice(0, q)).lastIndexOf("/");
     return idx <= 0 ? "/" : key.slice(0, idx);
 }
 function computeDisplaySegment(rawPath, parentKey, isDirectory) {
@@ -2805,13 +2838,42 @@ treeSearchInput.addEventListener("input", renderTree);
 // full Hide rules support (status/size/parent-path/depth), same as live.
 var fuzzedPaths = {};
 function fuzzHistoryForPath(path) {
-    return DATA.jobs.filter(function (j) { return jobFuzzedPath(j) === path; }).map(function (j) {
+    return DATA.jobs.filter(function (j) { return normalizeKey(jobFuzzedPath(j)) === normalizeKey(path); }).map(function (j) {
         return {
             job_id: j.id, status: j.status, wordlist_sources: j.wordlist_sources,
             extensions: (j.config && j.config.extensions) || [], config: j.config || {},
             created_at: j.created_at, started_at: j.started_at,
         };
     });
+}
+
+// "/x" (a redirect stub) and "/x/" are one place; the fuzz is shown (and filtered) on the place's primary
+// result only, as the live app does. A place with no result of its own is tagged on its synthetic row.
+var primaryResultCache = { results: null, byKey: {} };
+// A fuzzed folder with no result of its own is only a synthetic row: "Fuzzed" keeps what lies under it.
+function underFuzzedFolder(path) {
+    isPrimaryResult({ path: path });
+    var key = parentKeyOf(normalizeKey(path));
+    while (key && key !== "/") {
+        if (fuzzedPaths[key] && primaryResultCache.byKey[key] === undefined) return true;
+        key = parentKeyOf(key);
+    }
+    return false;
+}
+function isPrimaryResult(r) {
+    if (primaryResultCache.results !== DATA.results) {
+        var groups = {};
+        DATA.results.forEach(function (it) { var k = normalizeKey(it.path); (groups[k] = groups[k] || []).push(it); });
+        var byKey = {};
+        Object.keys(groups).forEach(function (k) {
+            var items = groups[k];
+            var real = items.filter(function (it) { return !isRedirectItem(it); });
+            var pool = real.length ? real : items;
+            byKey[k] = (pool.filter(function (it) { return it.path === "/" || it.path.charAt(it.path.length - 1) === "/"; })[0] || pool[0]).path;
+        });
+        primaryResultCache = { results: DATA.results, byKey: byKey };
+    }
+    return primaryResultCache.byKey[normalizeKey(r.path)] === r.path;
 }
 
 // Seeded per target from the hide rules/filters saved in the live app
@@ -2827,7 +2889,7 @@ function matchesHideFilter(result, f) {
         if (resultKey.indexOf(prefix) !== 0 || resultKey === parentKey) return false;
         var depth = f.depth === undefined ? 0 : f.depth;
         if (depth > 0) {
-            var segments = resultKey.slice(prefix.length).split("/").length;
+            var segments = resultKey.slice(prefix.length).split("?")[0].split("/").length;
             if (segments > depth) return false;
         }
     }
@@ -2856,7 +2918,7 @@ resultsStatusInput.addEventListener("input", function () {
 function passesResultsFilters(r) {
     var query = resultsSearchInput.value.trim().toLowerCase();
     if (query && r.path.toLowerCase().indexOf(query) === -1) return false;
-    if (resultsFuzzedBtn.classList.contains("active") && !fuzzedPaths[r.path]) return false;
+    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || underFuzzedFolder(r.path))) return false;
     if (resultsStatusSet.length && resultsStatusSet.indexOf(r.status) === -1) return false;
     if (resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return false;
     return true;
@@ -2947,7 +3009,7 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         pathContent.appendChild(link);
         if (thisChildCount > 0) pathContent.appendChild(h("span", { class: "hint", text: " (" + thisChildCount + ")" }));
 
-        var history = item ? fuzzHistoryForPath(item.path) : [];
+        var history = item ? (isPrimaryResult(item) ? fuzzHistoryForPath(item.path) : []) : fuzzHistoryForPath(node.key);
         var detailRow = null;
         if (history.length) {
             detailRow = buildFuzzHistoryRow(4, history, false, item ? item.path : node.key);
@@ -3397,7 +3459,7 @@ function loadTarget(t) {
     applyResultsView(t.view);
     resultsHideFilters = ((t.view && t.view.hide_rules) || []).map(function (r) { return Object.assign({}, r); });
     fuzzedPaths = {};
-    DATA.jobs.forEach(function (j) { fuzzedPaths[jobFuzzedPath(j)] = true; });
+    DATA.jobs.forEach(function (j) { fuzzedPaths[normalizeKey(jobFuzzedPath(j))] = true; });
     renderBreadcrumb();
     renderTree();
     renderHideChips();

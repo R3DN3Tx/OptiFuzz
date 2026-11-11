@@ -2,7 +2,8 @@
 demo_site/ directory like before, plus a handful of fixed routes that
 return non-2xx/3xx status codes with deliberately different body sizes, so
 status-code handling (and dirsearch's own same-size-404 detection) can be
-eyeballed directly in the app.\n"""
+eyeballed directly in the app.
+"""
 from __future__ import annotations
 
 import http.server

@@ -458,3 +458,17 @@ def test_adding_one_of_x_and_x_slash_to_the_tree_does_not_create_the_other(works
 
     paths = [n.path for n in trs.list_nodes(project_id, target_id)]
     assert "/es-eu/" in paths and "/es-eu" not in paths
+
+
+def test_a_slash_inside_a_query_does_not_create_ancestor_nodes(workspace_root) -> None:
+    """BUG-025: /search/?file=../../etc/passwd lives under /search, not under /search/?file=.. and so on."""
+    project_id, target_id = _setup(workspace_root)
+
+    trs.add_path(project_id, target_id, "/search/?file=../../etc/passwd", source="manual")
+    trs.add_path(project_id, target_id, "/?x=a/b/c", source="manual")
+
+    paths = {n.path for n in trs.list_nodes(project_id, target_id)}
+    assert "/search" in paths
+    assert "/search/?file=../../etc/passwd" in paths
+    assert not any(p.startswith("/search/?file=") and p != "/search/?file=../../etc/passwd" for p in paths)
+    assert not any(p.startswith("/?x=a") and p != "/?x=a/b/c" for p in paths)

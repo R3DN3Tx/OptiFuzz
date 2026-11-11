@@ -1529,7 +1529,9 @@ function queryOfUrl(value) {
 function parentKeyOf(path) {
     const key = normalizeKey(path);
     if (key === "/") return null;
-    const lastSlash = key.lastIndexOf("/");
+    // a "/" inside a query belongs to the query, not to the path (?file=../../etc/passwd is one row)
+    const queryAt = key.indexOf("?");
+    const lastSlash = (queryAt === -1 ? key : key.slice(0, queryAt)).lastIndexOf("/");
     return lastSlash <= 0 ? "/" : key.slice(0, lastSlash);
 }
 
@@ -3715,15 +3717,26 @@ async function renderWorkspace(projectId, targetId, tab) {
             if (!resultKey.startsWith(prefix) || resultKey === parentKey) return false;
             const depth = f.depth === undefined ? 0 : f.depth;
             if (depth > 0) {
-                const segments = resultKey.slice(prefix.length).split("/").length;
+                const segments = resultKey.slice(prefix.length).split("?")[0].split("/").length;
                 if (segments > depth) return false;
             }
         }
         return true;
     }
+    // A fuzzed folder with no result of its own (for example /api/FUZZ/crash, found as /api/v1/crash) is only a
+    // synthetic row: "Fuzzed only" keeps what lies under it so that the tagged row is still drawn.
+    function underFuzzedFolder(path) {
+        fuzzHistoryForPath(path); // refreshes primaryPathByKey
+        let key = parentKeyOf(path);
+        while (key && key !== "/") {
+            if (jobsByPathKey.has(key) && !primaryPathByKey.has(key)) return true;
+            key = parentKeyOf(key);
+        }
+        return false;
+    }
     function passesResultFilters(r) {
         if (resultsSearchQuery && !r.path.toLowerCase().includes(resultsSearchQuery)) return false;
-        if (showFuzzedResultsOnly && fuzzHistoryForPath(r.path).length === 0) return false;
+        if (showFuzzedResultsOnly && fuzzHistoryForPath(r.path).length === 0 && !underFuzzedFolder(r.path)) return false;
         if (resultsStatusSet.size && !resultsStatusSet.has(r.status)) return false;
         if (resultsHideFilters.some((f) => matchesHideFilter(r, f))) return false;
         return true;

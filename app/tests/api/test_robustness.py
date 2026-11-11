@@ -197,6 +197,22 @@ def test_a_good_mirror_folder_is_accepted_and_can_be_cleared(client: TestClient,
     assert client.put(url, json={"dir": ""}).json()["dir"] == ""
 
 
+def test_a_mirror_folder_that_cannot_be_created_is_refused_and_keeps_the_previous_one(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """BUG-029: this used to be a 500 once a previous mirror folder existed."""
+    project = _project(client)
+    url = f"/api/projects/{project['id']}/outputs-mirror"
+    previous = tmp_path / "previous"
+    assert client.put(url, json={"dir": str(previous)}).status_code == 200
+    blocker = tmp_path / "a-file"
+    blocker.write_text("x", encoding="utf-8")
+    response = client.put(url, json={"dir": str(blocker / "inside")})
+    assert response.status_code == 400
+    assert "Cannot create that folder" in response.json()["detail"]
+    assert client.get(f"/api/projects/{project['id']}").json()["outputs_mirror_dir"] == str(previous)
+
+
 # ---- damaged data ------------------------------------------------------------------------------------------
 
 def test_one_damaged_project_does_not_hide_the_others(client: TestClient) -> None:

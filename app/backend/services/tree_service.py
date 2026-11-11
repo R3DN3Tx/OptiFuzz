@@ -77,10 +77,14 @@ def _ensure_ancestors(nodes: dict[str, TreeNode], project_id: str, target_id: st
     they're part of the tree now, with their own note, interesting flag, status
     and deletion, not just placeholders implied by a deeper path. Returns
     whether anything new was added."""
-    segments = [s for s in _key_for_comparison(path).split("/") if s]
+    key = _key_for_comparison(path)
+    # A "/" inside a query belongs to the query: "/search/?file=../../etc/passwd" sits under "/search" only.
+    query_at = key.find("?")
+    segments = [s for s in (key if query_at == -1 else key[:query_at]).split("/") if s]
     existing = {_key_for_comparison(n.path) for n in nodes.values()}
     changed = False
-    for depth in range(1, len(segments)):
+    last = len(segments) + 1 if query_at != -1 else len(segments)
+    for depth in range(1, last):
         ancestor = "/" + "/".join(segments[:depth])
         if ancestor in existing:
             continue
