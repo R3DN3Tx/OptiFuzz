@@ -1632,7 +1632,7 @@ function appendConnectorUnits(pathPrefix, connector) {
 //
 // Returns { childrenOf: Map(key -> [node, ...]), topLevel: [node, ...] },
 // each node shaped { key, path, items: [item, ...], synthetic }.
-function buildPathHierarchy(items, makeSynthetic, sort = null) {
+function buildPathHierarchy(items, makeSynthetic, sort = null, extraKeys = []) {
     // Two raw items can normalize to the same key -- verified against a
     // real dirsearch run: both "/admin" (a 301 redirect stub) and "/admin/"
     // (the actual 200 hit) are separate, genuinely distinct results. Real,
@@ -1658,6 +1658,14 @@ function buildPathHierarchy(items, makeSynthetic, sort = null) {
     const allKeys = new Set();
     for (const key of itemsByKey.keys()) {
         let k = key;
+        while (k && k !== "/") {
+            allKeys.add(k);
+            k = parentKeyOf(k);
+        }
+    }
+    // Places that must be drawn although no item sits there (a fuzzed folder with no result of its own).
+    for (const extra of extraKeys) {
+        let k = normalizeKey(extra);
         while (k && k !== "/") {
             allKeys.add(k);
             k = parentKeyOf(k);
@@ -3725,18 +3733,37 @@ async function renderWorkspace(projectId, targetId, tab) {
     }
     // A fuzzed folder with no result of its own (for example /api/FUZZ/crash, found as /api/v1/crash) is only a
     // synthetic row: "Fuzzed only" keeps what lies under it so that the tagged row is still drawn.
-    function underFuzzedFolder(path) {
-        fuzzHistoryForPath(path); // refreshes primaryPathByKey
-        let key = parentKeyOf(path);
-        while (key && key !== "/") {
-            if (jobsByPathKey.has(key) && !primaryPathByKey.has(key)) return true;
-            key = parentKeyOf(key);
+    // The parents of a fuzzed place stay too (with their own status and size when they have a result), so
+    // that the fuzzed row is always shown inside its real path; their other children are not kept.
+    let fuzzAncestorCache = { source: null, keys: new Set() };
+    function isFuzzAncestor(path) {
+        if (fuzzAncestorCache.source !== jobsByPathKey) {
+            const keys = new Set();
+            for (const fuzzedKey of jobsByPathKey.keys()) {
+                let key = parentKeyOf(fuzzedKey);
+                while (key && key !== "/") { keys.add(key); key = parentKeyOf(key); }
+            }
+            fuzzAncestorCache = { source: jobsByPathKey, keys };
         }
-        return false;
+        return fuzzAncestorCache.keys.has(normalizeKey(path));
+    }
+    // A fuzzed folder with no result of its own (for example /api/FUZZ/crash, found as /api/v1/crash) has no row to
+    // keep, so "Fuzzed only" draws it as an empty synthetic row: just the folder (and its parents), never what lies under it.
+    function fuzzedFoldersWithoutResult() {
+        if (!showFuzzedResultsOnly || resultsStatusSet.size) return [];
+        fuzzHistoryForPath("/"); // refreshes primaryPathByKey
+        const keys = [];
+        for (const key of jobsByPathKey.keys()) {
+            if (key === "/" || primaryPathByKey.has(key)) continue;
+            if (resultsSearchQuery && !key.toLowerCase().includes(resultsSearchQuery)) continue;
+            if (resultsHideFilters.some((f) => matchesHideFilter({ path: key, status: null, size: "" }, f))) continue;
+            keys.push(key);
+        }
+        return keys;
     }
     function passesResultFilters(r) {
         if (resultsSearchQuery && !r.path.toLowerCase().includes(resultsSearchQuery)) return false;
-        if (showFuzzedResultsOnly && fuzzHistoryForPath(r.path).length === 0 && !underFuzzedFolder(r.path)) return false;
+        if (showFuzzedResultsOnly && fuzzHistoryForPath(r.path).length === 0 && !isFuzzAncestor(r.path)) return false;
         if (resultsStatusSet.size && !resultsStatusSet.has(r.status)) return false;
         if (resultsHideFilters.some((f) => matchesHideFilter(r, f))) return false;
         return true;
@@ -4100,7 +4127,7 @@ async function renderWorkspace(projectId, targetId, tab) {
         // their own top-level entries instead of disappearing too.
         const visibleResults = allResults.filter(passesResultFilters);
         updateHiddenByRules();
-        const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult, resultsSort);
+        const hierarchy = buildPathHierarchy(visibleResults, makeSyntheticResult, resultsSort, fuzzedFoldersWithoutResult());
         lastResultsHierarchy = hierarchy;
 
         hierarchy.topLevel.forEach((top, i) => {

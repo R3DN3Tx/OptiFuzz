@@ -100,3 +100,17 @@ console.log(JSON.stringify(out));
 """
     out = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=30, check=True)
     assert json.loads(out.stdout) == [True, True, False, True]
+
+
+def test_exported_reports_show_how_many_children_the_hide_rules_hide() -> None:
+    """The live app writes "(10 · 3 hidden)" next to a folder; both report templates must do the same."""
+    text = Path(export_service.__file__).read_text(encoding="utf-8")
+    assert text.count("updateHiddenByRules();") == 2
+    assert text.count("hiddenChildCounts[node.key]") == 2
+
+
+def test_fuzzed_filter_keeps_the_parents_of_a_fuzzed_place_in_the_app_and_in_reports() -> None:
+    text = Path(export_service.__file__).read_text(encoding="utf-8")
+    assert text.count("isFuzzAncestor(r.path)") == 2
+    assert "underFuzzedFolder" not in text  # the children of a fuzzed folder are never kept
+    assert "isFuzzAncestor(r.path)" in (_FRONTEND / "app.js").read_text(encoding="utf-8")

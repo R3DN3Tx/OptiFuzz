@@ -929,7 +929,7 @@ function wireSortHeaders(table, getSort, setSort) {
         });
     });
 }
-function buildHierarchy(items, sort) {
+function buildHierarchy(items, sort, extraKeys) {
     var byKey = {};
     function ensure(key) {
         if (byKey[key]) return byKey[key];
@@ -940,6 +940,7 @@ function buildHierarchy(items, sort) {
     }
     ensure("/");
     items.forEach(function (item) { ensure(normalizeKey(item.path)).items.push(item); });
+    (extraKeys || []).forEach(function (key) { ensure(normalizeKey(key)); });
     Object.keys(byKey).forEach(function (key) {
         byKey[key].children.sort(function (a, b) { return compareSiblings(a, b, sort); });
     });
@@ -1283,18 +1284,44 @@ function fuzzHistoryForPath(path) {
     });
 }
 
+// Per parent folder: how many of its direct children the Hide rules hide ("(10 · 3 hidden)"), as in the live app.
+var hiddenChildCounts = {};
+function updateHiddenByRules() {
+    hiddenChildCounts = {};
+    if (!resultsHideFilters.length) return;
+    DATA.results.forEach(function (r) {
+        if (!resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return;
+        var parentKey = parentKeyOf(normalizeKey(r.path));
+        if (parentKey !== null) hiddenChildCounts[parentKey] = (hiddenChildCounts[parentKey] || 0) + 1;
+    });
+}
 // "/x" (a redirect stub) and "/x/" are one place; the fuzz is shown (and filtered) on the place's primary
 // result only, as the live app does. A place with no result of its own is tagged on its synthetic row.
 var primaryResultCache = { results: null, byKey: {} };
-// A fuzzed folder with no result of its own is only a synthetic row: "Fuzzed" keeps what lies under it.
-function underFuzzedFolder(path) {
-    isPrimaryResult({ path: path });
-    var key = parentKeyOf(normalizeKey(path));
-    while (key && key !== "/") {
-        if (fuzzedPaths[key] && primaryResultCache.byKey[key] === undefined) return true;
-        key = parentKeyOf(key);
+// The parents of a fuzzed place stay too (with their own status and size when they have a result).
+var fuzzAncestorCache = { source: null, keys: {} };
+function isFuzzAncestor(path) {
+    if (fuzzAncestorCache.source !== fuzzedPaths) {
+        var keys = {};
+        Object.keys(fuzzedPaths).forEach(function (fuzzedKey) {
+            var key = parentKeyOf(fuzzedKey);
+            while (key && key !== "/") { keys[key] = true; key = parentKeyOf(key); }
+        });
+        fuzzAncestorCache = { source: fuzzedPaths, keys: keys };
     }
-    return false;
+    return !!fuzzAncestorCache.keys[normalizeKey(path)];
+}
+// A fuzzed folder with no result of its own has no row to keep: "Fuzzed" draws it as an empty synthetic row
+// (the folder and its parents, never what lies under it).
+function fuzzedFoldersWithoutResult() {
+    if (!resultsFuzzedBtn.classList.contains("active") || resultsStatusSet.length) return [];
+    isPrimaryResult({ path: "/" }); // refreshes primaryResultCache
+    var query = resultsSearchInput.value.trim().toLowerCase();
+    return Object.keys(fuzzedPaths).filter(function (key) {
+        if (key === "/" || primaryResultCache.byKey[key] !== undefined) return false;
+        if (query && key.toLowerCase().indexOf(query) === -1) return false;
+        return !resultsHideFilters.some(function (f) { return matchesHideFilter({ path: key, status: null, size: "" }, f); });
+    });
 }
 function isPrimaryResult(r) {
     if (primaryResultCache.results !== DATA.results) {
@@ -1355,7 +1382,7 @@ resultsStatusInput.addEventListener("input", function () {
 function passesResultsFilters(r) {
     var query = resultsSearchInput.value.trim().toLowerCase();
     if (query && r.path.toLowerCase().indexOf(query) === -1) return false;
-    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || underFuzzedFolder(r.path))) return false;
+    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || isFuzzAncestor(r.path))) return false;
     if (resultsStatusSet.length && resultsStatusSet.indexOf(r.status) === -1) return false;
     if (resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return false;
     return true;
@@ -1444,7 +1471,13 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         var link = h("a", { class: "result-path-link", href: item ? item.url : "#", target: "_blank", rel: "noopener", text: displaySegment });
         attachCopyPathContextMenu(link, item ? item.path : node.key);
         pathContent.appendChild(link);
-        if (thisChildCount > 0) pathContent.appendChild(h("span", { class: "hint", text: " (" + thisChildCount + ")" }));
+        var thisHiddenCount = isLastItem ? (hiddenChildCounts[node.key] || 0) : 0;
+        if (thisChildCount > 0 || thisHiddenCount > 0) {
+            pathContent.appendChild(h("span", {
+                class: "hint",
+                text: " (" + (thisChildCount > 0 ? thisChildCount : "") + (thisHiddenCount > 0 ? (thisChildCount > 0 ? " · " : "") + thisHiddenCount + " hidden" : "") + ")",
+            }));
+        }
 
         var history = item ? (isPrimaryResult(item) ? fuzzHistoryForPath(item.path) : []) : fuzzHistoryForPath(node.key);
         var detailRow = null;
@@ -1557,8 +1590,10 @@ function renderResults() {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results." })]));
         return;
     }
+    updateHiddenByRules();
     var filtered = DATA.results.filter(passesResultsFilters);
-    if (!filtered.length) {
+    var extraFuzzedFolders = fuzzedFoldersWithoutResult();
+    if (!filtered.length && !extraFuzzedFolders.length) {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results match your filters." })]));
         return;
     }
@@ -1570,7 +1605,7 @@ function renderResults() {
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
     resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
-    var hierarchy = buildHierarchy(filtered, resultsSort);
+    var hierarchy = buildHierarchy(filtered, resultsSort, extraFuzzedFolders);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a
@@ -2496,7 +2531,7 @@ function wireSortHeaders(table, getSort, setSort) {
         });
     });
 }
-function buildHierarchy(items, sort) {
+function buildHierarchy(items, sort, extraKeys) {
     var byKey = {};
     function ensure(key) {
         if (byKey[key]) return byKey[key];
@@ -2507,6 +2542,7 @@ function buildHierarchy(items, sort) {
     }
     ensure("/");
     items.forEach(function (item) { ensure(normalizeKey(item.path)).items.push(item); });
+    (extraKeys || []).forEach(function (key) { ensure(normalizeKey(key)); });
     Object.keys(byKey).forEach(function (key) {
         byKey[key].children.sort(function (a, b) { return compareSiblings(a, b, sort); });
     });
@@ -2847,18 +2883,44 @@ function fuzzHistoryForPath(path) {
     });
 }
 
+// Per parent folder: how many of its direct children the Hide rules hide ("(10 · 3 hidden)"), as in the live app.
+var hiddenChildCounts = {};
+function updateHiddenByRules() {
+    hiddenChildCounts = {};
+    if (!resultsHideFilters.length) return;
+    DATA.results.forEach(function (r) {
+        if (!resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return;
+        var parentKey = parentKeyOf(normalizeKey(r.path));
+        if (parentKey !== null) hiddenChildCounts[parentKey] = (hiddenChildCounts[parentKey] || 0) + 1;
+    });
+}
 // "/x" (a redirect stub) and "/x/" are one place; the fuzz is shown (and filtered) on the place's primary
 // result only, as the live app does. A place with no result of its own is tagged on its synthetic row.
 var primaryResultCache = { results: null, byKey: {} };
-// A fuzzed folder with no result of its own is only a synthetic row: "Fuzzed" keeps what lies under it.
-function underFuzzedFolder(path) {
-    isPrimaryResult({ path: path });
-    var key = parentKeyOf(normalizeKey(path));
-    while (key && key !== "/") {
-        if (fuzzedPaths[key] && primaryResultCache.byKey[key] === undefined) return true;
-        key = parentKeyOf(key);
+// The parents of a fuzzed place stay too (with their own status and size when they have a result).
+var fuzzAncestorCache = { source: null, keys: {} };
+function isFuzzAncestor(path) {
+    if (fuzzAncestorCache.source !== fuzzedPaths) {
+        var keys = {};
+        Object.keys(fuzzedPaths).forEach(function (fuzzedKey) {
+            var key = parentKeyOf(fuzzedKey);
+            while (key && key !== "/") { keys[key] = true; key = parentKeyOf(key); }
+        });
+        fuzzAncestorCache = { source: fuzzedPaths, keys: keys };
     }
-    return false;
+    return !!fuzzAncestorCache.keys[normalizeKey(path)];
+}
+// A fuzzed folder with no result of its own has no row to keep: "Fuzzed" draws it as an empty synthetic row
+// (the folder and its parents, never what lies under it).
+function fuzzedFoldersWithoutResult() {
+    if (!resultsFuzzedBtn.classList.contains("active") || resultsStatusSet.length) return [];
+    isPrimaryResult({ path: "/" }); // refreshes primaryResultCache
+    var query = resultsSearchInput.value.trim().toLowerCase();
+    return Object.keys(fuzzedPaths).filter(function (key) {
+        if (key === "/" || primaryResultCache.byKey[key] !== undefined) return false;
+        if (query && key.toLowerCase().indexOf(query) === -1) return false;
+        return !resultsHideFilters.some(function (f) { return matchesHideFilter({ path: key, status: null, size: "" }, f); });
+    });
 }
 function isPrimaryResult(r) {
     if (primaryResultCache.results !== DATA.results) {
@@ -2918,7 +2980,7 @@ resultsStatusInput.addEventListener("input", function () {
 function passesResultsFilters(r) {
     var query = resultsSearchInput.value.trim().toLowerCase();
     if (query && r.path.toLowerCase().indexOf(query) === -1) return false;
-    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || underFuzzedFolder(r.path))) return false;
+    if (resultsFuzzedBtn.classList.contains("active") && !((fuzzedPaths[normalizeKey(r.path)] && isPrimaryResult(r)) || isFuzzAncestor(r.path))) return false;
     if (resultsStatusSet.length && resultsStatusSet.indexOf(r.status) === -1) return false;
     if (resultsHideFilters.some(function (f) { return matchesHideFilter(r, f); })) return false;
     return true;
@@ -3007,7 +3069,13 @@ function appendResultRows(tbody, node, depth, parentKey, prefix, isLast, forceVi
         var link = h("a", { class: "result-path-link", href: item ? item.url : "#", target: "_blank", rel: "noopener", text: displaySegment });
         attachCopyPathContextMenu(link, item ? item.path : node.key);
         pathContent.appendChild(link);
-        if (thisChildCount > 0) pathContent.appendChild(h("span", { class: "hint", text: " (" + thisChildCount + ")" }));
+        var thisHiddenCount = isLastItem ? (hiddenChildCounts[node.key] || 0) : 0;
+        if (thisChildCount > 0 || thisHiddenCount > 0) {
+            pathContent.appendChild(h("span", {
+                class: "hint",
+                text: " (" + (thisChildCount > 0 ? thisChildCount : "") + (thisHiddenCount > 0 ? (thisChildCount > 0 ? " · " : "") + thisHiddenCount + " hidden" : "") + ")",
+            }));
+        }
 
         var history = item ? (isPrimaryResult(item) ? fuzzHistoryForPath(item.path) : []) : fuzzHistoryForPath(node.key);
         var detailRow = null;
@@ -3120,8 +3188,10 @@ function renderResults() {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results." })]));
         return;
     }
+    updateHiddenByRules();
     var filtered = DATA.results.filter(passesResultsFilters);
-    if (!filtered.length) {
+    var extraFuzzedFolders = fuzzedFoldersWithoutResult();
+    if (!filtered.length && !extraFuzzedFolders.length) {
         resultsBody.appendChild(h("tr", {}, [h("td", { colspan: "4", class: "empty", text: "No results match your filters." })]));
         return;
     }
@@ -3133,7 +3203,7 @@ function renderResults() {
     // either way, not a remembered per-node toggle.
     var searching = !!resultsSearchInput.value.trim();
     resultRowBudget = searching ? SEARCH_ROW_LIMIT : Infinity;
-    var hierarchy = buildHierarchy(filtered, resultsSort);
+    var hierarchy = buildHierarchy(filtered, resultsSort, extraFuzzedFolders);
     // Root itself is never its own row (see the comment above) -- it still
     // needs an entry in resultNodesByKey, with no row of its own, so
     // goToResultsAndReveal(path) can be given the exact root path ("/", a
