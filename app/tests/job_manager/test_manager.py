@@ -1453,6 +1453,45 @@ def test_auto_pause_sees_a_status_dirsearch_filtered_out_of_stdout_and_repeats_t
     assert paused.completed_lines == 10  # word10 (the 403) is the first one requested again
 
 
+class _ProbeThenWordEngine(MockDirsearchEngine):
+    """dirsearch's own calibration probes answer 500 first (its base-URL check and two random
+    paths, none of them in the wordlist), then word3 answers 500 for real."""
+
+    def build_command(self, config, *, wordlist_file, output_base, log_file=None):
+        script = (
+            "import time\n"
+            f"log = open({str(log_file)!r}, 'w')\n"
+            "for url in ('', 'chrononomium_mechnomable', 'synvalism-neocoroid'):\n"
+            "    log.write(f'2026-11-19 13:24:54,100 [INFO] \"GET https://target.local/{url}\" 500 - 9000B\\n')\n"
+            "log.flush()\n"
+            "time.sleep(0.6)\n"
+            "log.write('2026-11-19 13:24:55,100 [INFO] \"GET https://target.local/word3\" 500 - 9000B\\n')\n"
+            "log.flush()\n"
+            "print('[##########] 5%  15/300  5/s  job:1/1  errors:0', flush=True)\n"
+            "time.sleep(60)\n"
+        )
+        return [sys.executable, "-c", script]
+
+
+def test_dirsearch_own_calibration_probe_never_auto_pauses_the_job(workspace_root, tmp_path: Path) -> None:
+    # Reported (job b38c27becb60): against a target answering 500 to everything, the job auto-paused at
+    # 0 of 24349 lines on dirsearch's own random probe. That pause had no word to skip, so Resume showed
+    # no "skip the word that paused it" option at all, and resuming only probed and paused again at 0.
+    manager = JobManager(_ProbeThenWordEngine(), max_concurrent_jobs=1)
+    job = manager.create_job(
+        project_id="p1", target_id="t1", path="/",
+        config=DirsearchJobConfig(url="https://target.local/", threads=5),
+        wordlist_files=[_wordlist(tmp_path, 300)], pause_on_status=[500],
+    )
+    _wait_until(lambda: manager.get_job(job.id).status == JobStatus.PAUSED, timeout=15)
+    paused = manager.get_job(job.id)
+    assert paused.auto_paused is True
+    assert paused.auto_pause_status == 500
+    # word3, not the probe: the word is requested again on resume, and skipping past it is offered.
+    assert paused.completed_lines == 3
+    assert paused.skip_completed_lines is not None
+
+
 def test_parse_request_record_reads_status_and_url_of_responses_only() -> None:
     from backend.job_manager.dirsearch_log import parse_request_record
 

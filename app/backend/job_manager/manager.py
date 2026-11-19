@@ -27,6 +27,7 @@ from backend.job_manager.dirsearch_log import (
 from backend.job_manager.pty_output import LiveOutputParser
 from backend.job_manager.result_batcher import ResultBatcher
 from backend.job_manager.wordlist_resolver import (
+    all_line_variants,
     estimate_requests,
     find_resume_point,
     first_line_requesting,
@@ -1019,7 +1020,16 @@ class JobManager:
         if job.pause_on_status:
             log_thread = threading.Thread(
                 target=self._watch_log_for_pause_status,
-                args=(job, proc, log_file, set(job.pause_on_status), log_stop),
+                args=(
+                    job, proc, log_file, set(job.pause_on_status), log_stop,
+                    # Built once per segment (a set, so the watcher's own per-record check stays O(1)
+                    # however long the wordlist is), from THIS segment's remainder -- the same slice
+                    # a resume actually requests.
+                    all_line_variants(
+                        lines[base_lines:], list(config.extensions), config.force_extensions,
+                    ),
+                    urlparse(config.url).path.rstrip("/") + "/",
+                ),
                 daemon=True,
             )
             log_thread.start()
@@ -1359,10 +1369,28 @@ class JobManager:
         return exit_code, error_reason
 
     def _watch_log_for_pause_status(
-        self, job: FuzzJob, proc: subprocess.Popen, log_file: Path, pause_statuses: set[int], stop: threading.Event,
+        self,
+        job: FuzzJob,
+        proc: subprocess.Popen,
+        log_file: Path,
+        pause_statuses: set[int],
+        stop: threading.Event,
+        wordlist_paths: set[str],
+        base_path: str,
     ) -> None:
         """Auto-pause on responses dirsearch never prints: its filters (wildcard auto-calibration,
-        status filters) drop them from stdout, but its --log records every request it made."""
+        status filters) drop them from stdout, but its --log records every request it made.
+
+        Only a request the WORDLIST asked for can pause the job. The log also holds dirsearch's own
+        calibration probes -- random paths like "chrononomium_mechnomable", requested once per
+        directory before the wordlist is touched (`rand_stealth_word`, lib/core/scanner.py) -- and
+        its base-URL connection check. Real, reported bug (2026-11-19, job b38c27becb60): against a
+        target answering 500 to everything, the very first probe paused the job at 0 of 24349 lines.
+        Nothing could be done with that pause: the trigger is not a wordlist word, so
+        `_repeat_auto_pause_trigger` found no line, Resume offered no "skip the word that paused it"
+        at all (that option only exists when skip_completed_lines is set), and resuming just probed
+        and paused again at 0. Ignoring the probe costs no signal: a target answering an armed status
+        answers it for the next real word too, and THAT pause can be skipped past."""
         position = 0
         pending = b""
         while not stop.wait(LOG_WATCH_INTERVAL_SECONDS):
@@ -1376,9 +1404,19 @@ class JobManager:
             *complete, pending = (pending + data).split(b"\n")
             for raw in complete:
                 record = parse_request_record(raw.decode("utf-8", errors="replace"))
-                if record and record[0] in pause_statuses:
-                    self._maybe_trigger_auto_pause(job, record[0], pause_statuses, proc, record[1])
-                    return
+                if not record or record[0] not in pause_statuses:
+                    continue
+                if not self._is_wordlist_request(job, record[1], wordlist_paths, base_path):
+                    continue  # dirsearch's own probe, not a word of this job's wordlist
+                self._maybe_trigger_auto_pause(job, record[0], pause_statuses, proc, record[1])
+                return
+
+    @staticmethod
+    def _is_wordlist_request(job: FuzzJob, url: str, wordlist_paths: set[str], base_path: str) -> bool:
+        """Whether `url` is a path this segment's wordlist actually asked for. Same mapping
+        `_repeat_auto_pause_trigger` uses to find the word again, so the two can never disagree."""
+        path = unquote(results_service.result_path(url, bool(job.fuzz_keyword)))
+        return path.startswith(base_path) and path[len(base_path):] in wordlist_paths
 
     def _maybe_trigger_auto_pause(
         self, job: FuzzJob, status: int, pause_statuses: set[int], proc, url: str | None = None,

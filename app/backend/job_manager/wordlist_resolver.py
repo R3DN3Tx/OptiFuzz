@@ -217,6 +217,21 @@ def first_line_requesting(
     return None
 
 
+def all_line_variants(lines: list[str], extensions: list[str], force_extensions: bool) -> set[str]:
+    """Every path this wordlist makes dirsearch request (relative to the job's base URL).
+
+    What it is for: dirsearch also requests a handful of paths that are NOT in the wordlist at all --
+    the random "stealth" words it probes a directory with to detect wildcard/soft-404 answers
+    (`rand_stealth_word`, lib/core/scanner.py) -- and they are logged exactly like a real request.
+    Membership in this set is what tells the two apart.
+    """
+    extensions = list(extensions or [])
+    variants: set[str] = set()
+    for raw_line in lines:
+        variants.update(_line_variants(raw_line, extensions, force_extensions))
+    return variants
+
+
 def first_lines_requesting(
     lines: list[str], paths: set[str], extensions: list[str], force_extensions: bool,
 ) -> dict[str, int]:
