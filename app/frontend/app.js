@@ -5390,7 +5390,7 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
     // fuzz) should still be remembered, and both the main New Fuzz section
     // AND every inline "Fuzz this path" launcher from Results/TREE share
     // this same function, so fixing it here covers both for free.
-    const [, wordlistTree, currentConcurrency, fuzzDefaults, dirsearchDefaultHeaders, defaultExtensions] = await Promise.all([
+    const [, wordlistTree, loadedConcurrency, fuzzDefaults, dirsearchDefaultHeaders, defaultExtensions] = await Promise.all([
         fetchFuzzKeyword(),
         fetchWordlistTreeForNewFuzz(),
         fetchConcurrencyForNewFuzz(projectId, targetId),
@@ -5398,6 +5398,12 @@ async function buildNewFuzzForm(projectId, targetId, onSubmitted) {
         fetchDefaultHeadersForNewFuzz(),
         fetchDefaultExtensionsForNewFuzz(),
     ]);
+    // `let`, NOT part of the const destructuring above: the "Concurrent fuzzes" field below writes
+    // the saved value back here after every change. Real, reported bug (2026-11-19): as a const, that
+    // write threw "Assignment to constant variable" AFTER the PUT had already succeeded, so the catch
+    // right next to it announced "Could not update concurrency" and put the old number back in the
+    // field -- for a change the backend had in fact saved.
+    let currentConcurrency = loadedConcurrency;
     const hasSavedDefaults = Object.keys(fuzzDefaults).length > 0;
 
     let submitForm = () => {};
